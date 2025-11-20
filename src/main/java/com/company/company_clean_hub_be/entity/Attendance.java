@@ -3,6 +3,9 @@ package com.company.company_clean_hub_be.entity;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -30,27 +33,36 @@ public class Attendance {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id")
+    @NotNull
     private Employee employee;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assignment_id")
+    @NotNull
     private Assignment assignment;
 
+    @NotNull
     private LocalDate date;
 
+    @PositiveOrZero
     private Double bonus;
+
+    @PositiveOrZero
     private Double penalty;
 
     @Column(name = "support_cost")
+    @PositiveOrZero
     private Double supportCost;
 
     @Column(name = "work_hours")
+    @PositiveOrZero
     private Double workHours;
 
     @Column(name = "is_overtime")
     private Boolean isOvertime;
 
     @Column(name = "overtime_amount")
+    @PositiveOrZero
     private Double overtimeAmount;
 
     @ManyToOne(fetch = FetchType.LAZY)

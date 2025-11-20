@@ -3,6 +3,8 @@ package com.company.company_clean_hub_be.entity;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -30,21 +32,26 @@ public class Assignment {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id")
+    @NotNull
     private Employee employee;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "contract_id")
+    @NotNull
     private Contract contract;
 
     @Column(name = "start_date")
+    @NotNull
     private LocalDate startDate;
 
     private String status;
 
     @Column(name = "salary_at_time")
+    @PositiveOrZero
     private Double salaryAtTime;
 
     @Column(name = "work_days")
+    @PositiveOrZero
     private Integer workDays;
 
     private String description;

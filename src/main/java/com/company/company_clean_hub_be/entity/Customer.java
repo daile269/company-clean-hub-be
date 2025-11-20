@@ -2,6 +2,8 @@ package com.company.company_clean_hub_be.entity;
 
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.PrimaryKeyJoinColumn;
@@ -25,18 +27,29 @@ import lombok.experimental.SuperBuilder;
 public class Customer extends User {
 
     @Column(name = "customer_code")
+    @NotBlank
+    @Size(max = 50)
     private String customerCode;
 
+    @NotBlank
+    @Size(max = 150)
     private String name;
+
+    @Size(max = 255)
     private String address;
 
     @Column(name = "contact_info")
+    @Size(max = 255)
     private String contactInfo;
 
     @Column(name = "tax_code")
+    @Size(max = 100)
     private String taxCode;
 
+    @Size(max = 1000)
     private String description;
+
+    @Size(max = 255)
     private String company;
 
     @Column(name = "created_at")
