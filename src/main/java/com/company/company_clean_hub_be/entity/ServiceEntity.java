@@ -4,6 +4,10 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -27,19 +31,26 @@ public class ServiceEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank
+    @Size(max = 200)
     private String title;
 
+    @Size(max = 2000)
     private String description;
 
     @Column(name = "price_from")
+    @PositiveOrZero
     private Double priceFrom;
 
     @Column(name = "price_to")
+    @PositiveOrZero
     private Double priceTo;
 
     @Column(name = "main_image")
     private String mainImage;
 
+    @NotBlank
+    @Size(max = 50)
     private String status;
 
     @Column(name = "created_at")

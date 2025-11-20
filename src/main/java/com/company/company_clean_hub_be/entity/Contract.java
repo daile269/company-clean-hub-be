@@ -5,6 +5,11 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -34,6 +39,7 @@ public class Contract {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id")
+    @NotNull
     private Customer customer;
 
     @ManyToMany
@@ -43,30 +49,40 @@ public class Contract {
         inverseJoinColumns = @JoinColumn(name = "service_id")
     )
     @Builder.Default
+    @NotEmpty
     private Set<ServiceEntity> services = new HashSet<>();
 
     @Column(name = "start_date")
+    @NotNull
     private LocalDate startDate;
 
     @Column(name = "end_date")
     private LocalDate endDate;
 
     @Column(name = "base_price")
+    @PositiveOrZero
     private Double basePrice;
 
+    @PositiveOrZero
     private Double vat;
+
+    @PositiveOrZero
     private Double total;
 
     @Column(name = "extra_cost")
+    @PositiveOrZero
     private Double extraCost;
 
     @Column(name = "discount_cost")
+    @PositiveOrZero
     private Double discountCost;
 
     @Column(name = "final_price")
+    @PositiveOrZero
     private Double finalPrice;
 
     @Column(name = "payment_status")
+    @Size(max = 50)
     private String paymentStatus;
 
     private String description;

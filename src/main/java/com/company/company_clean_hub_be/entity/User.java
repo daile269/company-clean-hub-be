@@ -2,6 +2,11 @@ package com.company.company_clean_hub_be.entity;
 
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -30,13 +35,24 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank
+    @Size(min = 3, max = 50)
     private String username;
+
+    @NotBlank
+    @Size(min = 6, max = 255)
     private String password;
+
+    @Size(max = 50)
     private String phone;
+
+    @Email
+    @Size(max = 255)
     private String email;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "role_id")
+    @NotNull
     private Role role;
 
     private String status;

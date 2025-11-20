@@ -2,6 +2,10 @@ package com.company.company_clean_hub_be.entity;
 
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -29,9 +33,12 @@ public class EmployeeImage {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id")
+    @NotNull
     private Employee employee;
 
     @Column(name = "image_path")
+    @NotBlank
+    @Size(max = 512)
     private String imagePath;
 
     @Column(name = "uploaded_at")
