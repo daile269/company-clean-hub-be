@@ -1,10 +1,13 @@
 package com.company.company_clean_hub_be.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -25,6 +28,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
 
 @Entity
 @Table(name = "contracts")
@@ -32,6 +37,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Contract {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,6 +46,9 @@ public class Contract {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id")
     @NotNull
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
     private Customer customer;
 
     @ManyToMany
@@ -50,6 +59,9 @@ public class Contract {
     )
     @Builder.Default
     @NotEmpty
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
     private Set<ServiceEntity> services = new HashSet<>();
 
     @Column(name = "start_date")
@@ -61,25 +73,25 @@ public class Contract {
 
     @Column(name = "base_price")
     @PositiveOrZero
-    private Double basePrice;
+    private BigDecimal basePrice;
 
     @PositiveOrZero
-    private Double vat;
+    private BigDecimal vat;
 
     @PositiveOrZero
-    private Double total;
+    private BigDecimal total;
 
     @Column(name = "extra_cost")
     @PositiveOrZero
-    private Double extraCost;
+    private BigDecimal extraCost;
 
     @Column(name = "discount_cost")
     @PositiveOrZero
-    private Double discountCost;
+    private BigDecimal discountCost;
 
     @Column(name = "final_price")
     @PositiveOrZero
-    private Double finalPrice;
+    private BigDecimal finalPrice;
 
     @Column(name = "payment_status")
     @Size(max = 50)

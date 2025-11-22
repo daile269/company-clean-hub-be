@@ -1,8 +1,11 @@
 package com.company.company_clean_hub_be.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
@@ -19,6 +22,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
 
 @Entity
 @Table(name = "attendance")
@@ -26,6 +31,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Attendance {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,40 +40,50 @@ public class Attendance {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id")
     @NotNull
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
     private Employee employee;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assignment_id")
     @NotNull
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
     private Assignment assignment;
 
     @NotNull
     private LocalDate date;
 
     @PositiveOrZero
-    private Double bonus;
+    private BigDecimal bonus;
 
     @PositiveOrZero
-    private Double penalty;
+    private BigDecimal penalty;
 
     @Column(name = "support_cost")
     @PositiveOrZero
-    private Double supportCost;
+    private BigDecimal supportCost;
 
     @Column(name = "work_hours")
     @PositiveOrZero
-    private Double workHours;
+    private BigDecimal workHours;
 
     @Column(name = "is_overtime")
     private Boolean isOvertime;
 
     @Column(name = "overtime_amount")
     @PositiveOrZero
-    private Double overtimeAmount;
+    private BigDecimal overtimeAmount;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "approved_by")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
     private User approvedBy;
+    
 
     private String description;
 

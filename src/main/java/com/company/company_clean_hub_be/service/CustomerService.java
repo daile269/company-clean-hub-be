@@ -1,12 +1,14 @@
 package com.company.company_clean_hub_be.service;
 
-import com.company.company_clean_hub_be.entity.Customer;
+import com.company.company_clean_hub_be.dto.request.CustomerRequest;
+import com.company.company_clean_hub_be.dto.response.CustomerResponse;
+
 import java.util.List;
-import java.util.Optional;
 
 public interface CustomerService {
-    List<Customer> findAll();
-    Optional<Customer> findById(Long id);
-    Customer save(Customer customer);
-    void deleteById(Long id);
+    List<CustomerResponse> getAllCustomers();
+    CustomerResponse getCustomerById(Long id);
+    CustomerResponse createCustomer(CustomerRequest request);
+    CustomerResponse updateCustomer(Long id, CustomerRequest request);
+    void deleteCustomer(Long id);
 }

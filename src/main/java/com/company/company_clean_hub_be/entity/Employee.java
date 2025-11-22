@@ -1,7 +1,9 @@
 package com.company.company_clean_hub_be.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -29,7 +31,14 @@ import lombok.experimental.SuperBuilder;
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
 @SuperBuilder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Employee extends User {
+
+    @NotBlank
+    @Size(max = 50)
+    @Column(name = "employee_code", unique = true)
+    private String employeeCode;
+
     @NotBlank
     @Size(max = 50)
     private String cccd;
@@ -53,26 +62,22 @@ public class Employee extends User {
 
     @Column(name = "base_salary")
     @PositiveOrZero
-    private Double baseSalary;
+    private BigDecimal baseSalary;
 
     @Column(name = "daily_salary")
     @PositiveOrZero
-    private Double dailySalary;
+    private BigDecimal dailySalary;
 
-    @Column(name = "insurance_bhxh")
+    @Column(name = "social_insurance")
     @PositiveOrZero
-    private Double insuranceBhxh;
+    private BigDecimal socialInsurance;
 
-    @Column(name = "insurance_bhyt")
+    @Column(name = "health_insurance")
     @PositiveOrZero
-    private Double insuranceBhyt;
-
-    @Column(name = "insurance_bhtn")
-    @PositiveOrZero
-    private Double insuranceBhtn;
+    private BigDecimal healthInsurance;
 
     @PositiveOrZero
-    private Double allowance;
+    private BigDecimal allowance;
 
     private String description;
 

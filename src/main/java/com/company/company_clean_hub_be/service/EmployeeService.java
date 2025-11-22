@@ -1,12 +1,14 @@
 package com.company.company_clean_hub_be.service;
 
-import com.company.company_clean_hub_be.entity.Employee;
+import com.company.company_clean_hub_be.dto.request.EmployeeRequest;
+import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
+
 import java.util.List;
-import java.util.Optional;
 
 public interface EmployeeService {
-    List<Employee> findAll();
-    Optional<Employee> findById(Long id);
-    Employee save(Employee employee);
-    void deleteById(Long id);
+    List<EmployeeResponse> getAllEmployees();
+    EmployeeResponse getEmployeeById(Long id);
+    EmployeeResponse createEmployee(EmployeeRequest request);
+    EmployeeResponse updateEmployee(Long id, EmployeeRequest request);
+    void deleteEmployee(Long id);
 }

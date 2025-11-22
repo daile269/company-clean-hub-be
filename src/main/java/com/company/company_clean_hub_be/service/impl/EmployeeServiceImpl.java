@@ -1,38 +1,147 @@
 package com.company.company_clean_hub_be.service.impl;
 
+import com.company.company_clean_hub_be.dto.request.EmployeeRequest;
+import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
 import com.company.company_clean_hub_be.entity.Employee;
+import com.company.company_clean_hub_be.entity.Role;
+import com.company.company_clean_hub_be.exception.AppException;
+import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
+import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.service.EmployeeService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class EmployeeServiceImpl implements EmployeeService {
-    private final EmployeeRepository repository;
+    private final EmployeeRepository employeeRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
-    public List<Employee> findAll() {
-        return repository.findAll();
+    public List<EmployeeResponse> getAllEmployees() {
+        return employeeRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 
     @Override
-    public Optional<Employee> findById(Long id) {
-        return repository.findById(id);
+    public EmployeeResponse getEmployeeById(Long id) {
+        Employee employee = employeeRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+        return mapToResponse(employee);
     }
 
     @Override
-    public Employee save(Employee employee) {
-        return repository.save(employee);
+    public EmployeeResponse createEmployee(EmployeeRequest request) {
+        Role role = roleRepository.findById(request.getRoleId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
+
+        Employee employee = Employee.builder()
+            .employeeCode(request.getEmployeeCode())
+                .username(request.getUsername())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .phone(request.getPhone())
+                .email(request.getEmail())
+                .role(role)
+                .status(request.getStatus())
+                .employeeCode(request.getEmployeeCode())
+                .cccd(request.getCccd())
+                .address(request.getAddress())
+                .name(request.getName())
+                .bankAccount(request.getBankAccount())
+                .bankName(request.getBankName())
+                .employmentType(request.getEmploymentType())
+                .baseSalary(request.getBaseSalary())
+                .dailySalary(request.getDailySalary())
+                .socialInsurance(request.getSocialInsurance())
+                .healthInsurance(request.getHealthInsurance())
+                .allowance(request.getAllowance())
+                .description(request.getDescription())
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        Employee savedEmployee = employeeRepository.save(employee);
+        return mapToResponse(savedEmployee);
     }
 
     @Override
-    public void deleteById(Long id) {
-        repository.deleteById(id);
+    public EmployeeResponse updateEmployee(Long id, EmployeeRequest request) {
+        Employee employee = employeeRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+        Role role = roleRepository.findById(request.getRoleId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
+
+        employee.setUsername(request.getUsername());
+        employee.setEmployeeCode(request.getEmployeeCode());
+        if (request.getPassword() != null && !request.getPassword().isEmpty()) {
+            employee.setPassword(passwordEncoder.encode(request.getPassword()));
+        }
+        employee.setPhone(request.getPhone());
+        employee.setEmail(request.getEmail());
+        employee.setRole(role);
+        employee.setStatus(request.getStatus());
+        employee.setCccd(request.getCccd());
+        employee.setEmployeeCode(request.getEmployeeCode());
+        employee.setAddress(request.getAddress());
+        employee.setName(request.getName());
+        employee.setBankAccount(request.getBankAccount());
+        employee.setBankName(request.getBankName());
+        employee.setEmploymentType(request.getEmploymentType());
+        employee.setBaseSalary(request.getBaseSalary());
+        employee.setDailySalary(request.getDailySalary());
+        employee.setSocialInsurance(request.getSocialInsurance());
+        employee.setHealthInsurance(request.getHealthInsurance());
+        employee.setAllowance(request.getAllowance());
+        employee.setDescription(request.getDescription());
+        employee.setUpdatedAt(LocalDateTime.now());
+
+        Employee updatedEmployee = employeeRepository.save(employee);
+        return mapToResponse(updatedEmployee);
+    }
+
+    @Override
+    public void deleteEmployee(Long id) {
+        if (!employeeRepository.existsById(id)) {
+            throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
+        }
+        employeeRepository.deleteById(id);
+    }
+
+    private EmployeeResponse mapToResponse(Employee employee) {
+        return EmployeeResponse.builder()
+                .id(employee.getId())
+                .username(employee.getUsername())
+                .phone(employee.getPhone())
+                .email(employee.getEmail())
+                .roleId(employee.getRole() != null ? employee.getRole().getId() : null)
+                .roleName(employee.getRole() != null ? employee.getRole().getName() : null)
+                .status(employee.getStatus())
+                .employeeCode(employee.getEmployeeCode())
+                .cccd(employee.getCccd())
+                .address(employee.getAddress())
+                .name(employee.getName())
+                .bankAccount(employee.getBankAccount())
+                .bankName(employee.getBankName())
+                .employmentType(employee.getEmploymentType())
+                .baseSalary(employee.getBaseSalary())
+                .dailySalary(employee.getDailySalary())
+                .socialInsurance(employee.getSocialInsurance())
+                .healthInsurance(employee.getHealthInsurance())
+                .allowance(employee.getAllowance())
+                .description(employee.getDescription())
+                .createdAt(employee.getCreatedAt())
+                .updatedAt(employee.getUpdatedAt())
+                .build();
     }
 }
