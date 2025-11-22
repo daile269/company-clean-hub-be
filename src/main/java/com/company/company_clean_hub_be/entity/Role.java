@@ -31,7 +31,7 @@ public class Role {
     private String name;
 
     @Size(max = 50)
-    private String codel;
+    private String code;
 
     @Size(max = 255)
     private String description;
