@@ -16,6 +16,7 @@ public enum ErrorCode {
     CUSTOMER_NOT_FOUND(404,"Khách hàng không tồn tại"),
     CONTRACT_NOT_FOUND(404,"Hợp đồng không tồn tại"),
     SERVICE_NOT_FOUND(404,"Dịch vụ không tồn tại"),
+    ASSIGNMENT_NOT_FOUND(404,"Phân công không tồn tại"),
     ROLE_NOT_FOUND(404,"Vai trò không tồn tại"),
 
     UNAUTHENTICATED(403,"Không có quyền truy cập" );
