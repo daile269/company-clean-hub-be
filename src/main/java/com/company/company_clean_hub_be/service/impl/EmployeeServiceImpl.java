@@ -2,7 +2,9 @@ package com.company.company_clean_hub_be.service.impl;
 
 import com.company.company_clean_hub_be.dto.request.EmployeeRequest;
 import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.Employee;
+import com.company.company_clean_hub_be.entity.EmploymentType;
 import com.company.company_clean_hub_be.entity.Role;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
@@ -10,6 +12,10 @@ import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.service.EmployeeService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +37,26 @@ public class EmployeeServiceImpl implements EmployeeService {
         return employeeRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, EmploymentType employmentType, int page, int pageSize) {
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+        Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, pageable);
+
+        List<EmployeeResponse> employees = employeePage.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        return PageResponse.<EmployeeResponse>builder()
+                .content(employees)
+                .page(employeePage.getNumber())
+                .pageSize(employeePage.getSize())
+                .totalElements(employeePage.getTotalElements())
+                .totalPages(employeePage.getTotalPages())
+                .first(employeePage.isFirst())
+                .last(employeePage.isLast())
+                .build();
     }
 
     @Override
@@ -82,11 +108,10 @@ public class EmployeeServiceImpl implements EmployeeService {
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
-        employee.setUsername(request.getUsername());
-        employee.setEmployeeCode(request.getEmployeeCode());
-        if (request.getPassword() != null && !request.getPassword().isEmpty()) {
-            employee.setPassword(passwordEncoder.encode(request.getPassword()));
-        }
+//        employee.setUsername(request.getUsername());
+//        if (request.getPassword() != null && !request.getPassword().isEmpty()) {
+//            employee.setPassword(passwordEncoder.encode(request.getPassword()));
+//        }
         employee.setPhone(request.getPhone());
         employee.setEmail(request.getEmail());
         employee.setRole(role);

@@ -3,6 +3,8 @@ package com.company.company_clean_hub_be.controller;
 import com.company.company_clean_hub_be.dto.request.EmployeeRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.entity.EmploymentType;
 import com.company.company_clean_hub_be.service.EmployeeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,16 @@ public class EmployeeController {
     @GetMapping
     public ApiResponse<List<EmployeeResponse>> getAllEmployees() {
         List<EmployeeResponse> employees = employeeService.getAllEmployees();
+        return ApiResponse.success("Lấy danh sách nhân viên thành công", employees, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/filter")
+    public ApiResponse<PageResponse<EmployeeResponse>> getEmployeesWithFilter(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) EmploymentType employmentType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<EmployeeResponse> employees = employeeService.getEmployeesWithFilter(keyword, employmentType, page, pageSize);
         return ApiResponse.success("Lấy danh sách nhân viên thành công", employees, HttpStatus.OK.value());
     }
 
