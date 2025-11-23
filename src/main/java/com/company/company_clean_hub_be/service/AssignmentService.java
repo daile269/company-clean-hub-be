@@ -1,12 +1,13 @@
 package com.company.company_clean_hub_be.service;
 
-import com.company.company_clean_hub_be.entity.Assignment;
+import com.company.company_clean_hub_be.dto.request.AssignmentRequest;
+import com.company.company_clean_hub_be.dto.response.AssignmentResponse;
 import java.util.List;
-import java.util.Optional;
 
 public interface AssignmentService {
-    List<Assignment> findAll();
-    Optional<Assignment> findById(Long id);
-    Assignment save(Assignment assignment);
-    void deleteById(Long id);
+    List<AssignmentResponse> getAllAssignments();
+    AssignmentResponse getAssignmentById(Long id);
+    AssignmentResponse createAssignment(AssignmentRequest request);
+    AssignmentResponse updateAssignment(Long id, AssignmentRequest request);
+    void deleteAssignment(Long id);
 }

@@ -1,9 +1,12 @@
 package com.company.company_clean_hub_be.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -19,6 +22,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
 
 @Entity
 @Table(name = "services")
@@ -26,6 +31,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ServiceEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,11 +46,11 @@ public class ServiceEntity {
 
     @Column(name = "price_from")
     @PositiveOrZero
-    private Double priceFrom;
+    private BigDecimal priceFrom;
 
     @Column(name = "price_to")
     @PositiveOrZero
-    private Double priceTo;
+    private BigDecimal priceTo;
 
     @Column(name = "main_image")
     private String mainImage;
@@ -61,5 +67,8 @@ public class ServiceEntity {
 
     @ManyToMany(mappedBy = "services")
     @Builder.Default
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
     private Set<Contract> contracts = new HashSet<>();
 }

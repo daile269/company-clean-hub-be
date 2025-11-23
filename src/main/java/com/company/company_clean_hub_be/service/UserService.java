@@ -1,12 +1,14 @@
 package com.company.company_clean_hub_be.service;
 
-import com.company.company_clean_hub_be.entity.User;
+import com.company.company_clean_hub_be.dto.request.UserRequest;
+import com.company.company_clean_hub_be.dto.response.UserResponse;
+
 import java.util.List;
-import java.util.Optional;
 
 public interface UserService {
-    List<User> findAll();
-    Optional<User> findById(Long id);
-    User save(User user);
-    void deleteById(Long id);
+    List<UserResponse> getAllUsers();
+    UserResponse getUserById(Long id);
+    UserResponse createUser(UserRequest request);
+    UserResponse updateUser(Long id, UserRequest request);
+    void deleteUser(Long id);
 }

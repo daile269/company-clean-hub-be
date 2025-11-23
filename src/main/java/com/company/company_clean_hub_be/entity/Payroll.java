@@ -1,7 +1,10 @@
 package com.company.company_clean_hub_be.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -15,6 +18,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
 
 @Entity
 @Table(name = "payrolls")
@@ -22,6 +27,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Payroll {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -29,31 +35,34 @@ public class Payroll {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
     private Employee employee;
 
     @Column(name = "total_days")
     private Integer totalDays;
 
     @Column(name = "salary_base")
-    private Double salaryBase;
+    private BigDecimal salaryBase;
 
     @Column(name = "bonus_total")
-    private Double bonusTotal;
+    private BigDecimal bonusTotal;
 
     @Column(name = "penalty_total")
-    private Double penaltyTotal;
+    private BigDecimal penaltyTotal;
 
     @Column(name = "advance_total")
-    private Double advanceTotal;
+    private BigDecimal advanceTotal;
 
     @Column(name = "allowance_total")
-    private Double allowanceTotal;
+    private BigDecimal allowanceTotal;
 
     @Column(name = "insurance_total")
-    private Double insuranceTotal;
+    private BigDecimal insuranceTotal;
 
     @Column(name = "final_salary")
-    private Double finalSalary;
+    private BigDecimal finalSalary;
 
     @Column(name = "is_paid")
     private Boolean isPaid;
@@ -63,6 +72,9 @@ public class Payroll {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "accountant_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
     private User accountant;
 
     @Column(name = "created_at")

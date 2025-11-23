@@ -1,12 +1,13 @@
 package com.company.company_clean_hub_be.service;
 
-import com.company.company_clean_hub_be.entity.Role;
+import com.company.company_clean_hub_be.dto.request.RoleRequest;
+import com.company.company_clean_hub_be.dto.response.RoleResponse;
 import java.util.List;
-import java.util.Optional;
 
 public interface RoleService {
-    List<Role> findAll();
-    Optional<Role> findById(Long id);
-    Role save(Role role);
-    void deleteById(Long id);
+    List<RoleResponse> getAllRoles();
+    RoleResponse getRoleById(Long id);
+    RoleResponse createRole(RoleRequest request);
+    RoleResponse updateRole(Long id, RoleRequest request);
+    void deleteRole(Long id);
 }
