@@ -3,6 +3,7 @@ package com.company.company_clean_hub_be.controller;
 import com.company.company_clean_hub_be.dto.request.CustomerRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.CustomerResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.service.CustomerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,15 @@ public class CustomerController {
     @GetMapping
     public ApiResponse<List<CustomerResponse>> getAllCustomers() {
         List<CustomerResponse> customers = customerService.getAllCustomers();
+        return ApiResponse.success("Lấy danh sách khách hàng thành công", customers, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/filter")
+    public ApiResponse<PageResponse<CustomerResponse>> getCustomersWithFilter(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<CustomerResponse> customers = customerService.getCustomersWithFilter(keyword, page, pageSize);
         return ApiResponse.success("Lấy danh sách khách hàng thành công", customers, HttpStatus.OK.value());
     }
 

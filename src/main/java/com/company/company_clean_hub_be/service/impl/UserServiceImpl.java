@@ -1,6 +1,7 @@
 package com.company.company_clean_hub_be.service.impl;
 
 import com.company.company_clean_hub_be.dto.request.UserRequest;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.UserResponse;
 import com.company.company_clean_hub_be.entity.Role;
 import com.company.company_clean_hub_be.entity.User;
@@ -10,6 +11,10 @@ import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +36,26 @@ public class UserServiceImpl implements UserService {
         return userRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResponse<UserResponse> getUsersWithFilter(String keyword, Long roleId, int page, int pageSize) {
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+        Page<User> userPage = userRepository.findByFilters(keyword, roleId, pageable);
+
+        List<UserResponse> users = userPage.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        return PageResponse.<UserResponse>builder()
+                .content(users)
+                .page(userPage.getNumber())
+                .pageSize(userPage.getSize())
+                .totalElements(userPage.getTotalElements())
+                .totalPages(userPage.getTotalPages())
+                .first(userPage.isFirst())
+                .last(userPage.isLast())
+                .build();
     }
 
     @Override

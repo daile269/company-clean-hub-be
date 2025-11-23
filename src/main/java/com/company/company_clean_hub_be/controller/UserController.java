@@ -2,6 +2,7 @@ package com.company.company_clean_hub_be.controller;
 
 import com.company.company_clean_hub_be.dto.request.UserRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.UserResponse;
 import com.company.company_clean_hub_be.service.UserService;
 import jakarta.validation.Valid;
@@ -20,6 +21,16 @@ public class UserController {
     @GetMapping
     public ApiResponse<List<UserResponse>> getAllUsers() {
         List<UserResponse> users = userService.getAllUsers();
+        return ApiResponse.success("Lấy danh sách người dùng thành công", users, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/filter")
+    public ApiResponse<PageResponse<UserResponse>> getUsersWithFilter(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long roleId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<UserResponse> users = userService.getUsersWithFilter(keyword, roleId, page, pageSize);
         return ApiResponse.success("Lấy danh sách người dùng thành công", users, HttpStatus.OK.value());
     }
 

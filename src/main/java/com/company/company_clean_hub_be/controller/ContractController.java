@@ -3,6 +3,7 @@ package com.company.company_clean_hub_be.controller;
 import com.company.company_clean_hub_be.dto.request.ContractRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.ContractResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.service.ContractService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,15 @@ public class ContractController {
     @GetMapping
     public ApiResponse<List<ContractResponse>> getAllContracts() {
         List<ContractResponse> contracts = contractService.getAllContracts();
+        return ApiResponse.success("Lấy danh sách hợp đồng thành công", contracts, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/filter")
+    public ApiResponse<PageResponse<ContractResponse>> getContractsWithFilter(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<ContractResponse> contracts = contractService.getContractsWithFilter(keyword, page, pageSize);
         return ApiResponse.success("Lấy danh sách hợp đồng thành công", contracts, HttpStatus.OK.value());
     }
 

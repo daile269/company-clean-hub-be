@@ -2,6 +2,7 @@ package com.company.company_clean_hub_be.service.impl;
 
 import com.company.company_clean_hub_be.dto.request.CustomerRequest;
 import com.company.company_clean_hub_be.dto.response.CustomerResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.Role;
 import com.company.company_clean_hub_be.exception.AppException;
@@ -10,6 +11,10 @@ import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.service.CustomerService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +36,26 @@ public class CustomerServiceImpl implements CustomerService {
         return customerRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResponse<CustomerResponse> getCustomersWithFilter(String keyword, int page, int pageSize) {
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+        Page<Customer> customerPage = customerRepository.findByFilters(keyword, pageable);
+
+        List<CustomerResponse> customers = customerPage.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        return PageResponse.<CustomerResponse>builder()
+                .content(customers)
+                .page(customerPage.getNumber())
+                .pageSize(customerPage.getSize())
+                .totalElements(customerPage.getTotalElements())
+                .totalPages(customerPage.getTotalPages())
+                .first(customerPage.isFirst())
+                .last(customerPage.isLast())
+                .build();
     }
 
     @Override
