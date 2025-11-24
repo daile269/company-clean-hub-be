@@ -18,6 +18,12 @@ public enum ErrorCode {
     SERVICE_NOT_FOUND(404,"Dịch vụ không tồn tại"),
     ASSIGNMENT_NOT_FOUND(404,"Phân công không tồn tại"),
     ROLE_NOT_FOUND(404,"Vai trò không tồn tại"),
+    
+    USERNAME_ALREADY_EXISTS(400,"Tên đăng nhập đã tồn tại"),
+    PHONE_ALREADY_EXISTS(400,"Số điện thoại đã tồn tại"),
+    EMPLOYEE_CODE_ALREADY_EXISTS(400,"Mã nhân viên đã tồn tại"),
+    CCCD_ALREADY_EXISTS(400,"Số CCCD đã tồn tại"),
+    BANK_ACCOUNT_ALREADY_EXISTS(400,"Số tài khoản ngân hàng đã tồn tại"),
 
     UNAUTHENTICATED(403,"Không có quyền truy cập" );
 

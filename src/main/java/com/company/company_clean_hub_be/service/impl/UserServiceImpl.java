@@ -67,6 +67,16 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserResponse createUser(UserRequest request) {
+        // Kiểm tra trùng username
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+        
+        // Kiểm tra trùng phone
+        if (request.getPhone() != null && userRepository.existsByPhone(request.getPhone())) {
+            throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
+        }
+        
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
@@ -90,6 +100,16 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
 
+        // Kiểm tra trùng username (ngoại trừ chính nó)
+        if (userRepository.existsByUsernameAndIdNot(request.getUsername(), id)) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+        
+        // Kiểm tra trùng phone (ngoại trừ chính nó)
+        if (request.getPhone() != null && userRepository.existsByPhoneAndIdNot(request.getPhone(), id)) {
+            throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
+        }
+        
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 

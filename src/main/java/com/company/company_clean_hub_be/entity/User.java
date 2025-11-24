@@ -42,6 +42,7 @@ public class User {
 
     @NotBlank
     @Size(min = 3, max = 50)
+    @Column(unique = true)
     private String username;
 
     @NotBlank
@@ -49,6 +50,7 @@ public class User {
     private String password;
 
     @Size(max = 50)
+    @Column(unique = true)
     private String phone;
 
     @Email

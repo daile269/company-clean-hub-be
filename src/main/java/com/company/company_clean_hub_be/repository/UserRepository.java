@@ -14,6 +14,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
+    boolean existsByPhone(String phone);
+    boolean existsByUsernameAndIdNot(String username, Long id);
+    boolean existsByPhoneAndIdNot(String phone, Long id);
     
     @Query("SELECT u FROM User u LEFT JOIN u.role r WHERE " +
            "(:keyword IS NULL OR :keyword = '' OR " +
