@@ -45,12 +45,12 @@ public class Assignment {
     private Employee employee;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "contract_id")
+    @JoinColumn(name = "customer_id")
     @NotNull
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     @JsonIgnore
-    private Contract contract;
+    private Customer customer;
 
     @Column(name = "start_date")
     @NotNull

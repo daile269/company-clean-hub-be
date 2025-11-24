@@ -2,6 +2,7 @@ package com.company.company_clean_hub_be.controller;
 
 import com.company.company_clean_hub_be.dto.request.ServiceRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.ServiceResponse;
 import com.company.company_clean_hub_be.service.ServiceEntityService;
 import jakarta.validation.Valid;
@@ -20,6 +21,15 @@ public class ServiceController {
     @GetMapping
     public ApiResponse<List<ServiceResponse>> getAllServices() {
         List<ServiceResponse> services = serviceEntityService.getAllServices();
+        return ApiResponse.success("Lấy danh sách dịch vụ thành công", services, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/filter")
+    public ApiResponse<PageResponse<ServiceResponse>> getServicesWithFilter(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<ServiceResponse> services = serviceEntityService.getServicesWithFilter(keyword, page, pageSize);
         return ApiResponse.success("Lấy danh sách dịch vụ thành công", services, HttpStatus.OK.value());
     }
 

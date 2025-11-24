@@ -2,6 +2,7 @@ package com.company.company_clean_hub_be.service.impl;
 
 import com.company.company_clean_hub_be.dto.request.ContractRequest;
 import com.company.company_clean_hub_be.dto.response.ContractResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.Contract;
 import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.ServiceEntity;
@@ -12,6 +13,10 @@ import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.ServiceEntityRepository;
 import com.company.company_clean_hub_be.service.ContractService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +39,26 @@ public class ContractServiceImpl implements ContractService {
         return contractRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResponse<ContractResponse> getContractsWithFilter(String keyword, int page, int pageSize) {
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+        Page<Contract> contractPage = contractRepository.findByFilters(keyword, pageable);
+
+        List<ContractResponse> contracts = contractPage.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        return PageResponse.<ContractResponse>builder()
+                .content(contracts)
+                .page(contractPage.getNumber())
+                .pageSize(contractPage.getSize())
+                .totalElements(contractPage.getTotalElements())
+                .totalPages(contractPage.getTotalPages())
+                .first(contractPage.isFirst())
+                .last(contractPage.isLast())
+                .build();
     }
 
     @Override

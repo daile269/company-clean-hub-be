@@ -3,6 +3,7 @@ package com.company.company_clean_hub_be.controller;
 import com.company.company_clean_hub_be.dto.request.AssignmentRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.AssignmentResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.service.AssignmentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,15 @@ public class AssignmentController {
     @GetMapping
     public ApiResponse<List<AssignmentResponse>> getAllAssignments() {
         List<AssignmentResponse> assignments = assignmentService.getAllAssignments();
+        return ApiResponse.success("Lấy danh sách phân công thành công", assignments, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/filter")
+    public ApiResponse<PageResponse<AssignmentResponse>> getAssignmentsWithFilter(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<AssignmentResponse> assignments = assignmentService.getAssignmentsWithFilter(keyword, page, pageSize);
         return ApiResponse.success("Lấy danh sách phân công thành công", assignments, HttpStatus.OK.value());
     }
 
