@@ -68,6 +68,31 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public EmployeeResponse createEmployee(EmployeeRequest request) {
+        // Kiểm tra trùng username
+        if (employeeRepository.existsByUsername(request.getUsername())) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+        
+        // Kiểm tra trùng phone
+        if (request.getPhone() != null && employeeRepository.existsByPhone(request.getPhone())) {
+            throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
+        }
+        
+        // Kiểm tra trùng employeeCode
+        if (employeeRepository.existsByEmployeeCode(request.getEmployeeCode())) {
+            throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
+        }
+        
+        // Kiểm tra trùng CCCD
+        if (employeeRepository.existsByCccd(request.getCccd())) {
+            throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
+        }
+        
+        // Kiểm tra trùng bankAccount
+        if (request.getBankAccount() != null && employeeRepository.existsByBankAccount(request.getBankAccount())) {
+            throw new AppException(ErrorCode.BANK_ACCOUNT_ALREADY_EXISTS);
+        }
+        
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
@@ -105,6 +130,26 @@ public class EmployeeServiceImpl implements EmployeeService {
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
+        // Kiểm tra trùng phone (ngoại trừ chính nó)
+        if (request.getPhone() != null && employeeRepository.existsByPhoneAndIdNot(request.getPhone(), id)) {
+            throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
+        }
+        
+        // Kiểm tra trùng employeeCode (ngoại trừ chính nó)
+        if (employeeRepository.existsByEmployeeCodeAndIdNot(request.getEmployeeCode(), id)) {
+            throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
+        }
+        
+        // Kiểm tra trùng CCCD (ngoại trừ chính nó)
+        if (employeeRepository.existsByCccdAndIdNot(request.getCccd(), id)) {
+            throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
+        }
+        
+        // Kiểm tra trùng bankAccount (ngoại trừ chính nó)
+        if (request.getBankAccount() != null && employeeRepository.existsByBankAccountAndIdNot(request.getBankAccount(), id)) {
+            throw new AppException(ErrorCode.BANK_ACCOUNT_ALREADY_EXISTS);
+        }
+        
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 

@@ -2,16 +2,21 @@ package com.company.company_clean_hub_be.service.impl;
 
 import com.company.company_clean_hub_be.dto.request.AssignmentRequest;
 import com.company.company_clean_hub_be.dto.response.AssignmentResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.Assignment;
-import com.company.company_clean_hub_be.entity.Contract;
+import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.Employee;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
-import com.company.company_clean_hub_be.repository.ContractRepository;
+import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.service.AssignmentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,13 +30,33 @@ import java.util.stream.Collectors;
 public class AssignmentServiceImpl implements AssignmentService {
     private final AssignmentRepository assignmentRepository;
     private final EmployeeRepository employeeRepository;
-    private final ContractRepository contractRepository;
+    private final CustomerRepository customerRepository;
 
     @Override
     public List<AssignmentResponse> getAllAssignments() {
         return assignmentRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResponse<AssignmentResponse> getAssignmentsWithFilter(String keyword, int page, int pageSize) {
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+        Page<Assignment> assignmentPage = assignmentRepository.findByFilters(keyword, pageable);
+
+        List<AssignmentResponse> assignments = assignmentPage.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        return PageResponse.<AssignmentResponse>builder()
+                .content(assignments)
+                .page(assignmentPage.getNumber())
+                .pageSize(assignmentPage.getSize())
+                .totalElements(assignmentPage.getTotalElements())
+                .totalPages(assignmentPage.getTotalPages())
+                .first(assignmentPage.isFirst())
+                .last(assignmentPage.isLast())
+                .build();
     }
 
     @Override
@@ -46,12 +71,12 @@ public class AssignmentServiceImpl implements AssignmentService {
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
-        Contract contract = contractRepository.findById(request.getContractId())
-                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+        Customer customer = customerRepository.findById(request.getCustomerId())
+                .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
         Assignment assignment = Assignment.builder()
                 .employee(employee)
-                .contract(contract)
+                .customer(customer)
                 .startDate(request.getStartDate())
                 .status(request.getStatus())
                 .salaryAtTime(request.getSalaryAtTime())
@@ -73,11 +98,11 @@ public class AssignmentServiceImpl implements AssignmentService {
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
-        Contract contract = contractRepository.findById(request.getContractId())
-                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+        Customer customer = customerRepository.findById(request.getCustomerId())
+                .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
         assignment.setEmployee(employee);
-        assignment.setContract(contract);
+        assignment.setCustomer(customer);
         assignment.setStartDate(request.getStartDate());
         assignment.setStatus(request.getStatus());
         assignment.setSalaryAtTime(request.getSalaryAtTime());
@@ -102,7 +127,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .employeeId(assignment.getEmployee().getId())
                 .employeeName(assignment.getEmployee().getName())
                 .employeeCode(assignment.getEmployee().getEmployeeCode())
-                .contractId(assignment.getContract().getId())
+                .customerId(assignment.getCustomer().getId())
+                .customerName(assignment.getCustomer().getName())
+                .customerCode(assignment.getCustomer().getCustomerCode())
                 .startDate(assignment.getStartDate())
                 .status(assignment.getStatus())
                 .salaryAtTime(assignment.getSalaryAtTime())

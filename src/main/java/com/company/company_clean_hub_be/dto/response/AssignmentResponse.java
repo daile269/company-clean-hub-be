@@ -19,7 +19,9 @@ public class AssignmentResponse {
     private Long employeeId;
     private String employeeName;
     private String employeeCode;
-    private Long contractId;
+    private Long customerId;
+    private String customerName;
+    private String customerCode;
     private LocalDate startDate;
     private String status;
     private BigDecimal salaryAtTime;

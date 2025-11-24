@@ -41,6 +41,7 @@ public class Employee extends User {
 
     @NotBlank
     @Size(max = 50)
+    @Column(unique = true)
     private String cccd;
 
     @Size(max = 255)
@@ -49,7 +50,8 @@ public class Employee extends User {
     @NotBlank
     @Size(max = 150)
     private String name;
-    @Column(name = "bank_account")
+    
+    @Column(name = "bank_account", unique = true)
     private String bankAccount;
 
     @Column(name = "bank_name")

@@ -20,8 +20,8 @@ public class AssignmentRequest {
     @NotNull(message = "ID nhân viên không được để trống")
     private Long employeeId;
 
-    @NotNull(message = "ID hợp đồng không được để trống")
-    private Long contractId;
+    @NotNull(message = "ID khách hàng không được để trống")
+    private Long customerId;
 
     @NotNull(message = "Ngày bắt đầu không được để trống")
     private LocalDate startDate;
