@@ -24,6 +24,10 @@ public enum ErrorCode {
     EMPLOYEE_CODE_ALREADY_EXISTS(400,"Mã nhân viên đã tồn tại"),
     CCCD_ALREADY_EXISTS(400,"Số CCCD đã tồn tại"),
     BANK_ACCOUNT_ALREADY_EXISTS(400,"Số tài khoản ngân hàng đã tồn tại"),
+    PAYROLL_NOT_FOUND(404,"Bảng lương không tồn tại"),
+    PAYROLL_ALREADY_EXISTS(400,"Bảng lương tháng này đã tồn tại"),
+    ATTENDANCE_NOT_FOUND(404,"Chấm công không tồn tại"),
+    ATTENDANCE_ALREADY_EXISTS(400,"Chấm công ngày này đã tồn tại"),
 
     UNAUTHENTICATED(403,"Không có quyền truy cập" );
 

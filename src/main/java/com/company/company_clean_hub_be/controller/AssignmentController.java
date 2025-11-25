@@ -1,9 +1,11 @@
 package com.company.company_clean_hub_be.controller;
 
 import com.company.company_clean_hub_be.dto.request.AssignmentRequest;
+import com.company.company_clean_hub_be.dto.request.TemporaryReassignmentRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.AssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.TemporaryAssignmentResponse;
 import com.company.company_clean_hub_be.service.AssignmentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -57,5 +59,13 @@ public class AssignmentController {
     public ApiResponse<Void> deleteAssignment(@PathVariable Long id) {
         assignmentService.deleteAssignment(id);
         return ApiResponse.success("Xóa phân công thành công", null, HttpStatus.OK.value());
+    }
+
+    @PostMapping("/temporary-reassignment")
+    public ApiResponse<TemporaryAssignmentResponse> temporaryReassignment(
+            @Valid @RequestBody TemporaryReassignmentRequest request) {
+        return ApiResponse.<TemporaryAssignmentResponse>builder()
+                .data(assignmentService.temporaryReassignment(request))
+                .build();
     }
 }
