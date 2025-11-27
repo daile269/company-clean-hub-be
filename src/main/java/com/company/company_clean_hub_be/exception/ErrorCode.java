@@ -28,6 +28,7 @@ public enum ErrorCode {
     PAYROLL_ALREADY_EXISTS(400,"Bảng lương tháng này đã tồn tại"),
     ATTENDANCE_NOT_FOUND(404,"Chấm công không tồn tại"),
     ATTENDANCE_ALREADY_EXISTS(400,"Chấm công ngày này đã tồn tại"),
+    ASSIGNMENT_ALREADY_EXISTS(400,"Nhân viên này đã được phân công phụ trách khách hàng này và đang ở trạng thái hoạt động"),
 
     UNAUTHENTICATED(403,"Không có quyền truy cập" );
 
