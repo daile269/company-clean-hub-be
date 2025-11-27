@@ -7,6 +7,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -25,30 +27,64 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 @Entity
-@Table(name = "employee_images")
+@Table(name = "contract_documents")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
-public class EmployeeImage {
+public class ContractDocument {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "employee_id")
+    @JoinColumn(name = "contract_id")
     @NotNull
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     @JsonIgnore
-    private Employee employee;
+    private Contract contract;
     
     @Column(name = "cloudinary_public_id")
     @NotBlank
     @Size(max = 512)
     private String cloudinaryPublicId;
 
+    @Column(name = "document_type")
+    @Enumerated(EnumType.STRING)
+    @NotNull
+    private DocumentType documentType;
+
+    @Column(name = "file_name")
+    @NotBlank
+    @Size(max = 255)
+    private String fileName;
+
     @Column(name = "uploaded_at")
     private LocalDateTime uploadedAt;
+
+    public enum DocumentType {
+        IMAGE("image"),
+        PDF("pdf");
+
+        private final String type;
+
+        DocumentType(String type) {
+            this.type = type;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public static DocumentType fromString(String type) {
+            for (DocumentType dt : DocumentType.values()) {
+                if (dt.type.equalsIgnoreCase(type)) {
+                    return dt;
+                }
+            }
+            throw new IllegalArgumentException("Unknown document type: " + type);
+        }
+    }
 }
