@@ -13,21 +13,31 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class AssignmentResponse {
+public class AttendanceResponse {
 
     private Long id;
+    
     private Long employeeId;
     private String employeeName;
     private String employeeCode;
+    
+    private Long assignmentId;
+    private String assignmentType;
     private Long customerId;
     private String customerName;
-    private String customerCode;
-    private LocalDate startDate;
-    private String status;
-    private BigDecimal salaryAtTime;
-    private Integer workDays;
+    
+    private LocalDate date;
+    private BigDecimal workHours;
+    private BigDecimal bonus;
+    private BigDecimal penalty;
+    private BigDecimal supportCost;
+    private Boolean isOvertime;
+    private BigDecimal overtimeAmount;
+    
+    private Long approvedBy;
+    private String approvedByName;
+    
     private String description;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private String assignmentType;
 }

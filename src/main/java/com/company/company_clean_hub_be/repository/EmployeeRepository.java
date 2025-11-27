@@ -37,4 +37,12 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     boolean existsByPhone(String phone);
 
     boolean existsByPhoneAndIdNot(String phone, Long id);
+    
+    @Query("SELECT e FROM Employee e WHERE e.id NOT IN (" +
+           "SELECT a.employee.id FROM Assignment a " +
+           "WHERE a.customer.id = :customerId AND a.status = 'ACTIVE')")
+    Page<Employee> findEmployeesNotAssignedToCustomer(
+            @Param("customerId") Long customerId,
+            Pageable pageable
+    );
 }
