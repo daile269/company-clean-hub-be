@@ -18,6 +18,7 @@ public enum ErrorCode {
     SERVICE_NOT_FOUND(404,"Dịch vụ không tồn tại"),
     ASSIGNMENT_NOT_FOUND(404,"Phân công không tồn tại"),
     ROLE_NOT_FOUND(404,"Vai trò không tồn tại"),
+    IMAGE_NOT_FOUND(404, "Ảnh nhân viên không tồn tại"),
     
     USERNAME_ALREADY_EXISTS(400,"Tên đăng nhập đã tồn tại"),
     PHONE_ALREADY_EXISTS(400,"Số điện thoại đã tồn tại"),
