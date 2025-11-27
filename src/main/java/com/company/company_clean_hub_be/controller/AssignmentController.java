@@ -66,6 +66,52 @@ public class AssignmentController {
             @Valid @RequestBody TemporaryReassignmentRequest request) {
         return ApiResponse.<TemporaryAssignmentResponse>builder()
                 .data(assignmentService.temporaryReassignment(request))
+                .success(true)
                 .build();
+    }
+
+    @GetMapping("/customer/{customerId}")
+    public ApiResponse<List<AssignmentResponse>> getEmployeesByCustomer(@PathVariable Long customerId) {
+        List<AssignmentResponse> assignments = assignmentService.getEmployeesByCustomer(customerId);
+        return ApiResponse.success(
+                "Lấy danh sách nhân viên phụ trách khách hàng thành công", 
+                assignments, 
+                HttpStatus.OK.value()
+        );
+    }
+
+    @GetMapping("/employee/{employeeId}/customers")
+    public ApiResponse<List<com.company.company_clean_hub_be.dto.response.CustomerResponse>> getCustomersByEmployee(
+            @PathVariable Long employeeId) {
+        List<com.company.company_clean_hub_be.dto.response.CustomerResponse> customers = assignmentService.getCustomersByEmployee(employeeId);
+        return ApiResponse.success(
+                "Lấy danh sách khách hàng nhân viên phụ trách thành công",
+                customers,
+                HttpStatus.OK.value()
+        );
+    }
+
+    @GetMapping("/employee/{employeeId}")
+    public ApiResponse<List<AssignmentResponse>> getAssignmentsByEmployee(@PathVariable Long employeeId) {
+        List<AssignmentResponse> assignments = assignmentService.getAssignmentsByEmployee(employeeId);
+        return ApiResponse.success(
+                "Lấy danh sách phân công của nhân viên thành công",
+                assignments,
+                HttpStatus.OK.value()
+        );
+    }
+
+    @GetMapping("/customer/{customerId}/not-assigned")
+    public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse>> getEmployeesNotAssignedToCustomer(
+            @PathVariable Long customerId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> employees = 
+                assignmentService.getEmployeesNotAssignedToCustomer(customerId, page, pageSize);
+        return ApiResponse.success(
+                "Lấy danh sách nhân viên chưa phân công thành công", 
+                employees, 
+                HttpStatus.OK.value()
+        );
     }
 }

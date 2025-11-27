@@ -180,6 +180,30 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    public PageResponse<AttendanceResponse> getAttendancesByEmployee(Long employeeId, Integer month, Integer year, int page, int pageSize) {
+        // Validate employee exists
+        employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("date").descending());
+        Page<Attendance> attendancePage = attendanceRepository.findByEmployeeAndFilters(employeeId, month, year, pageable);
+
+        List<AttendanceResponse> attendances = attendancePage.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        return PageResponse.<AttendanceResponse>builder()
+                .content(attendances)
+                .page(attendancePage.getNumber())
+                .pageSize(attendancePage.getSize())
+                .totalElements(attendancePage.getTotalElements())
+                .totalPages(attendancePage.getTotalPages())
+                .first(attendancePage.isFirst())
+                .last(attendancePage.isLast())
+                .build();
+    }
+
+    @Override
     public AttendanceResponse updateAttendance(Long id, AttendanceRequest request) {
         Attendance attendance = attendanceRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
@@ -240,6 +264,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .employeeName(employee.getName())
                 .employeeCode(employee.getEmployeeCode())
                 .assignmentId(assignment.getId())
+                .assignmentType(assignment.getAssignmentType() != null ? assignment.getAssignmentType().name() : null)
                 .customerId(assignment.getCustomer().getId())
                 .customerName(assignment.getCustomer().getName())
                 .date(attendance.getDate())
