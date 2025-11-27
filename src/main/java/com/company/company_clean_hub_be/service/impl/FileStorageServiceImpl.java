@@ -23,12 +23,17 @@ import lombok.extern.slf4j.Slf4j;
 public class FileStorageServiceImpl implements FileStorageService {
 
     private final Cloudinary cloudinary;
-    private static final String FOLDER = "company-clean-hub/employee";
+    private static final String EMPLOYEE_FOLDER = "company-clean-hub/employee";
+    private static final String CONTRACT_FOLDER = "company-clean-hub/contract";
 
     @Override
     public String storeFile(MultipartFile file) throws IOException {
+        return storeFileToFolder(file, EMPLOYEE_FOLDER);
+    }
+
+    public String storeFileToFolder(MultipartFile file, String folder) throws IOException {
         String originalFileName = file.getOriginalFilename();
-        log.info("Uploading file to Cloudinary: originalName={}", originalFileName);
+        log.info("Uploading file to Cloudinary: originalName={}, folder={}", originalFileName, folder);
 
         File tempFile = null;
         try (InputStream inputStream = file.getInputStream()) {
@@ -40,8 +45,9 @@ public class FileStorageServiceImpl implements FileStorageService {
             Map<String, Object> uploadResult = cloudinary.uploader().upload(
                     tempFile,
                     ObjectUtils.asMap(
-                            "folder", FOLDER,
-                            "resource_type", "auto"
+                            "folder", folder,
+                            "resource_type", "auto",
+                            "access_mode", "public"
                     )
             );
 
@@ -50,7 +56,7 @@ public class FileStorageServiceImpl implements FileStorageService {
 
             log.info("File uploaded successfully to Cloudinary: publicId={}, url={}", publicId, secureUrl);
 
-            return publicId; // hoặc return secureUrl nếu muốn lấy URL trực tiếp
+            return publicId;
         } catch (IOException ex) {
             log.error("Failed to upload file to Cloudinary: {}", originalFileName, ex);
             throw new IOException("Failed to upload file to Cloudinary", ex);

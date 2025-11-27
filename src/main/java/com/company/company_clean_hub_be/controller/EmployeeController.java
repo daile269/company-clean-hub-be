@@ -129,6 +129,11 @@ public class EmployeeController {
                 id, imageId, file.getOriginalFilename(), file.getSize());
         
         try {
+
+
+
+
+
             EmployeeImage saved = employeeImageService.replaceImage(id, imageId, file);
             log.info("Replace successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
             return ApiResponse.success("Cập nhật ảnh nhân viên thành công", saved, HttpStatus.OK.value());
