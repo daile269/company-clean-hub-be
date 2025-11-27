@@ -15,6 +15,7 @@ public interface AttendanceService {
     AttendanceResponse getAttendanceById(Long id);
     List<AttendanceResponse> getAllAttendances();
     PageResponse<AttendanceResponse> getAttendancesWithFilter(String keyword, Integer month, Integer year, int page, int pageSize);
+    PageResponse<AttendanceResponse> getAttendancesByEmployee(Long employeeId, Integer month, Integer year, int page, int pageSize);
     AttendanceResponse updateAttendance(Long id, AttendanceRequest request);
     void deleteAttendance(Long id);
     TotalDaysResponse getTotalDaysByEmployee(Long employeeId, Integer month, Integer year);

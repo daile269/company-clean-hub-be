@@ -53,6 +53,18 @@ public class AttendanceController {
         return ApiResponse.success("Lấy danh sách chấm công thành công", attendances, HttpStatus.OK.value());
     }
 
+        @GetMapping("/employee/{employeeId}")
+        public ApiResponse<PageResponse<AttendanceResponse>> getAttendancesByEmployee(
+            @PathVariable Long employeeId,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<AttendanceResponse> attendances = attendanceService.getAttendancesByEmployee(
+            employeeId, month, year, page, pageSize);
+        return ApiResponse.success("Lấy danh sách chấm công theo nhân viên thành công", attendances, HttpStatus.OK.value());
+        }
+
     @GetMapping("/{id}")
     public ApiResponse<AttendanceResponse> getAttendanceById(@PathVariable Long id) {
         AttendanceResponse attendance = attendanceService.getAttendanceById(id);

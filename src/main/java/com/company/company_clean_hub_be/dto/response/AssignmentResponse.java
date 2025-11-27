@@ -29,4 +29,5 @@ public class AssignmentResponse {
     private String description;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String assignmentType;
 }

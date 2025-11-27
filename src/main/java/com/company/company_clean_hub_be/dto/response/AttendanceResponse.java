@@ -22,6 +22,7 @@ public class AttendanceResponse {
     private String employeeCode;
     
     private Long assignmentId;
+    private String assignmentType;
     private Long customerId;
     private String customerName;
     
