@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.dto.request;
 
+import com.company.company_clean_hub_be.entity.DayOfWeek;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -10,6 +11,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -26,14 +28,17 @@ public class AssignmentRequest {
     @NotNull(message = "Ngày bắt đầu không được để trống")
     private LocalDate startDate;
 
-    @Size(max = 50, message = "Trạng thái không được vượt quá 50 ký tự")
     private String status;
+
+    private String assignmentType;
 
     @PositiveOrZero(message = "Lương tại thời điểm phải lớn hơn hoặc bằng 0")
     private BigDecimal salaryAtTime;
 
-    @PositiveOrZero(message = "Số ngày làm việc phải lớn hơn hoặc bằng 0")
-    private Integer workDays;
+    private List<DayOfWeek> workingDaysPerWeek;
+
+    @PositiveOrZero(message = "Phụ cấp thêm phải lớn hơn hoặc bằng 0")
+    private BigDecimal additionalAllowance;
 
     private String description;
 }

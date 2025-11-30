@@ -23,15 +23,7 @@ public class ServiceRequest {
     @Size(max = 2000, message = "Mô tả không được vượt quá 2000 ký tự")
     private String description;
 
-    @PositiveOrZero(message = "Giá từ phải lớn hơn hoặc bằng 0")
-    private BigDecimal priceFrom;
+    @PositiveOrZero(message = "Giá phải lớn hơn hoặc bằng 0")
+    private BigDecimal price;
 
-    @PositiveOrZero(message = "Giá đến phải lớn hơn hoặc bằng 0")
-    private BigDecimal priceTo;
-
-    private String mainImage;
-
-    @NotBlank(message = "Trạng thái không được để trống")
-    @Size(max = 50, message = "Trạng thái không được vượt quá 50 ký tự")
-    private String status;
 }
