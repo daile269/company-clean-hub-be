@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Set;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -19,8 +19,7 @@ public class ContractResponse {
     private Long id;
     private Long customerId;
     private String customerName;
-    private Set<Long> serviceIds;
-    private Set<String> serviceNames;
+    private List<ServiceResponse> services;
     private LocalDate startDate;
     private LocalDate endDate;
     private BigDecimal basePrice;

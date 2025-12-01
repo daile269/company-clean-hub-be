@@ -44,20 +44,9 @@ public class ServiceEntity {
     @Size(max = 2000)
     private String description;
 
-    @Column(name = "price_from")
+    @Column(name = "price")
     @PositiveOrZero
-    private BigDecimal priceFrom;
-
-    @Column(name = "price_to")
-    @PositiveOrZero
-    private BigDecimal priceTo;
-
-    @Column(name = "main_image")
-    private String mainImage;
-
-    @NotBlank
-    @Size(max = 50)
-    private String status;
+    private BigDecimal price;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

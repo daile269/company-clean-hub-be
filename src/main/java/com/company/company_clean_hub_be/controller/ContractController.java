@@ -57,6 +57,12 @@ public class ContractController {
         return ApiResponse.success("Lấy thông tin hợp đồng thành công", contract, HttpStatus.OK.value());
     }
 
+    @GetMapping("/customer/{customerId}")
+    public ApiResponse<List<ContractResponse>> getContractsByCustomer(@PathVariable Long customerId) {
+        List<ContractResponse> contracts = contractService.getContractsByCustomer(customerId);
+        return ApiResponse.success("Lấy danh sách hợp đồng của khách hàng thành công", contracts, HttpStatus.OK.value());
+    }
+
     @PostMapping
     public ApiResponse<ContractResponse> createContract(@Valid @RequestBody ContractRequest request) {
         ContractResponse contract = contractService.createContract(request);
