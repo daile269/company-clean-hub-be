@@ -65,4 +65,14 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
                  "WHERE a.employee.id = :employeeId " +
                  "AND a.status = 'ACTIVE'")
        List<com.company.company_clean_hub_be.entity.Customer> findActiveCustomersByEmployee(@Param("employeeId") Long employeeId);
+    @Query("SELECT DISTINCT a FROM Assignment a " +
+            "JOIN a.attendances att " +   // join dựa trên quan hệ OneToMany từ Assignment → Attendance
+            "WHERE a.employee.id = :employeeId " +
+            "AND FUNCTION('MONTH', att.date) = :month " +
+            "AND FUNCTION('YEAR', att.date) = :year")
+    List<Assignment> findDistinctAssignmentsByAttendanceMonthAndEmployee(
+            @Param("month") Integer month,
+            @Param("year") Integer year,
+            @Param("employeeId") Long employeeId);
+
 }

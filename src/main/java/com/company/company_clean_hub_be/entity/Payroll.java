@@ -2,9 +2,11 @@ package com.company.company_clean_hub_be.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -13,13 +15,14 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
-import lombok.EqualsAndHashCode;
 
 @Entity
 @Table(name = "payrolls")
@@ -33,21 +36,11 @@ public class Payroll {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "employee_id")
-    @ToString.Exclude
-    @EqualsAndHashCode.Exclude
-    @JsonIgnore
-    private Employee employee;
+    @Column(name = "bonus_total")
+    private BigDecimal bonusTotal;
 
     @Column(name = "total_days")
     private Integer totalDays;
-
-    @Column(name = "salary_base")
-    private BigDecimal salaryBase;
-
-    @Column(name = "bonus_total")
-    private BigDecimal bonusTotal;
 
     @Column(name = "penalty_total")
     private BigDecimal penaltyTotal;
@@ -77,9 +70,16 @@ public class Payroll {
     @JsonIgnore
     private User accountant;
 
+    @OneToMany(mappedBy = "payroll", fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
+    private List<Attendance> attendances;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
 }

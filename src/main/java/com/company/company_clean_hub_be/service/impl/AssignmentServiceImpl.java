@@ -227,7 +227,6 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         // Tạo attendance mới cho người thay
         Attendance newAttendance = Attendance.builder()
-                .employee(replacementEmployee)
                 .assignment(savedTemporaryAssignment)
                 .date(request.getDate())
                 .workHours(java.math.BigDecimal.valueOf(8))
@@ -366,15 +365,16 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     private AttendanceResponse mapAttendanceToResponse(Attendance attendance) {
         Assignment assignment = attendance.getAssignment();
+        Employee employee = assignment != null ? assignment.getEmployee() : null;
         return AttendanceResponse.builder()
                 .id(attendance.getId())
-                .employeeId(attendance.getEmployee().getId())
-                .employeeName(attendance.getEmployee().getName())
-                .employeeCode(attendance.getEmployee().getEmployeeCode())
-                .assignmentId(assignment.getId())
-                .assignmentType(assignment.getAssignmentType() != null ? assignment.getAssignmentType().name() : null)
-                .customerId(assignment.getCustomer().getId())
-                .customerName(assignment.getCustomer().getName())
+                .employeeId(employee != null ? employee.getId() : null)
+                .employeeName(employee != null ? employee.getName() : null)
+                .employeeCode(employee != null ? employee.getEmployeeCode() : null)
+                .assignmentId(assignment != null ? assignment.getId() : null)
+                .assignmentType(assignment != null && assignment.getAssignmentType() != null ? assignment.getAssignmentType().name() : null)
+                .customerId(assignment != null && assignment.getCustomer() != null ? assignment.getCustomer().getId() : null)
+                .customerName(assignment != null && assignment.getCustomer() != null ? assignment.getCustomer().getName() : null)
                 .date(attendance.getDate())
                 .workHours(attendance.getWorkHours())
                 .bonus(attendance.getBonus())
@@ -444,7 +444,6 @@ public class AssignmentServiceImpl implements AssignmentService {
                 // Nếu chưa tồn tại thì tạo mới
                 if (!alreadyExists) {
                     Attendance attendance = Attendance.builder()
-                            .employee(assignment.getEmployee())
                             .assignment(assignment)
                             .date(currentDate)
                             .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
