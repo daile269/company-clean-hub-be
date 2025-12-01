@@ -37,7 +37,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     
     @Query("SELECT e FROM Employee e WHERE e.id NOT IN (" +
            "SELECT a.employee.id FROM Assignment a " +
-           "WHERE a.customer.id = :customerId AND a.status = 'ACTIVE')")
+           "WHERE a.customer.id = :customerId AND a.status = 'IN_PROGRESS')")
     Page<Employee> findEmployeesNotAssignedToCustomer(
             @Param("customerId") Long customerId,
             Pageable pageable

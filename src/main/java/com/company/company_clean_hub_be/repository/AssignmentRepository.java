@@ -37,14 +37,19 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     
     @Query("SELECT a FROM Assignment a " +
            "WHERE a.customer.id = :customerId " +
-           "AND a.status = 'ACTIVE' " +
+           "AND a.status = 'IN_PROGRESS' " +
            "ORDER BY a.startDate DESC")
     List<Assignment> findActiveAssignmentsByCustomer(@Param("customerId") Long customerId);
     
     @Query("SELECT a FROM Assignment a " +
+           "WHERE a.customer.id = :customerId " +
+           "ORDER BY a.startDate ASC")
+    List<Assignment> findAllAssignmentsByCustomer(@Param("customerId") Long customerId);
+    
+    @Query("SELECT a FROM Assignment a " +
            "WHERE a.employee.id = :employeeId " +
            "AND a.customer.id = :customerId " +
-           "AND a.status = 'ACTIVE'")
+           "AND a.status = 'IN_PROGRESS'")
     List<Assignment> findActiveAssignmentByEmployeeAndCustomer(
             @Param("employeeId") Long employeeId,
             @Param("customerId") Long customerId
@@ -53,7 +58,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     @Query("SELECT a FROM Assignment a " +
            "WHERE a.employee.id = :employeeId " +
            "AND a.customer.id = :customerId " +
-           "AND a.status = 'ACTIVE' " +
+           "AND a.status = 'IN_PROGRESS' " +
            "AND a.id != :assignmentId")
     List<Assignment> findActiveAssignmentByEmployeeAndCustomerAndIdNot(
             @Param("employeeId") Long employeeId,
@@ -63,6 +68,18 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 
        @Query("SELECT DISTINCT a.customer FROM Assignment a " +
                  "WHERE a.employee.id = :employeeId " +
-                 "AND a.status = 'ACTIVE'")
+                 "AND a.status = 'IN_PROGRESS'")
        List<com.company.company_clean_hub_be.entity.Customer> findActiveCustomersByEmployee(@Param("employeeId") Long employeeId);
+       
+       @Query("SELECT a FROM Assignment a " +
+              "WHERE a.assignmentType = 'TEMPORARY' " +
+              "AND a.status = 'IN_PROGRESS' " +
+              "AND a.startDate <= :date")
+       List<Assignment> findExpiredTemporaryAssignments(@Param("date") LocalDate date);
+       
+       @Query("SELECT a FROM Assignment a " +
+              "WHERE (a.assignmentType = 'FIXED_BY_CONTRACT' OR a.assignmentType = 'FIXED_BY_DAY') " +
+              "AND a.status = 'IN_PROGRESS' " +
+              "AND a.startDate <= :endOfLastMonth")
+       List<Assignment> findExpiredFixedAssignments(@Param("endOfLastMonth") LocalDate endOfLastMonth);
 }

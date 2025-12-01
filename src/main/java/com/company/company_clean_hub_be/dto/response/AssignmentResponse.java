@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.dto.response;
 
+import com.company.company_clean_hub_be.entity.AssignmentStatus;
 import com.company.company_clean_hub_be.entity.DayOfWeek;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -25,7 +26,7 @@ public class AssignmentResponse {
     private String customerName;
     private String customerCode;
     private LocalDate startDate;
-    private String status;
+    private AssignmentStatus status;
     private BigDecimal salaryAtTime;
     private Integer workDays;
     private List<DayOfWeek> workingDaysPerWeek;
