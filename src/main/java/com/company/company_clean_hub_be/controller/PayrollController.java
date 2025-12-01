@@ -18,11 +18,11 @@ import java.util.List;
 public class PayrollController {
     private final PayrollService payrollService;
 
-    @PostMapping("/calculate")
-    public ApiResponse<PayrollResponse> calculatePayroll(@Valid @RequestBody PayrollRequest request) {
-        PayrollResponse payroll = payrollService.calculatePayroll(request);
-        return ApiResponse.success("Tính lương thành công", payroll, HttpStatus.CREATED.value());
-    }
+//    @PostMapping("/calculate")
+//    public ApiResponse<PayrollResponse> calculatePayroll(@Valid @RequestBody PayrollRequest request) {
+//        PayrollResponse payroll = payrollService.calculatePayroll(request);
+//        return ApiResponse.success("Tính lương thành công", payroll, HttpStatus.CREATED.value());
+//    }
 
     @GetMapping
     public ApiResponse<List<PayrollResponse>> getAllPayrolls() {

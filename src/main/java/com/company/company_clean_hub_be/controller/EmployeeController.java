@@ -22,7 +22,6 @@ import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.EmployeeImage;
-import com.company.company_clean_hub_be.entity.EmploymentType;
 import com.company.company_clean_hub_be.service.EmployeeImageService;
 import com.company.company_clean_hub_be.service.EmployeeService;
 
@@ -47,10 +46,9 @@ public class EmployeeController {
     @GetMapping("/filter")
     public ApiResponse<PageResponse<EmployeeResponse>> getEmployeesWithFilter(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) EmploymentType employmentType,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        PageResponse<EmployeeResponse> employees = employeeService.getEmployeesWithFilter(keyword, employmentType, page, pageSize);
+        PageResponse<EmployeeResponse> employees = employeeService.getEmployeesWithFilter(keyword, page, pageSize);
         return ApiResponse.success("Lấy danh sách nhân viên thành công", employees, HttpStatus.OK.value());
     }
 

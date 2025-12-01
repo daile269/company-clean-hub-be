@@ -3,6 +3,7 @@ package com.company.company_clean_hub_be.service.impl;
 import com.company.company_clean_hub_be.dto.request.ContractRequest;
 import com.company.company_clean_hub_be.dto.response.ContractResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.ServiceResponse;
 import com.company.company_clean_hub_be.entity.Contract;
 import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.ServiceEntity;
@@ -141,21 +142,35 @@ public class ContractServiceImpl implements ContractService {
         contractRepository.delete(contract);
     }
 
-    private ContractResponse mapToResponse(Contract contract) {
-        Set<Long> serviceIds = contract.getServices().stream()
-                .map(ServiceEntity::getId)
-                .collect(Collectors.toSet());
+    @Override
+    public List<ContractResponse> getContractsByCustomer(Long customerId) {
+        customerRepository.findById(customerId)
+                .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
+        
+        List<Contract> contracts = contractRepository.findByCustomerId(customerId);
+        
+        return contracts.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
 
-        Set<String> serviceNames = contract.getServices().stream()
-                .map(ServiceEntity::getTitle)
-                .collect(Collectors.toSet());
+    private ContractResponse mapToResponse(Contract contract) {
+        List<ServiceResponse> services = contract.getServices().stream()
+                .map(service -> ServiceResponse.builder()
+                        .id(service.getId())
+                        .title(service.getTitle())
+                        .description(service.getDescription())
+                        .price(service.getPrice())
+                        .createdAt(service.getCreatedAt())
+                        .updatedAt(service.getUpdatedAt())
+                        .build())
+                .collect(Collectors.toList());
 
         return ContractResponse.builder()
                 .id(contract.getId())
                 .customerId(contract.getCustomer().getId())
                 .customerName(contract.getCustomer().getName())
-                .serviceIds(serviceIds)
-                .serviceNames(serviceNames)
+                .services(services)
                 .startDate(contract.getStartDate())
                 .endDate(contract.getEndDate())
                 .basePrice(contract.getBasePrice())

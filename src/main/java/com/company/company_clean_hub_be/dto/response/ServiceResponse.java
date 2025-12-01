@@ -17,10 +17,7 @@ public class ServiceResponse {
     private Long id;
     private String title;
     private String description;
-    private BigDecimal priceFrom;
-    private BigDecimal priceTo;
-    private String mainImage;
-    private String status;
+    private BigDecimal price;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

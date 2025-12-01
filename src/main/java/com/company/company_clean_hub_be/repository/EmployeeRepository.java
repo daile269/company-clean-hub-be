@@ -1,6 +1,5 @@
 package com.company.company_clean_hub_be.repository;
 
-import com.company.company_clean_hub_be.entity.EmploymentType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Page;
@@ -24,11 +23,9 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
            "(:keyword IS NULL OR :keyword = '' OR " +
            "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(e.phone) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND " +
-           "(:employmentType IS NULL OR e.employmentType = :employmentType)")
+           "LOWER(e.phone) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     Page<Employee> findByFilters(
             @Param("keyword") String keyword,
-            @Param("employmentType") EmploymentType employmentType,
             Pageable pageable
     );
 

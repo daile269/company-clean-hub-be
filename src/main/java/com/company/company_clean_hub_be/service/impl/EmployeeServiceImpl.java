@@ -4,7 +4,6 @@ import com.company.company_clean_hub_be.dto.request.EmployeeRequest;
 import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.Employee;
-import com.company.company_clean_hub_be.entity.EmploymentType;
 import com.company.company_clean_hub_be.entity.Role;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
@@ -40,9 +39,9 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     @Override
-    public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, EmploymentType employmentType, int page, int pageSize) {
+    public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, int page, int pageSize) {
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
-        Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, pageable);
+        Page<Employee> employeePage = employeeRepository.findByFilters(keyword, pageable);
 
         List<EmployeeResponse> employees = employeePage.getContent().stream()
                 .map(this::mapToResponse)
@@ -101,7 +100,6 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .phone(request.getPhone())
-                .email(request.getEmail())
                 .role(role)
                 .status(request.getStatus())
                 .employeeCode(request.getEmployeeCode())
@@ -110,12 +108,6 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .name(request.getName())
                 .bankAccount(request.getBankAccount())
                 .bankName(request.getBankName())
-                .employmentType(request.getEmploymentType())
-                .baseSalary(request.getBaseSalary())
-                .dailySalary(request.getDailySalary())
-                .socialInsurance(request.getSocialInsurance())
-                .healthInsurance(request.getHealthInsurance())
-                .allowance(request.getAllowance())
                 .description(request.getDescription())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
@@ -158,7 +150,6 @@ public class EmployeeServiceImpl implements EmployeeService {
 //            employee.setPassword(passwordEncoder.encode(request.getPassword()));
 //        }
         employee.setPhone(request.getPhone());
-        employee.setEmail(request.getEmail());
         employee.setRole(role);
         employee.setStatus(request.getStatus());
         employee.setCccd(request.getCccd());
@@ -167,12 +158,6 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setName(request.getName());
         employee.setBankAccount(request.getBankAccount());
         employee.setBankName(request.getBankName());
-        employee.setEmploymentType(request.getEmploymentType());
-        employee.setBaseSalary(request.getBaseSalary());
-        employee.setDailySalary(request.getDailySalary());
-        employee.setSocialInsurance(request.getSocialInsurance());
-        employee.setHealthInsurance(request.getHealthInsurance());
-        employee.setAllowance(request.getAllowance());
         employee.setDescription(request.getDescription());
         employee.setUpdatedAt(LocalDateTime.now());
 
@@ -203,12 +188,6 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .name(employee.getName())
                 .bankAccount(employee.getBankAccount())
                 .bankName(employee.getBankName())
-                .employmentType(employee.getEmploymentType())
-                .baseSalary(employee.getBaseSalary())
-                .dailySalary(employee.getDailySalary())
-                .socialInsurance(employee.getSocialInsurance())
-                .healthInsurance(employee.getHealthInsurance())
-                .allowance(employee.getAllowance())
                 .description(employee.getDescription())
                 .createdAt(employee.getCreatedAt())
                 .updatedAt(employee.getUpdatedAt())

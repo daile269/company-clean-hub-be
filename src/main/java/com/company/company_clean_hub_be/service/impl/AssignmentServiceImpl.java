@@ -24,6 +24,7 @@ import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
 
 @Service
 @RequiredArgsConstructor
@@ -93,14 +94,25 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .startDate(request.getStartDate())
                 .status(request.getStatus())
                 .salaryAtTime(request.getSalaryAtTime())
-                .workDays(request.getWorkDays())
+                .workingDaysPerWeek(request.getWorkingDaysPerWeek())
+                .additionalAllowance(request.getAdditionalAllowance())
                 .description(request.getDescription())
-                .assignmentType(AssignmentType.REGULAR)
+                .assignmentType(AssignmentType.valueOf(request.getAssignmentType()))
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        return mapToResponse(assignmentRepository.save(assignment));
+        Assignment savedAssignment = assignmentRepository.save(assignment);
+
+        // Tự động tạo chấm công nếu có workingDaysPerWeek và status là ACTIVE
+        if ("ACTIVE".equals(request.getStatus()) && 
+            request.getWorkingDaysPerWeek() != null && 
+            !request.getWorkingDaysPerWeek().isEmpty()) {
+            
+            autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+        }
+
+        return mapToResponse(savedAssignment);
     }
 
     @Override
@@ -133,11 +145,26 @@ public class AssignmentServiceImpl implements AssignmentService {
         assignment.setStartDate(request.getStartDate());
         assignment.setStatus(request.getStatus());
         assignment.setSalaryAtTime(request.getSalaryAtTime());
-        assignment.setWorkDays(request.getWorkDays());
+        assignment.setWorkingDaysPerWeek(request.getWorkingDaysPerWeek());
+        assignment.setAdditionalAllowance(request.getAdditionalAllowance());
         assignment.setDescription(request.getDescription());
         assignment.setUpdatedAt(LocalDateTime.now());
 
-        return mapToResponse(assignmentRepository.save(assignment));
+        Assignment updatedAssignment = assignmentRepository.save(assignment);
+
+        // Tính lại workDays dựa vào số chấm công thực tế trong tháng
+        YearMonth ym = YearMonth.from(request.getStartDate());
+        LocalDate monthStart = ym.atDay(1);
+        LocalDate monthEnd = ym.atEndOfMonth();
+        
+        int totalWorkDays = attendanceRepository
+                .findByEmployeeAndDateBetween(employee.getId(), monthStart, monthEnd)
+                .size();
+        
+        updatedAssignment.setWorkDays(totalWorkDays);
+        assignmentRepository.save(updatedAssignment);
+
+        return mapToResponse(updatedAssignment);
     }
 
 
@@ -326,23 +353,11 @@ public class AssignmentServiceImpl implements AssignmentService {
         return com.company.company_clean_hub_be.dto.response.EmployeeResponse.builder()
                 .id(employee.getId())
                 .employeeCode(employee.getEmployeeCode())
-                .name(employee.getName())
-                .username(employee.getUsername())
-                .phone(employee.getPhone())
-                .email(employee.getEmail())
-                .roleId(employee.getRole() != null ? employee.getRole().getId() : null)
-                .roleName(employee.getRole() != null ? employee.getRole().getName() : null)
-                .status(employee.getStatus())
                 .cccd(employee.getCccd())
                 .address(employee.getAddress())
+                .name(employee.getName())
                 .bankAccount(employee.getBankAccount())
                 .bankName(employee.getBankName())
-                .employmentType(employee.getEmploymentType())
-                .baseSalary(employee.getBaseSalary())
-                .dailySalary(employee.getDailySalary())
-                .socialInsurance(employee.getSocialInsurance())
-                .healthInsurance(employee.getHealthInsurance())
-                .allowance(employee.getAllowance())
                 .description(employee.getDescription())
                 .createdAt(employee.getCreatedAt())
                 .updatedAt(employee.getUpdatedAt())
@@ -387,9 +402,84 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .status(assignment.getStatus())
                 .salaryAtTime(assignment.getSalaryAtTime())
                 .workDays(assignment.getWorkDays())
+                .workingDaysPerWeek(assignment.getWorkingDaysPerWeek())
+                .additionalAllowance(assignment.getAdditionalAllowance())
                 .description(assignment.getDescription())
                 .createdAt(assignment.getCreatedAt())
                 .updatedAt(assignment.getUpdatedAt())
                 .build();
+    }
+
+    /**
+     * Tự động tạo chấm công cho assignment dựa vào workingDaysPerWeek
+     * Từ startDate đến cuối tháng hiện tại
+     */
+    private void autoGenerateAttendancesForAssignment(Assignment assignment, LocalDate startDate) {
+        if (assignment.getWorkingDaysPerWeek() == null || assignment.getWorkingDaysPerWeek().isEmpty()) {
+            return;
+        }
+
+        // Tính ngày cuối tháng
+        YearMonth yearMonth = YearMonth.from(startDate);
+        LocalDate endDate = yearMonth.atEndOfMonth();
+
+        List<Attendance> attendances = new ArrayList<>();
+
+        // Chuyển đổi DayOfWeek từ entity sang java.time.DayOfWeek
+        List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek().stream()
+                .map(day -> java.time.DayOfWeek.valueOf(day.name()))
+                .collect(Collectors.toList());
+
+        // Duyệt qua tất cả các ngày từ startDate đến cuối tháng
+        LocalDate currentDate = startDate;
+        while (!currentDate.isAfter(endDate)) {
+            // Kiểm tra ngày hiện tại có nằm trong danh sách ngày làm việc không
+            if (workingDays.contains(currentDate.getDayOfWeek())) {
+                // Kiểm tra đã có chấm công ngày này chưa
+                boolean alreadyExists = attendanceRepository.findByEmployeeAndDate(
+                        assignment.getEmployee().getId(), 
+                        currentDate
+                ).isPresent();
+
+                // Nếu chưa tồn tại thì tạo mới
+                if (!alreadyExists) {
+                    Attendance attendance = Attendance.builder()
+                            .employee(assignment.getEmployee())
+                            .assignment(assignment)
+                            .date(currentDate)
+                            .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
+                            .bonus(java.math.BigDecimal.ZERO)
+                            .penalty(java.math.BigDecimal.ZERO)
+                            .supportCost(java.math.BigDecimal.ZERO)
+                            .isOvertime(false)
+                            .overtimeAmount(java.math.BigDecimal.ZERO)
+                            .description("Tự động tạo từ phân công")
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .build();
+                    
+                    attendances.add(attendance);
+                }
+            }
+
+            currentDate = currentDate.plusDays(1);
+        }
+
+        // Lưu tất cả chấm công
+        if (!attendances.isEmpty()) {
+            attendanceRepository.saveAll(attendances);
+            
+            // Tính lại workDays dựa vào số chấm công thực tế trong tháng
+            YearMonth ym = YearMonth.from(startDate);
+            LocalDate monthStart = ym.atDay(1);
+            LocalDate monthEnd = ym.atEndOfMonth();
+            
+            int totalWorkDays = attendanceRepository
+                    .findByEmployeeAndDateBetween(assignment.getEmployee().getId(), monthStart, monthEnd)
+                    .size();
+            
+            assignment.setWorkDays(totalWorkDays);
+            assignmentRepository.save(assignment);
+        }
     }
 }

@@ -1,8 +1,5 @@
 package com.company.company_clean_hub_be.dto.request;
 
-import java.math.BigDecimal;
-
-import com.company.company_clean_hub_be.entity.EmploymentType;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -29,10 +26,6 @@ public class EmployeeRequest {
     @Size(max = 50, message = "Số điện thoại không được vượt quá 50 ký tự")
     private String phone;
 
-    @Email(message = "Email không hợp lệ")
-    @Size(max = 255, message = "Email không được vượt quá 255 ký tự")
-    private String email;
-
     @NotNull(message = "Role ID bắt buộc")
     private Long roleId;
 
@@ -52,24 +45,6 @@ public class EmployeeRequest {
     private String bankAccount;
 
     private String bankName;
-
-    @NotNull(message = "Loại hình tuyển dụng bắt buộc")
-    private EmploymentType employmentType;
-
-    @PositiveOrZero(message = "Lương cơ bản phải là số lớn hơn hoặc bằng 0")
-    private BigDecimal baseSalary;
-
-    @PositiveOrZero(message = "Lương theo ngày phải là số lớn hơn hoặc bằng 0")
-    private BigDecimal dailySalary;
-
-    @PositiveOrZero(message = "Bảo hiểm xã hội phải là số lớn hơn hoặc bằng 0")
-    private BigDecimal socialInsurance;
-
-    @PositiveOrZero(message = "Bảo hiểm y tế phải là số lớn hơn hoặc bằng 0")
-    private BigDecimal healthInsurance;
-
-    @PositiveOrZero(message = "Phụ cấp phải là số lớn hơn hoặc bằng 0")
-    private BigDecimal allowance;
 
     private String description;
 }

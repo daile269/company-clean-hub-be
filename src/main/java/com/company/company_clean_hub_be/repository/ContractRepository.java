@@ -8,6 +8,8 @@ import org.springframework.data.repository.query.Param;
 
 import com.company.company_clean_hub_be.entity.Contract;
 
+import java.util.List;
+
 public interface ContractRepository extends JpaRepository<Contract, Long> {
     
     @Query("SELECT c FROM Contract c LEFT JOIN c.customer cu WHERE " +
@@ -19,4 +21,6 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
             @Param("keyword") String keyword,
             Pageable pageable
     );
+    
+    List<Contract> findByCustomerId(Long customerId);
 }

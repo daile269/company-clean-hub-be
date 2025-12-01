@@ -1,18 +1,13 @@
 package com.company.company_clean_hub_be.entity;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrimaryKeyJoinColumn;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -56,30 +51,6 @@ public class Employee extends User {
 
     @Column(name = "bank_name")
     private String bankName;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "employment_type")
-    @NotNull
-    private EmploymentType employmentType;
-
-    @Column(name = "base_salary")
-    @PositiveOrZero
-    private BigDecimal baseSalary;
-
-    @Column(name = "daily_salary")
-    @PositiveOrZero
-    private BigDecimal dailySalary;
-
-    @Column(name = "social_insurance")
-    @PositiveOrZero
-    private BigDecimal socialInsurance;
-
-    @Column(name = "health_insurance")
-    @PositiveOrZero
-    private BigDecimal healthInsurance;
-
-    @PositiveOrZero
-    private BigDecimal allowance;
 
     private String description;
 

@@ -65,10 +65,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
         ServiceEntity service = ServiceEntity.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
-                .priceFrom(request.getPriceFrom())
-                .priceTo(request.getPriceTo())
-                .mainImage(request.getMainImage())
-                .status(request.getStatus())
+                .price(request.getPrice())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -84,10 +81,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
 
         service.setTitle(request.getTitle());
         service.setDescription(request.getDescription());
-        service.setPriceFrom(request.getPriceFrom());
-        service.setPriceTo(request.getPriceTo());
-        service.setMainImage(request.getMainImage());
-        service.setStatus(request.getStatus());
+        service.setPrice(request.getPrice());
         service.setUpdatedAt(LocalDateTime.now());
 
         ServiceEntity updatedService = serviceEntityRepository.save(service);
@@ -106,10 +100,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
                 .id(service.getId())
                 .title(service.getTitle())
                 .description(service.getDescription())
-                .priceFrom(service.getPriceFrom())
-                .priceTo(service.getPriceTo())
-                .mainImage(service.getMainImage())
-                .status(service.getStatus())
+                .price(service.getPrice())
                 .createdAt(service.getCreatedAt())
                 .updatedAt(service.getUpdatedAt())
                 .build();

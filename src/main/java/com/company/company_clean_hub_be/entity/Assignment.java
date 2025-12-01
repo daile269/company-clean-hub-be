@@ -3,6 +3,7 @@ package com.company.company_clean_hub_be.entity;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -57,6 +58,16 @@ public class Assignment {
     @Column(name = "work_days")
     @PositiveOrZero
     private Integer workDays;
+
+    @ElementCollection(targetClass = DayOfWeek.class)
+    @CollectionTable(name = "assignment_working_days", joinColumns = @JoinColumn(name = "assignment_id"))
+    @Column(name = "day_of_week")
+    @Enumerated(EnumType.STRING)
+    private List<DayOfWeek> workingDaysPerWeek;
+
+    @Column(name = "additional_allowance")
+    @PositiveOrZero
+    private BigDecimal additionalAllowance;
 
     private String description;
 
