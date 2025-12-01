@@ -136,4 +136,14 @@ public class AssignmentController {
                 HttpStatus.OK.value()
         );
     }
+
+    @PostMapping("/update-expired-fixed")
+    public ApiResponse<String> testUpdateExpiredFixedAssignments() {
+        assignmentScheduler.executeUpdateExpiredFixedAssignments();
+        return ApiResponse.success(
+                "Đã chạy job cập nhật phân công cố định, kiểm tra console log để xem kết quả", 
+                "OK", 
+                HttpStatus.OK.value()
+        );
+    }
 }

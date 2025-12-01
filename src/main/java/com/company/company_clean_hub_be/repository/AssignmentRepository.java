@@ -76,4 +76,10 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
               "AND a.status = 'IN_PROGRESS' " +
               "AND a.startDate <= :date")
        List<Assignment> findExpiredTemporaryAssignments(@Param("date") LocalDate date);
+       
+       @Query("SELECT a FROM Assignment a " +
+              "WHERE (a.assignmentType = 'FIXED_BY_CONTRACT' OR a.assignmentType = 'FIXED_BY_DAY') " +
+              "AND a.status = 'IN_PROGRESS' " +
+              "AND a.startDate <= :endOfLastMonth")
+       List<Assignment> findExpiredFixedAssignments(@Param("endOfLastMonth") LocalDate endOfLastMonth);
 }
