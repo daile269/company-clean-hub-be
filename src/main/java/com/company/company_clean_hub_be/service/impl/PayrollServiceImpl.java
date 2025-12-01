@@ -72,6 +72,22 @@ public class PayrollServiceImpl implements PayrollService {
                         request.getMonth(), request.getYear(), request.getEmployeeId());
         log.info("Assignments found: {}", assignments.size());
 
+        // Validate: Check if there are any assignments for this employee in the requested period
+        if (assignments.isEmpty()) {
+            log.error("No assignments found for employeeId={} month={} year={}",
+                    request.getEmployeeId(), request.getMonth(), request.getYear());
+            throw new AppException(ErrorCode.NO_ASSIGNMENT_DATA);
+        }
+
+        // Validate: Check if there are any attendances for this employee in the requested period
+        List<Attendance> attendancesValidation = attendanceRepository.findAttendancesByMonthYearAndEmployee(
+                request.getMonth(), request.getYear(), request.getEmployeeId());
+        if (attendancesValidation.isEmpty()) {
+            log.error("No attendance data found for employeeId={} month={} year={}",
+                    request.getEmployeeId(), request.getMonth(), request.getYear());
+            throw new AppException(ErrorCode.NO_ATTENDANCE_DATA);
+        }
+
         for (Assignment assignment : assignments) {
             log.info("Processing Assignment id={}, type={}, salary={}, workDays={}",
                     assignment.getId(), assignment.getAssignmentType(),
@@ -111,8 +127,9 @@ public class PayrollServiceImpl implements PayrollService {
             log.info("Penalty for assignmentId={} = {}", assignment.getId(), penalty);
 
             BigDecimal support = attendanceRepository.sumSupportCostByAssignment(assignment.getId());
-            totalSupportCosts = totalSupportCosts.add(support != null ? support : BigDecimal.ZERO);
+            totalSupportCosts = totalSupportCosts.add(support != null ? support : BigDecimal.ZERO).add(assignment.getAdditionalAllowance());
             log.info("SupportCost for assignmentId={} = {}", assignment.getId(), support);
+
         }
 
         // Tính lương cuối cùng
@@ -137,7 +154,7 @@ public class PayrollServiceImpl implements PayrollService {
                 .paymentDate(null)
                 .isPaid(false)
                 .accountant(user)
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.of(request.getYear(),request.getMonth() ,1, 0, 0, 0))
                 .updatedAt(LocalDateTime.now())
                 .build();
 

@@ -522,13 +522,14 @@ public class AssignmentServiceImpl implements AssignmentService {
             if (workingDays.contains(currentDate.getDayOfWeek())) {
                 // Kiểm tra đã có chấm công ngày này chưa
                 boolean alreadyExists = attendanceRepository.findByEmployeeAndDate(
-                        assignment.getEmployee().getId(), 
+                        assignment.getEmployee().getId(),
                         currentDate
                 ).isPresent();
 
                 // Nếu chưa tồn tại thì tạo mới
                 if (!alreadyExists) {
                     Attendance attendance = Attendance.builder()
+                            .employee(assignment.getEmployee())
                             .assignment(assignment)
                             .date(currentDate)
                             .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
@@ -541,7 +542,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                             .createdAt(LocalDateTime.now())
                             .updatedAt(LocalDateTime.now())
                             .build();
-                    
+
                     attendances.add(attendance);
                 }
             }
@@ -552,16 +553,16 @@ public class AssignmentServiceImpl implements AssignmentService {
         // Lưu tất cả chấm công
         if (!attendances.isEmpty()) {
             attendanceRepository.saveAll(attendances);
-            
+
             // Tính lại workDays dựa vào số chấm công thực tế trong tháng
             YearMonth ym = YearMonth.from(startDate);
             LocalDate monthStart = ym.atDay(1);
             LocalDate monthEnd = ym.atEndOfMonth();
-            
+
             int totalWorkDays = attendanceRepository
                     .findByEmployeeAndDateBetween(assignment.getEmployee().getId(), monthStart, monthEnd)
                     .size();
-            
+
             assignment.setWorkDays(totalWorkDays);
             assignment.setPlannedDays(totalWorkDays);
             assignmentRepository.save(assignment);
