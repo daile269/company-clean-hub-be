@@ -49,7 +49,8 @@ public class Assignment {
     @NotNull
     private LocalDate startDate;
 
-    private String status;
+    @Enumerated(EnumType.STRING)
+    private AssignmentStatus status;
 
     @Column(name = "salary_at_time")
     @PositiveOrZero
@@ -58,6 +59,10 @@ public class Assignment {
     @Column(name = "work_days")
     @PositiveOrZero
     private Integer workDays;
+
+    @Column(name = "planned_days")
+    @PositiveOrZero
+    private Integer plannedDays;
 
     @ElementCollection(targetClass = DayOfWeek.class)
     @CollectionTable(name = "assignment_working_days", joinColumns = @JoinColumn(name = "assignment_id"))

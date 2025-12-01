@@ -30,6 +30,8 @@ public enum ErrorCode {
     ATTENDANCE_NOT_FOUND(404,"Chấm công không tồn tại"),
     ATTENDANCE_ALREADY_EXISTS(400,"Chấm công ngày này đã tồn tại"),
     ASSIGNMENT_ALREADY_EXISTS(400,"Nhân viên này đã được phân công phụ trách khách hàng này và đang ở trạng thái hoạt động"),
+    REPLACED_EMPLOYEE_NO_ATTENDANCE(400,"Người bị thay không có chấm công vào ngày này"),
+    REPLACEMENT_EMPLOYEE_HAS_ATTENDANCE(400,"Người thay đã có chấm công vào ngày này"),
 
     UNAUTHENTICATED(403,"Không có quyền truy cập" );
 

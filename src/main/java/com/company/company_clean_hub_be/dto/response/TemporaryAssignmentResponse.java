@@ -5,15 +5,18 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class TemporaryAssignmentResponse {
 
-    private AttendanceResponse createdAttendance;
-    private AttendanceResponse deletedAttendance;
+    private List<AttendanceResponse> createdAttendances;
+    private List<AttendanceResponse> deletedAttendances;
     private String message;
     private Integer replacementEmployeeTotalDays;
     private Integer replacedEmployeeTotalDays;
+    private Integer processedDaysCount;
 }

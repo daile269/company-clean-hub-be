@@ -79,8 +79,8 @@ public class AssignmentServiceImpl implements AssignmentService {
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
-        // Kiểm tra nhân viên đã được phân công phụ trách khách hàng này chưa (status ACTIVE)
-        if ("ACTIVE".equals(request.getStatus())) {
+        // Kiểm tra nhân viên đã được phân công phụ trách khách hàng này chưa (status IN_PROGRESS)
+        if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
             List<Assignment> existingAssignments = assignmentRepository
                     .findActiveAssignmentByEmployeeAndCustomer(request.getEmployeeId(), request.getCustomerId());
             if (!existingAssignments.isEmpty()) {
@@ -104,8 +104,8 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         Assignment savedAssignment = assignmentRepository.save(assignment);
 
-        // Tự động tạo chấm công nếu có workingDaysPerWeek và status là ACTIVE
-        if ("ACTIVE".equals(request.getStatus()) && 
+        // Tự động tạo chấm công nếu có workingDaysPerWeek và status là IN_PROGRESS
+        if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus()) && 
             request.getWorkingDaysPerWeek() != null && 
             !request.getWorkingDaysPerWeek().isEmpty()) {
             
@@ -127,8 +127,8 @@ public class AssignmentServiceImpl implements AssignmentService {
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
-        // Kiểm tra nhân viên đã được phân công phụ trách khách hàng này chưa (status ACTIVE)
-        if ("ACTIVE".equals(request.getStatus())) {
+        // Kiểm tra nhân viên đã được phân công phụ trách khách hàng này chưa (status IN_PROGRESS)
+        if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
             List<Assignment> existingAssignments = assignmentRepository
                     .findActiveAssignmentByEmployeeAndCustomerAndIdNot(
                             request.getEmployeeId(), 
@@ -178,99 +178,171 @@ public class AssignmentServiceImpl implements AssignmentService {
     @Override
     public TemporaryAssignmentResponse temporaryReassignment(TemporaryReassignmentRequest request) {
 
+        System.out.println("=== BẮT ĐẦU ĐIỀU ĐỘNG TẠM THỜI ===");
+        System.out.println("Request: replacementEmployeeId=" + request.getReplacementEmployeeId() 
+                + ", replacedEmployeeId=" + request.getReplacedEmployeeId()
+                + ", dates=" + request.getDates()
+                + ", salaryAtTime=" + request.getSalaryAtTime());
+
         Employee replacementEmployee = employeeRepository.findById(request.getReplacementEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+        System.out.println("Người thay: " + replacementEmployee.getName() + " (ID: " + replacementEmployee.getId() + ")");
 
         Employee replacedEmployee = employeeRepository.findById(request.getReplacedEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+        System.out.println("Người bị thay: " + replacedEmployee.getName() + " (ID: " + replacedEmployee.getId() + ")");
 
-        List<Assignment> replacementAssignments =
-                assignmentRepository.findActiveAssignmentsByEmployee(request.getReplacementEmployeeId(), request.getDate());
+        List<AttendanceResponse> createdAttendances = new ArrayList<>();
+        List<AttendanceResponse> deletedAttendances = new ArrayList<>();
 
-        if (replacementAssignments.isEmpty()) {
-            throw new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND);
+        // Xử lý từng ngày điều động
+        for (LocalDate date : request.getDates()) {
+            System.out.println("\n--- Xử lý ngày: " + date + " ---");
+            
+            // Tìm attendance của người bị thay
+            Optional<Attendance> deletedAttendanceOpt = attendanceRepository.findByEmployeeAndDate(
+                    request.getReplacedEmployeeId(),
+                    date
+            );
+
+            System.out.println("Attendance của người bị thay (ID " + request.getReplacedEmployeeId() + ") vào ngày " + date + ": " 
+                    + (deletedAttendanceOpt.isPresent() ? "CÓ" : "KHÔNG CÓ"));
+            if (!deletedAttendanceOpt.isPresent()) {
+                System.out.println("❌ LỖI: Người bị thay không có attendance vào ngày này");
+                throw new AppException(ErrorCode.REPLACED_EMPLOYEE_NO_ATTENDANCE);
+            }
+
+            Attendance deletedAttendance = deletedAttendanceOpt.get();
+            Assignment replacedAssignmentEntity = deletedAttendance.getAssignment();
+            System.out.println("Attendance tìm thấy: ID=" + deletedAttendance.getId() 
+                    + ", workHours=" + deletedAttendance.getWorkHours()
+                    + ", isOvertime=" + deletedAttendance.getIsOvertime());
+
+            // Tạo temporary assignment
+            Assignment temporaryAssignment = Assignment.builder()
+                    .employee(replacementEmployee)
+                    .customer(replacedAssignmentEntity.getCustomer())
+                    .assignmentType(AssignmentType.TEMPORARY)
+                    .workDays(1)
+                    .salaryAtTime(request.getSalaryAtTime())
+                    .startDate(date)
+                    .status(AssignmentStatus.IN_PROGRESS)
+                    .description(request.getDescription() != null
+                            ? request.getDescription()
+                            : "Điều động tạm thời")
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+
+            Assignment savedTemporaryAssignment = assignmentRepository.save(temporaryAssignment);
+            System.out.println("✓ Đã tạo temporary assignment ID: " + savedTemporaryAssignment.getId());
+
+            // Check nếu người thay đã có công ngày này
+            Optional<Attendance> existingAttendance = attendanceRepository.findByEmployeeAndDate(
+                    request.getReplacementEmployeeId(), date
+            );
+
+            System.out.println("Kiểm tra người thay đã có attendance vào ngày " + date + ": " 
+                    + (existingAttendance.isPresent() ? "CÓ RỒI" : "CHƯA CÓ"));
+            if (existingAttendance.isPresent()) {
+                System.out.println("❌ LỖI: Người thay đã có attendance vào ngày này (ID: " + existingAttendance.get().getId() + ")");
+                throw new AppException(ErrorCode.REPLACEMENT_EMPLOYEE_HAS_ATTENDANCE);
+            }
+
+            // Lưu attendance bị xóa
+            AttendanceResponse deletedAttendanceResponse = mapAttendanceToResponse(deletedAttendance);
+            deletedAttendances.add(deletedAttendanceResponse);
+            attendanceRepository.delete(deletedAttendance);
+            System.out.println("✓ Đã xóa attendance cũ ID: " + deletedAttendance.getId());
+
+            // Tạo attendance mới cho người thay
+            Attendance newAttendance = Attendance.builder()
+                    .employee(replacementEmployee)
+                    .assignment(savedTemporaryAssignment)
+                    .date(date)
+                    .workHours(deletedAttendance.getWorkHours())
+                    .bonus(java.math.BigDecimal.ZERO)
+                    .penalty(java.math.BigDecimal.ZERO)
+                    .supportCost(java.math.BigDecimal.ZERO)
+                    .isOvertime(deletedAttendance.getIsOvertime())
+                    .overtimeAmount(deletedAttendance.getOvertimeAmount())
+                    .description(request.getDescription() != null
+                            ? request.getDescription()
+                            : "Điều động thay thế " + replacedEmployee.getName() + " ngày " + date)
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+
+            Attendance savedAttendance = attendanceRepository.save(newAttendance);
+            System.out.println("✓ Đã tạo attendance mới ID: " + savedAttendance.getId());
+            
+            AttendanceResponse createdAttendanceResponse = mapAttendanceToResponse(savedAttendance);
+            createdAttendances.add(createdAttendanceResponse);
+            
+            // Cập nhật workDays cho assignment của người bị thay
+            YearMonth ym = YearMonth.from(date);
+            LocalDate monthStart = ym.atDay(1);
+            LocalDate monthEnd = ym.atEndOfMonth();
+            
+            int replacedWorkDays = attendanceRepository
+                    .findByEmployeeAndDateBetween(request.getReplacedEmployeeId(), monthStart, monthEnd)
+                    .size();
+            
+            replacedAssignmentEntity.setWorkDays(replacedWorkDays);
+            assignmentRepository.save(replacedAssignmentEntity);
+            System.out.println("✓ Đã cập nhật workDays của assignment ID " + replacedAssignmentEntity.getId() + " = " + replacedWorkDays);
         }
-        // Tìm attendance của người bị thay
-        Attendance deletedAttendance = attendanceRepository.findByEmployeeAndDate(
-                request.getReplacedEmployeeId(),
-                request.getDate()
-        ).orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
-        Optional<Assignment> replacedAssignment = assignmentRepository.findById(deletedAttendance.getAssignment().getId());
-        Assignment replacedAssignmentEntity = replacedAssignment
-                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
-        Assignment temporaryAssignment = Assignment.builder()
-                .employee(replacementEmployee)
-                .customer(replacedAssignmentEntity.getCustomer())
-                .assignmentType(AssignmentType.TEMPORARY)
-                .workDays(1)
-                .salaryAtTime(request.getSalaryAtTime())
-                .startDate(request.getDate())
-                .status("ACTIVE")
-                .description(request.getDescription() != null
-                        ? request.getDescription()
-                        : "Điều động tạm thời")
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
 
-        Assignment savedTemporaryAssignment = assignmentRepository.save(temporaryAssignment);
+        // Tính công trong tháng (lấy tháng của ngày đầu tiên)
+        if (!request.getDates().isEmpty()) {
+            LocalDate firstDate = request.getDates().get(0);
+            YearMonth ym = YearMonth.from(firstDate);
+            LocalDate start = ym.atDay(1);
+            LocalDate end = ym.atEndOfMonth();
 
-        // Check nếu người thay đã có công
-        attendanceRepository.findByEmployeeAndDate(
-                request.getReplacementEmployeeId(), request.getDate()
-        ).ifPresent(a -> {
-            throw new AppException(ErrorCode.ATTENDANCE_ALREADY_EXISTS);
-        });
+            System.out.println("\n=== TÍNH TỔNG CÔNG TRONG THÁNG ===");
+            System.out.println("Tháng: " + ym + " (từ " + start + " đến " + end + ")");
 
-        AttendanceResponse deletedAttendanceResponse = mapAttendanceToResponse(deletedAttendance);
-        attendanceRepository.delete(deletedAttendance);
+            int replacementTotal = attendanceRepository
+                    .findByEmployeeAndDateBetween(request.getReplacementEmployeeId(), start, end).size();
+            System.out.println("Tổng công người thay (ID " + request.getReplacementEmployeeId() + "): " + replacementTotal);
 
-        // Tạo attendance mới cho người thay
-        Attendance newAttendance = Attendance.builder()
-                .employee(replacementEmployee)
-                .assignment(savedTemporaryAssignment)
-                .date(request.getDate())
-                .workHours(java.math.BigDecimal.valueOf(8))
-                .bonus(java.math.BigDecimal.ZERO)
-                .penalty(java.math.BigDecimal.ZERO)
-                .supportCost(java.math.BigDecimal.ZERO)
-                .isOvertime(false)
-                .overtimeAmount(java.math.BigDecimal.ZERO)
-                .description(request.getDescription() != null
-                        ? request.getDescription()
-                        : "Điều động thay thế " + replacedEmployee.getName() + " ngày " + request.getDate())
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
+            int replacedTotal = attendanceRepository
+                    .findByEmployeeAndDateBetween(request.getReplacedEmployeeId(), start, end).size();
+            System.out.println("Tổng công người bị thay (ID " + request.getReplacedEmployeeId() + "): " + replacedTotal);
 
-        Attendance savedAttendance = attendanceRepository.save(newAttendance);
-        AttendanceResponse createdAttendanceResponse = mapAttendanceToResponse(savedAttendance);
+            System.out.println("\n=== KẾT QUA ===");
+            System.out.println("Số ngày đã xử lý thành công: " + createdAttendances.size());
+            System.out.println("Số attendance đã tạo: " + createdAttendances.size());
+            System.out.println("Số attendance đã xóa: " + deletedAttendances.size());
 
-        // Tính công trong tháng
-        YearMonth ym = YearMonth.from(request.getDate());
-        LocalDate start = ym.atDay(1);
-        LocalDate end = ym.atEndOfMonth();
+            return TemporaryAssignmentResponse.builder()
+                    .createdAttendances(createdAttendances)
+                    .deletedAttendances(deletedAttendances)
+                    .replacementEmployeeTotalDays(replacementTotal)
+                    .replacedEmployeeTotalDays(replacedTotal)
+                    .processedDaysCount(createdAttendances.size())
+                    .message(String.format(
+                            "Điều động thành công %d ngày: %s (+%d công, tổng: %d) thay %s (-%d công, tổng: %d)",
+                            createdAttendances.size(),
+                            replacementEmployee.getName(),
+                            createdAttendances.size(),
+                            replacementTotal,
+                            replacedEmployee.getName(),
+                            deletedAttendances.size(),
+                            replacedTotal
+                    ))
+                    .build();
+        }
 
-        int replacementTotal = attendanceRepository
-                .findByEmployeeAndDateBetween(request.getReplacementEmployeeId(), start, end).size();
-
-        int replacedTotal = attendanceRepository
-                .findByEmployeeAndDateBetween(request.getReplacedEmployeeId(), start, end).size();
-        replacedAssignmentEntity.setWorkDays(replacedTotal);
-        assignmentRepository.save(replacedAssignmentEntity);
+        System.out.println("\n⚠️ KHÔNG CÓ NGÀY NÀO ĐƯỢC XỬ LÝ");
         return TemporaryAssignmentResponse.builder()
-                .createdAttendance(createdAttendanceResponse)
-                .deletedAttendance(deletedAttendanceResponse)
-                .replacementEmployeeTotalDays(replacementTotal)
-                .replacedEmployeeTotalDays(replacedTotal)
-                .message(String.format(
-                        "Điều động thành công: %s (+1 công, tổng: %d) thay %s (-1 công, tổng: %d) ngày %s",
-                        replacementEmployee.getName(),
-                        replacementTotal,
-                        replacedEmployee.getName(),
-                        replacedTotal,
-                        request.getDate()
-                ))
+                .createdAttendances(createdAttendances)
+                .deletedAttendances(deletedAttendances)
+                .replacementEmployeeTotalDays(0)
+                .replacedEmployeeTotalDays(0)
+                .processedDaysCount(0)
+                .message("Không có ngày nào được xử lý")
                 .build();
     }
 
@@ -280,6 +352,18 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
         List<Assignment> assignments = assignmentRepository.findActiveAssignmentsByCustomer(customerId);
+        
+        return assignments.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AssignmentResponse> getAllEmployeesByCustomer(Long customerId) {
+        customerRepository.findById(customerId)
+                .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
+
+        List<Assignment> assignments = assignmentRepository.findAllAssignmentsByCustomer(customerId);
         
         return assignments.stream()
                 .map(this::mapToResponse)
@@ -479,6 +563,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                     .size();
             
             assignment.setWorkDays(totalWorkDays);
+            assignment.setPlannedDays(totalWorkDays);
             assignmentRepository.save(assignment);
         }
     }

@@ -6,6 +6,7 @@ import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.AssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.TemporaryAssignmentResponse;
+import com.company.company_clean_hub_be.schedule.AssignmentScheduler;
 import com.company.company_clean_hub_be.service.AssignmentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import java.util.List;
 @RequestMapping(value = "/api/assignments")
 public class AssignmentController {
     private final AssignmentService assignmentService;
+    private final AssignmentScheduler assignmentScheduler;
 
     @GetMapping
     public ApiResponse<List<AssignmentResponse>> getAllAssignments() {
@@ -80,6 +82,16 @@ public class AssignmentController {
         );
     }
 
+    @GetMapping("/customer/{customerId}/all")
+    public ApiResponse<List<AssignmentResponse>> getAllEmployeesByCustomer(@PathVariable Long customerId) {
+        List<AssignmentResponse> assignments = assignmentService.getAllEmployeesByCustomer(customerId);
+        return ApiResponse.success(
+                "Lấy tất cả danh sách nhân viên phụ trách khách hàng thành công", 
+                assignments, 
+                HttpStatus.OK.value()
+        );
+    }
+
     @GetMapping("/employee/{employeeId}/customers")
     public ApiResponse<List<com.company.company_clean_hub_be.dto.response.CustomerResponse>> getCustomersByEmployee(
             @PathVariable Long employeeId) {
@@ -111,6 +123,16 @@ public class AssignmentController {
         return ApiResponse.success(
                 "Lấy danh sách nhân viên chưa phân công thành công", 
                 employees, 
+                HttpStatus.OK.value()
+        );
+    }
+
+    @PostMapping("/update-expired-temporary")
+    public ApiResponse<String> testUpdateExpiredTemporaryAssignments() {
+        assignmentScheduler.executeUpdateExpiredTemporaryAssignments();
+        return ApiResponse.success(
+                "Đã chạy job cập nhật phân công tạm thời, kiểm tra console log để xem kết quả", 
+                "OK", 
                 HttpStatus.OK.value()
         );
     }

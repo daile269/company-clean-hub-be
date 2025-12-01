@@ -154,6 +154,36 @@ public class ContractServiceImpl implements ContractService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public ContractResponse addServiceToContract(Long contractId, Long serviceId) {
+        Contract contract = contractRepository.findById(contractId)
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+        
+        ServiceEntity service = serviceEntityRepository.findById(serviceId)
+                .orElseThrow(() -> new AppException(ErrorCode.SERVICE_NOT_FOUND));
+        
+        contract.getServices().add(service);
+        contract.setUpdatedAt(LocalDateTime.now());
+        
+        Contract updatedContract = contractRepository.save(contract);
+        return mapToResponse(updatedContract);
+    }
+
+    @Override
+    public ContractResponse removeServiceFromContract(Long contractId, Long serviceId) {
+        Contract contract = contractRepository.findById(contractId)
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+        
+        ServiceEntity service = serviceEntityRepository.findById(serviceId)
+                .orElseThrow(() -> new AppException(ErrorCode.SERVICE_NOT_FOUND));
+        
+        contract.getServices().remove(service);
+        contract.setUpdatedAt(LocalDateTime.now());
+        
+        Contract updatedContract = contractRepository.save(contract);
+        return mapToResponse(updatedContract);
+    }
+
     private ContractResponse mapToResponse(Contract contract) {
         List<ServiceResponse> services = contract.getServices().stream()
                 .map(service -> ServiceResponse.builder()
