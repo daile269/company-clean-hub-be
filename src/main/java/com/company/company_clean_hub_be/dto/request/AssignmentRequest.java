@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.dto.request;
 
+import com.company.company_clean_hub_be.entity.AssignmentStatus;
 import com.company.company_clean_hub_be.entity.DayOfWeek;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -28,7 +29,7 @@ public class AssignmentRequest {
     @NotNull(message = "Ngày bắt đầu không được để trống")
     private LocalDate startDate;
 
-    private String status;
+    private AssignmentStatus status;
 
     private String assignmentType;
 

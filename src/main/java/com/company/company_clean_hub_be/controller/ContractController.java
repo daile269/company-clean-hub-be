@@ -83,6 +83,22 @@ public class ContractController {
         return ApiResponse.success("Xóa hợp đồng thành công", null, HttpStatus.OK.value());
     }
 
+    @PostMapping("/{contractId}/services/{serviceId}")
+    public ApiResponse<ContractResponse> addServiceToContract(
+            @PathVariable Long contractId,
+            @PathVariable Long serviceId) {
+        ContractResponse contract = contractService.addServiceToContract(contractId, serviceId);
+        return ApiResponse.success("Thêm dịch vụ vào hợp đồng thành công", contract, HttpStatus.OK.value());
+    }
+
+    @DeleteMapping("/{contractId}/services/{serviceId}")
+    public ApiResponse<ContractResponse> removeServiceFromContract(
+            @PathVariable Long contractId,
+            @PathVariable Long serviceId) {
+        ContractResponse contract = contractService.removeServiceFromContract(contractId, serviceId);
+        return ApiResponse.success("Xóa dịch vụ khỏi hợp đồng thành công", contract, HttpStatus.OK.value());
+    }
+
     @PostMapping(value = "/{id}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<List<ContractDocument>> uploadContractDocuments(
             @PathVariable Long id,

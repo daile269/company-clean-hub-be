@@ -51,7 +51,13 @@ public class Attendance {
     @EqualsAndHashCode.Exclude
     @JsonIgnore
     private Payroll payroll;
-
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "employee_id")
+    @NotNull
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
+    private Employee employee;
     @NotNull
     private LocalDate date;
 

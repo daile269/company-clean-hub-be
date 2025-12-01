@@ -49,7 +49,8 @@ public class Assignment {
     @NotNull
     private LocalDate startDate;
 
-    private String status;
+    @Enumerated(EnumType.STRING)
+    private AssignmentStatus status;
 
     @Column(name = "salary_at_time")
     @PositiveOrZero

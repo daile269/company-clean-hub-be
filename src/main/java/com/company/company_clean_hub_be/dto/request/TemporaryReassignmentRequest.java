@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.dto.request;
 
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AllArgsConstructor;
@@ -9,6 +10,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -22,8 +24,8 @@ public class TemporaryReassignmentRequest {
     @NotNull(message = "ID nhân viên bị thay không được để trống")
     private Long replacedEmployeeId;
 
-    @NotNull(message = "Ngày điều động không được để trống")
-    private LocalDate date;
+    @NotEmpty(message = "Danh sách ngày điều động không được để trống")
+    private List<LocalDate> dates;
 
     @PositiveOrZero(message = "Lương theo ngày phải là số lớn hơn hoặc bằng 0")
     private BigDecimal salaryAtTime;

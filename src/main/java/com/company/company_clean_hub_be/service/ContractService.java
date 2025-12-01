@@ -13,4 +13,6 @@ public interface ContractService {
     ContractResponse updateContract(Long id, ContractRequest request);
     void deleteContract(Long id);
     List<ContractResponse> getContractsByCustomer(Long customerId);
+    ContractResponse addServiceToContract(Long contractId, Long serviceId);
+    ContractResponse removeServiceFromContract(Long contractId, Long serviceId);
 }
