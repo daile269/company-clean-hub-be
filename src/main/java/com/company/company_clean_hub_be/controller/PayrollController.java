@@ -1,16 +1,27 @@
 package com.company.company_clean_hub_be.controller;
 
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.company.company_clean_hub_be.dto.request.PayrollRequest;
+import com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
 import com.company.company_clean_hub_be.service.PayrollService;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -18,11 +29,11 @@ import java.util.List;
 public class PayrollController {
     private final PayrollService payrollService;
 
-//    @PostMapping("/calculate")
-//    public ApiResponse<PayrollResponse> calculatePayroll(@Valid @RequestBody PayrollRequest request) {
-//        PayrollResponse payroll = payrollService.calculatePayroll(request);
-//        return ApiResponse.success("Tính lương thành công", payroll, HttpStatus.CREATED.value());
-//    }
+    @PostMapping("/calculate")
+    public ApiResponse<PayrollResponse> calculatePayroll(@Valid @RequestBody PayrollRequest request) {
+        PayrollResponse payroll = payrollService.calculatePayroll(request);
+        return ApiResponse.success("Tính lương thành công", payroll, HttpStatus.CREATED.value());
+    }
 
     @GetMapping
     public ApiResponse<List<PayrollResponse>> getAllPayrolls() {
@@ -55,6 +66,14 @@ public class PayrollController {
             @RequestParam Boolean isPaid) {
         PayrollResponse payroll = payrollService.updatePaymentStatus(id, isPaid);
         return ApiResponse.success("Cập nhật trạng thái thanh toán thành công", payroll, HttpStatus.OK.value());
+    }
+
+    @PutMapping("/{id}/recalculate")
+    public ApiResponse<PayrollResponse> updatePayroll(
+            @PathVariable Long id,
+            @RequestBody PayrollUpdateRequest request) {
+        PayrollResponse payroll = payrollService.updatePayroll(id, request);
+        return ApiResponse.success("Cập nhật và tính lại bảng lương thành công", payroll, HttpStatus.OK.value());
     }
 
     @DeleteMapping("/{id}")

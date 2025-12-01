@@ -64,7 +64,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         Attendance attendance = Attendance.builder()
-                .employee(employee)
                 .assignment(assignment)
                 .date(request.getDate())
                 .workHours(request.getWorkHours())
@@ -116,23 +115,22 @@ public class AttendanceServiceImpl implements AttendanceService {
             ).isPresent();
 
             // Nếu không phải chủ nhật, không trong danh sách loại trừ, và chưa tồn tại
-            if (!isSunday && !isExcluded && !alreadyExists) {
-                Attendance attendance = Attendance.builder()
-                        .employee(employee)
-                        .assignment(assignment)
-                        .date(currentDate)
-                        .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
-                        .bonus(java.math.BigDecimal.ZERO)
-                        .penalty(java.math.BigDecimal.ZERO)
-                        .supportCost(java.math.BigDecimal.ZERO)
-                        .isOvertime(false)
-                        .overtimeAmount(java.math.BigDecimal.ZERO)
-                        .createdAt(LocalDateTime.now())
-                        .updatedAt(LocalDateTime.now())
-                        .build();
+                        if (!isSunday && !isExcluded && !alreadyExists) {
+                                Attendance attendance = Attendance.builder()
+                                                .assignment(assignment)
+                                                .date(currentDate)
+                                                .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
+                                                .bonus(java.math.BigDecimal.ZERO)
+                                                .penalty(java.math.BigDecimal.ZERO)
+                                                .supportCost(java.math.BigDecimal.ZERO)
+                                                .isOvertime(false)
+                                                .overtimeAmount(java.math.BigDecimal.ZERO)
+                                                .createdAt(LocalDateTime.now())
+                                                .updatedAt(LocalDateTime.now())
+                                                .build();
                 
-                attendances.add(attendance);
-            }
+                                attendances.add(attendance);
+                        }
 
             currentDate = currentDate.plusDays(1);
         }
@@ -208,19 +206,21 @@ public class AttendanceServiceImpl implements AttendanceService {
         Attendance attendance = attendanceRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
 
-        // Kiểm tra nếu đổi ngày, phải kiểm tra trùng
-        if (!attendance.getDate().equals(request.getDate())) {
-            attendanceRepository.findByEmployeeAndDate(request.getEmployeeId(), request.getDate())
-                    .ifPresent(a -> {
-                        throw new AppException(ErrorCode.ATTENDANCE_ALREADY_EXISTS);
-                    });
-        }
+                // Kiểm tra nếu đổi ngày, phải kiểm tra trùng (repository now checks assignment.employee)
+                if (!attendance.getDate().equals(request.getDate())) {
+                        attendanceRepository.findByEmployeeAndDate(request.getEmployeeId(), request.getDate())
+                                        .ifPresent(a -> {
+                                                throw new AppException(ErrorCode.ATTENDANCE_ALREADY_EXISTS);
+                                        });
+                }
 
-        Employee employee = employeeRepository.findById(request.getEmployeeId())
-                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+                Assignment assignment = assignmentRepository.findById(request.getAssignmentId())
+                                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
 
-        Assignment assignment = assignmentRepository.findById(request.getAssignmentId())
-                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+                // Validate assignment's employee matches requested employeeId
+                if (assignment.getEmployee() == null || !assignment.getEmployee().getId().equals(request.getEmployeeId())) {
+                        throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
+                }
 
         User approver = null;
         if (request.getApprovedBy() != null) {
@@ -228,7 +228,6 @@ public class AttendanceServiceImpl implements AttendanceService {
                     .orElse(null);
         }
 
-        attendance.setEmployee(employee);
         attendance.setAssignment(assignment);
         attendance.setDate(request.getDate());
         attendance.setWorkHours(request.getWorkHours());
@@ -253,16 +252,16 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendanceRepository.deleteById(id);
     }
 
-    private AttendanceResponse mapToResponse(Attendance attendance) {
-        Employee employee = attendance.getEmployee();
-        Assignment assignment = attendance.getAssignment();
-        User approver = attendance.getApprovedBy();
+        private AttendanceResponse mapToResponse(Attendance attendance) {
+                Assignment assignment = attendance.getAssignment();
+                Employee employee = assignment != null ? assignment.getEmployee() : null;
+                User approver = attendance.getApprovedBy();
 
         return AttendanceResponse.builder()
                 .id(attendance.getId())
-                .employeeId(employee.getId())
-                .employeeName(employee.getName())
-                .employeeCode(employee.getEmployeeCode())
+                .employeeId(employee != null ? employee.getId() : null)
+                .employeeName(employee != null ? employee.getName() : null)
+                .employeeCode(employee != null ? employee.getEmployeeCode() : null)
                 .assignmentId(assignment.getId())
                 .assignmentType(assignment.getAssignmentType() != null ? assignment.getAssignmentType().name() : null)
                 .customerId(assignment.getCustomer().getId())

@@ -73,7 +73,11 @@ public class Assignment {
     @Column(name = "additional_allowance")
     @PositiveOrZero
     private BigDecimal additionalAllowance;
-
+    @OneToMany(mappedBy = "assignment", fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
+    private List<Attendance> attendances;
     private String description;
 
     @Enumerated(EnumType.STRING)

@@ -179,7 +179,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     public TemporaryAssignmentResponse temporaryReassignment(TemporaryReassignmentRequest request) {
 
         System.out.println("=== BẮT ĐẦU ĐIỀU ĐỘNG TẠM THỜI ===");
-        System.out.println("Request: replacementEmployeeId=" + request.getReplacementEmployeeId() 
+        System.out.println("Request: replacementEmployeeId=" + request.getReplacementEmployeeId()
                 + ", replacedEmployeeId=" + request.getReplacedEmployeeId()
                 + ", dates=" + request.getDates()
                 + ", salaryAtTime=" + request.getSalaryAtTime());
@@ -198,14 +198,14 @@ public class AssignmentServiceImpl implements AssignmentService {
         // Xử lý từng ngày điều động
         for (LocalDate date : request.getDates()) {
             System.out.println("\n--- Xử lý ngày: " + date + " ---");
-            
+
             // Tìm attendance của người bị thay
             Optional<Attendance> deletedAttendanceOpt = attendanceRepository.findByEmployeeAndDate(
                     request.getReplacedEmployeeId(),
                     date
             );
 
-            System.out.println("Attendance của người bị thay (ID " + request.getReplacedEmployeeId() + ") vào ngày " + date + ": " 
+            System.out.println("Attendance của người bị thay (ID " + request.getReplacedEmployeeId() + ") vào ngày " + date + ": "
                     + (deletedAttendanceOpt.isPresent() ? "CÓ" : "KHÔNG CÓ"));
             if (!deletedAttendanceOpt.isPresent()) {
                 System.out.println("❌ LỖI: Người bị thay không có attendance vào ngày này");
@@ -214,7 +214,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             Attendance deletedAttendance = deletedAttendanceOpt.get();
             Assignment replacedAssignmentEntity = deletedAttendance.getAssignment();
-            System.out.println("Attendance tìm thấy: ID=" + deletedAttendance.getId() 
+            System.out.println("Attendance tìm thấy: ID=" + deletedAttendance.getId()
                     + ", workHours=" + deletedAttendance.getWorkHours()
                     + ", isOvertime=" + deletedAttendance.getIsOvertime());
 
@@ -242,7 +242,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                     request.getReplacementEmployeeId(), date
             );
 
-            System.out.println("Kiểm tra người thay đã có attendance vào ngày " + date + ": " 
+            System.out.println("Kiểm tra người thay đã có attendance vào ngày " + date + ": "
                     + (existingAttendance.isPresent() ? "CÓ RỒI" : "CHƯA CÓ"));
             if (existingAttendance.isPresent()) {
                 System.out.println("❌ LỖI: Người thay đã có attendance vào ngày này (ID: " + existingAttendance.get().getId() + ")");
@@ -275,19 +275,19 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             Attendance savedAttendance = attendanceRepository.save(newAttendance);
             System.out.println("✓ Đã tạo attendance mới ID: " + savedAttendance.getId());
-            
+
             AttendanceResponse createdAttendanceResponse = mapAttendanceToResponse(savedAttendance);
             createdAttendances.add(createdAttendanceResponse);
-            
+
             // Cập nhật workDays cho assignment của người bị thay
             YearMonth ym = YearMonth.from(date);
             LocalDate monthStart = ym.atDay(1);
             LocalDate monthEnd = ym.atEndOfMonth();
-            
+
             int replacedWorkDays = attendanceRepository
                     .findByEmployeeAndDateBetween(request.getReplacedEmployeeId(), monthStart, monthEnd)
                     .size();
-            
+
             replacedAssignmentEntity.setWorkDays(replacedWorkDays);
             assignmentRepository.save(replacedAssignmentEntity);
             System.out.println("✓ Đã cập nhật workDays của assignment ID " + replacedAssignmentEntity.getId() + " = " + replacedWorkDays);
@@ -450,15 +450,16 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     private AttendanceResponse mapAttendanceToResponse(Attendance attendance) {
         Assignment assignment = attendance.getAssignment();
+        Employee employee = assignment != null ? assignment.getEmployee() : null;
         return AttendanceResponse.builder()
                 .id(attendance.getId())
-                .employeeId(attendance.getEmployee().getId())
-                .employeeName(attendance.getEmployee().getName())
-                .employeeCode(attendance.getEmployee().getEmployeeCode())
-                .assignmentId(assignment.getId())
-                .assignmentType(assignment.getAssignmentType() != null ? assignment.getAssignmentType().name() : null)
-                .customerId(assignment.getCustomer().getId())
-                .customerName(assignment.getCustomer().getName())
+                .employeeId(employee != null ? employee.getId() : null)
+                .employeeName(employee != null ? employee.getName() : null)
+                .employeeCode(employee != null ? employee.getEmployeeCode() : null)
+                .assignmentId(assignment != null ? assignment.getId() : null)
+                .assignmentType(assignment != null && assignment.getAssignmentType() != null ? assignment.getAssignmentType().name() : null)
+                .customerId(assignment != null && assignment.getCustomer() != null ? assignment.getCustomer().getId() : null)
+                .customerName(assignment != null && assignment.getCustomer() != null ? assignment.getCustomer().getName() : null)
                 .date(attendance.getDate())
                 .workHours(attendance.getWorkHours())
                 .bonus(attendance.getBonus())
@@ -521,7 +522,7 @@ public class AssignmentServiceImpl implements AssignmentService {
             if (workingDays.contains(currentDate.getDayOfWeek())) {
                 // Kiểm tra đã có chấm công ngày này chưa
                 boolean alreadyExists = attendanceRepository.findByEmployeeAndDate(
-                        assignment.getEmployee().getId(), 
+                        assignment.getEmployee().getId(),
                         currentDate
                 ).isPresent();
 
@@ -541,7 +542,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                             .createdAt(LocalDateTime.now())
                             .updatedAt(LocalDateTime.now())
                             .build();
-                    
+
                     attendances.add(attendance);
                 }
             }
@@ -552,16 +553,16 @@ public class AssignmentServiceImpl implements AssignmentService {
         // Lưu tất cả chấm công
         if (!attendances.isEmpty()) {
             attendanceRepository.saveAll(attendances);
-            
+
             // Tính lại workDays dựa vào số chấm công thực tế trong tháng
             YearMonth ym = YearMonth.from(startDate);
             LocalDate monthStart = ym.atDay(1);
             LocalDate monthEnd = ym.atEndOfMonth();
-            
+
             int totalWorkDays = attendanceRepository
                     .findByEmployeeAndDateBetween(assignment.getEmployee().getId(), monthStart, monthEnd)
                     .size();
-            
+
             assignment.setWorkDays(totalWorkDays);
             assignment.setPlannedDays(totalWorkDays);
             assignmentRepository.save(assignment);

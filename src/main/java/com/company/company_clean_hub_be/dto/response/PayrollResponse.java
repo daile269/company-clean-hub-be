@@ -1,12 +1,12 @@
 package com.company.company_clean_hub_be.dto.response;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -18,13 +18,11 @@ public class PayrollResponse {
     private Long employeeId;
     private String employeeName;
     private String employeeCode;
-    private String employmentType;
     
     private Integer month;
     private Integer year;
     private Integer totalDays;
     
-    private BigDecimal salaryBase;
     private BigDecimal bonusTotal;
     private BigDecimal penaltyTotal;
     private BigDecimal advanceTotal;
