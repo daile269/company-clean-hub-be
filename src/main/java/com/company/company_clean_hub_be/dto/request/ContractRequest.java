@@ -30,21 +30,6 @@ public class ContractRequest {
 
     private LocalDate endDate;
 
-    @PositiveOrZero(message = "Giá cơ bản phải lớn hơn hoặc bằng 0")
-    private BigDecimal basePrice;
-
-    @PositiveOrZero(message = "VAT phải lớn hơn hoặc bằng 0")
-    private BigDecimal vat;
-
-    @PositiveOrZero(message = "Tổng tiền phải lớn hơn hoặc bằng 0")
-    private BigDecimal total;
-
-    @PositiveOrZero(message = "Chi phí phát sinh phải lớn hơn hoặc bằng 0")
-    private BigDecimal extraCost;
-
-    @PositiveOrZero(message = "Chi phí giảm giá phải lớn hơn hoặc bằng 0")
-    private BigDecimal discountCost;
-
     @PositiveOrZero(message = "Giá cuối cùng phải lớn hơn hoặc bằng 0")
     private BigDecimal finalPrice;
 

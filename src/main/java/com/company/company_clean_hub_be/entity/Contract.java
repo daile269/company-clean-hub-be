@@ -71,24 +71,6 @@ public class Contract {
     @Column(name = "end_date")
     private LocalDate endDate;
 
-    @Column(name = "base_price")
-    @PositiveOrZero
-    private BigDecimal basePrice;
-
-    @PositiveOrZero
-    private BigDecimal vat;
-
-    @PositiveOrZero
-    private BigDecimal total;
-
-    @Column(name = "extra_cost")
-    @PositiveOrZero
-    private BigDecimal extraCost;
-
-    @Column(name = "discount_cost")
-    @PositiveOrZero
-    private BigDecimal discountCost;
-
     @Column(name = "final_price")
     @PositiveOrZero
     private BigDecimal finalPrice;

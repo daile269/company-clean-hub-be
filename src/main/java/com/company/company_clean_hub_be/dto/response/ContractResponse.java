@@ -22,11 +22,6 @@ public class ContractResponse {
     private List<ServiceResponse> services;
     private LocalDate startDate;
     private LocalDate endDate;
-    private BigDecimal basePrice;
-    private BigDecimal vat;
-    private BigDecimal total;
-    private BigDecimal extraCost;
-    private BigDecimal discountCost;
     private BigDecimal finalPrice;
     private String paymentStatus;
     private String description;
