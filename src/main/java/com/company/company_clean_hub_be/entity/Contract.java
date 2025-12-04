@@ -1,9 +1,11 @@
 package com.company.company_clean_hub_be.entity;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -13,8 +15,12 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -70,6 +76,16 @@ public class Contract {
 
     @Column(name = "end_date")
     private LocalDate endDate;
+
+    @ElementCollection(targetClass = DayOfWeek.class)
+    @CollectionTable(name = "contract_working_days", joinColumns = @JoinColumn(name = "contract_id"))
+    @Column(name = "day_of_week")
+    @Enumerated(EnumType.STRING)
+    private List<DayOfWeek> workingDaysPerWeek;
+
+    @Column(name = "contract_type")
+    @Enumerated(EnumType.STRING)
+    private ContractType contractType;
 
     @Column(name = "final_price")
     @PositiveOrZero

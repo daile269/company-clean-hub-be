@@ -27,13 +27,20 @@ public enum ErrorCode {
     BANK_ACCOUNT_ALREADY_EXISTS(400,"Số tài khoản ngân hàng đã tồn tại"),
     PAYROLL_NOT_FOUND(404,"Bảng lương không tồn tại"),
     PAYROLL_ALREADY_EXISTS(400,"Bảng lương tháng này đã tồn tại"),
-    ATTENDANCE_NOT_FOUND(404,"Chấm công không tồn tại"),
+    ATTENDANCE_NOT_FOUND(404,"Nhân viên không đi làm vào ngày này"),
     ATTENDANCE_ALREADY_EXISTS(400,"Chấm công ngày này đã tồn tại"),
     ASSIGNMENT_ALREADY_EXISTS(400,"Nhân viên này đã được phân công phụ trách khách hàng này và đang ở trạng thái hoạt động"),
     REPLACED_EMPLOYEE_NO_ATTENDANCE(400,"Người bị thay không có chấm công vào ngày này"),
-    REPLACEMENT_EMPLOYEE_HAS_ATTENDANCE(400,"Người thay đã có chấm công vào ngày này"),
+    REPLACED_EMPLOYEE_DUPLICATE(400,"Người bị thay không được trùng với người làm thay"),
+    REPLACEMENT_EMPLOYEE_HAS_ATTENDANCE(400,"Người thay đã phụ trách khách hàng vào ngày này"),
     NO_ATTENDANCE_DATA(400,"Không tìm thấy dữ liệu chấm công cho nhân viên trong thời gian yêu cầu"),
     NO_ASSIGNMENT_DATA(400,"Không tìm thấy dữ liệu phân công cho nhân viên trong thời gian yêu cầu"),
+    ASSIGNMENT_START_DATE_BEFORE_CONTRACT(400,"Ngày bắt đầu phân công không được trước ngày bắt đầu hợp đồng"),
+
+    INVALID_TOKEN(401,"Token không hợp lệ"),
+    TOKEN_EXPIRED(401,"Token đã hết hạn, vui lòng đăng nhập lại"),
+    UNSUPPORTED_TOKEN(401,"Token không được hỗ trợ"),
+    TOKEN_CLAIMS_EMPTY(401,"Token không chứa thông tin"),
 
     UNAUTHENTICATED(403,"Không có quyền truy cập" );
 

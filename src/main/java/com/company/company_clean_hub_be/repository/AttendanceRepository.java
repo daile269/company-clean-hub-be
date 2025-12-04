@@ -32,7 +32,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     @Query("SELECT a FROM Attendance a " +
             "LEFT JOIN a.assignment asn " +
             "LEFT JOIN asn.employee e " +
-            "LEFT JOIN asn.customer c " +
+            "LEFT JOIN asn.contract.customer c " +
            "WHERE (:keyword IS NULL OR :keyword = '' OR " +
            "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +

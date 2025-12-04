@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.security;
 
+import com.company.company_clean_hub_be.exception.AppException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,11 +39,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
+            filterChain.doFilter(request, response);
+        } catch (AppException ex) {
+            // Trả JSON response cho FE
+            response.setStatus(ex.getErrorCode().getCode());
+            response.setContentType("application/json;charset=UTF-8");
+            String body = String.format("{\"code\":\"%s\",\"message\":\"%s\"}",
+                    ex.getErrorCode().getCode(),
+                    ex.getErrorCode().getMessage());
+            response.getWriter().write(body);
         } catch (Exception ex) {
             logger.error("Could not set user authentication in security context", ex);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            response.setContentType("application/json;charset=UTF-8");
+            String body = "{\"code\":\"INTERNAL_ERROR\",\"message\":\"Đã có lỗi xảy ra\"}";
+            response.getWriter().write(body);
         }
 
-        filterChain.doFilter(request, response);
+
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {

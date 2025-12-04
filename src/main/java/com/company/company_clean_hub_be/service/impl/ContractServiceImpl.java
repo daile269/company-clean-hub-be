@@ -4,11 +4,13 @@ import com.company.company_clean_hub_be.dto.request.ContractRequest;
 import com.company.company_clean_hub_be.dto.response.ContractResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.ServiceResponse;
+import com.company.company_clean_hub_be.entity.Assignment;
 import com.company.company_clean_hub_be.entity.Contract;
 import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.ServiceEntity;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
+import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.ContractRepository;
 import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.ServiceEntityRepository;
@@ -34,6 +36,7 @@ public class ContractServiceImpl implements ContractService {
     private final ContractRepository contractRepository;
     private final CustomerRepository customerRepository;
     private final ServiceEntityRepository serviceEntityRepository;
+    private final AssignmentRepository assignmentRepository;
 
     @Override
     public List<ContractResponse> getAllContracts() {
@@ -89,6 +92,8 @@ public class ContractServiceImpl implements ContractService {
                 .services(services)
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
+                .workingDaysPerWeek(request.getWorkingDaysPerWeek())
+                .contractType(request.getContractType())
                 .finalPrice(calculatedTotal)
                 .paymentStatus(request.getPaymentStatus())
                 .description(request.getDescription())
@@ -122,6 +127,8 @@ public class ContractServiceImpl implements ContractService {
         contract.setServices(services);
         contract.setStartDate(request.getStartDate());
         contract.setEndDate(request.getEndDate());
+        contract.setWorkingDaysPerWeek(request.getWorkingDaysPerWeek());
+        contract.setContractType(request.getContractType());
         contract.setFinalPrice(calculatedTotal);
         contract.setPaymentStatus(request.getPaymentStatus());
         contract.setDescription(request.getDescription());
@@ -208,6 +215,8 @@ public class ContractServiceImpl implements ContractService {
                 .services(services)
                 .startDate(contract.getStartDate())
                 .endDate(contract.getEndDate())
+                .workingDaysPerWeek(contract.getWorkingDaysPerWeek())
+                .contractType(contract.getContractType())
                 .finalPrice(contract.getFinalPrice())
                 .paymentStatus(contract.getPaymentStatus())
                 .description(contract.getDescription())
@@ -226,5 +235,18 @@ public class ContractServiceImpl implements ContractService {
                     return price.add(vatAmount);
                 })
                 .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+    }
+
+    @Override
+    public ContractResponse getContractByAssignmentId(Long assignmentId) {
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+        
+        Contract contract = assignment.getContract();
+        if (contract == null) {
+            throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
+        }
+        
+        return mapToResponse(contract);
     }
 }

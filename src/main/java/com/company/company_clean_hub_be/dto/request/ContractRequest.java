@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.dto.request;
 
+import com.company.company_clean_hub_be.entity.ContractType;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -9,7 +10,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 
 @Data
@@ -29,6 +32,10 @@ public class ContractRequest {
     private LocalDate startDate;
 
     private LocalDate endDate;
+
+    private List<DayOfWeek> workingDaysPerWeek;
+
+    private ContractType contractType;
 
     @PositiveOrZero(message = "Giá cuối cùng phải lớn hơn hoặc bằng 0")
     private BigDecimal finalPrice;
