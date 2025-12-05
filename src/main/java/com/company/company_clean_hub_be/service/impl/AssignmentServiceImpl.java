@@ -2,10 +2,7 @@ package com.company.company_clean_hub_be.service.impl;
 
 import com.company.company_clean_hub_be.dto.request.AssignmentRequest;
 import com.company.company_clean_hub_be.dto.request.TemporaryReassignmentRequest;
-import com.company.company_clean_hub_be.dto.response.AssignmentResponse;
-import com.company.company_clean_hub_be.dto.response.AttendanceResponse;
-import com.company.company_clean_hub_be.dto.response.PageResponse;
-import com.company.company_clean_hub_be.dto.response.TemporaryAssignmentResponse;
+import com.company.company_clean_hub_be.dto.response.*;
 import com.company.company_clean_hub_be.entity.*;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
@@ -13,9 +10,11 @@ import com.company.company_clean_hub_be.repository.*;
 import com.company.company_clean_hub_be.service.AssignmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -33,6 +32,8 @@ public class AssignmentServiceImpl implements AssignmentService {
     private final CustomerRepository customerRepository;
     private final ContractRepository contractRepository;
     private final AttendanceRepository attendanceRepository;
+    private final AssignmentHistoryRepository assignmentHistoryRepository;
+    private final UserRepository userRepository;
 
     @Override
     public List<AssignmentResponse> getAllAssignments() {
@@ -208,8 +209,16 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         System.out.println("Người bị thay: " + replacedEmployee.getName() + " (ID: " + replacedEmployee.getId() + ")");
 
+        // Lấy thông tin user đang thực hiện
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByUsername(username).orElse(null);
+
         List<AttendanceResponse> createdAttendances = new ArrayList<>();
         List<AttendanceResponse> deletedAttendances = new ArrayList<>();
+        
+        // Để lưu vào history
+        Assignment oldAssignment = null;
+        Assignment newAssignment = null;
 
         // Xử lý từng ngày điều động
         for (LocalDate date : request.getDates()) {
@@ -234,6 +243,11 @@ public class AssignmentServiceImpl implements AssignmentService {
                     + ", workHours=" + deletedAttendance.getWorkHours()
                     + ", isOvertime=" + deletedAttendance.getIsOvertime());
 
+            // Lưu lại old assignment cho history (lần đầu tiên)
+            if (oldAssignment == null) {
+                oldAssignment = replacedAssignmentEntity;
+            }
+
             // Tạo temporary assignment
             Assignment temporaryAssignment = Assignment.builder()
                     .employee(replacementEmployee)
@@ -252,6 +266,11 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             Assignment savedTemporaryAssignment = assignmentRepository.save(temporaryAssignment);
             System.out.println("✓ Đã tạo temporary assignment ID: " + savedTemporaryAssignment.getId());
+
+            // Lưu lại new assignment cho history (lần đầu tiên)
+            if (newAssignment == null) {
+                newAssignment = savedTemporaryAssignment;
+            }
 
             // Check nếu người thay đã có công ngày này
             Optional<Attendance> existingAttendance = attendanceRepository.findByEmployeeAndDate(
@@ -311,6 +330,29 @@ public class AssignmentServiceImpl implements AssignmentService {
             replacedAssignmentEntity.setWorkDays(replacedWorkDays);
             assignmentRepository.save(replacedAssignmentEntity);
             System.out.println("✓ Đã cập nhật workDays của assignment ID " + replacedAssignmentEntity.getId() + " = " + replacedWorkDays);
+        }
+
+        // Lưu lịch sử điều động
+        if (oldAssignment != null && newAssignment != null) {
+            Contract contract = oldAssignment.getContract();
+            AssignmentHistory history = AssignmentHistory.builder()
+                    .oldAssignment(oldAssignment)
+                    .newAssignment(newAssignment)
+                    .replacedEmployeeId(replacedEmployee.getId())
+                    .replacedEmployeeName(replacedEmployee.getName())
+                    .replacementEmployeeId(replacementEmployee.getId())
+                    .replacementEmployeeName(replacementEmployee.getName())
+                    .contractId(contract.getId())
+                    .customerName(contract.getCustomer().getName())
+                    .reassignmentDates(new ArrayList<>(request.getDates()))
+                    .reassignmentType(ReassignmentType.TEMPORARY)
+                    .notes(request.getDescription())
+                    .status(HistoryStatus.ACTIVE)
+                    .createdBy(currentUser)
+                    .build();
+            
+            assignmentHistoryRepository.save(history);
+            System.out.println("✓ Đã lưu lịch sử điều động ID: " + history.getId());
         }
 
         // Tính công trong tháng (lấy tháng của ngày đầu tiên)
@@ -621,5 +663,158 @@ public class AssignmentServiceImpl implements AssignmentService {
             // Không cần save lại assignment nếu nó đang trong transaction với createAssignment
             // JPA sẽ tự động save khi transaction commit
         }
+    }
+
+    // ==================== LỊCH SỬ ĐIỀU ĐỘNG ====================
+
+    @Override
+    public List<AssignmentHistoryResponse> getReassignmentHistory(Long employeeId) {
+        // Lấy cả lịch sử bị thay và lịch sử thay thế
+        List<AssignmentHistory> replacedHistory = assignmentHistoryRepository
+                .findByReplacedEmployeeIdOrderByCreatedAtDesc(employeeId);
+        List<AssignmentHistory> replacementHistory = assignmentHistoryRepository
+                .findByReplacementEmployeeIdOrderByCreatedAtDesc(employeeId);
+        
+        // Merge và loại bỏ duplicate
+        List<AssignmentHistory> allHistory = new ArrayList<>();
+        allHistory.addAll(replacedHistory);
+        for (AssignmentHistory h : replacementHistory) {
+            if (!allHistory.contains(h)) {
+                allHistory.add(h);
+            }
+        }
+        
+        // Sắp xếp theo thời gian mới nhất
+        allHistory.sort((h1, h2) -> h2.getCreatedAt().compareTo(h1.getCreatedAt()));
+        
+        return allHistory.stream()
+                .map(this::mapHistoryToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AssignmentHistoryResponse> getReassignmentHistoryByContract(Long contractId) {
+        return assignmentHistoryRepository.findByContractIdOrderByCreatedAtDesc(contractId).stream()
+                .map(this::mapHistoryToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public AssignmentHistoryResponse getHistoryDetail(Long historyId) {
+        AssignmentHistory history = assignmentHistoryRepository.findById(historyId)
+                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+        return mapHistoryToResponse(history);
+    }
+
+    @Override
+    @Transactional
+    public RollbackResponse rollbackReassignment(Long historyId) {
+        // Tìm lịch sử điều động
+        AssignmentHistory history = assignmentHistoryRepository.findActiveHistoryById(historyId)
+                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+
+        if (history.getStatus() == HistoryStatus.ROLLED_BACK) {
+            throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS); // Tạm dùng error này
+        }
+
+        // Lấy thông tin user đang rollback
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByUsername(username).orElse(null);
+
+        int restoredCount = 0;
+        int removedCount = 0;
+
+        // Rollback từng ngày
+        for (LocalDate date : history.getReassignmentDates()) {
+            // Xóa attendance của người thay
+            Optional<Attendance> replacementAttendance = attendanceRepository.findByEmployeeAndDate(
+                    history.getReplacementEmployeeId(), date);
+            if (replacementAttendance.isPresent()) {
+                attendanceRepository.delete(replacementAttendance.get());
+                removedCount++;
+            }
+
+            // Khôi phục attendance cho người bị thay
+            // Tìm assignment cũ để tạo lại attendance
+            Assignment oldAssignment = history.getOldAssignment();
+            
+            Attendance restoredAttendance = Attendance.builder()
+                    .employee(oldAssignment.getEmployee())
+                    .assignment(oldAssignment)
+                    .date(date)
+                    .workHours(BigDecimal.valueOf(8))
+                    .bonus(java.math.BigDecimal.ZERO)
+                    .penalty(java.math.BigDecimal.ZERO)
+                    .supportCost(java.math.BigDecimal.ZERO)
+                    .isOvertime(false)
+                    .description("Khôi phục sau rollback điều động")
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+            
+            attendanceRepository.save(restoredAttendance);
+            restoredCount++;
+        }
+
+        // Cập nhật workDays cho assignment cũ (người bị thay)
+        updateAssignmentWorkDays(history.getOldAssignment(), history.getReassignmentDates().get(0));
+        
+        // Chuyển trạng thái temporary assignment sang CANCELED thay vì xóa
+        Assignment newAssignment = history.getNewAssignment();
+        if (newAssignment != null && newAssignment.getAssignmentType() == AssignmentType.TEMPORARY) {
+            newAssignment.setStatus(AssignmentStatus.CANCELED);
+            assignmentRepository.save(newAssignment);
+            System.out.println("Canceled temporary assignment " + newAssignment.getId() + " during rollback");
+        }
+        
+        // Đánh dấu history đã rollback
+        history.setStatus(HistoryStatus.ROLLED_BACK);
+        history.setRollbackBy(currentUser);
+        history.setRollbackAt(LocalDateTime.now());
+        assignmentHistoryRepository.save(history);
+
+        return RollbackResponse.builder()
+                .success(true)
+                .message(String.format("Đã rollback thành công điều động giữa %s và %s. Khôi phục %d ngày.",
+                        history.getReplacedEmployeeName(), history.getReplacementEmployeeName(), restoredCount))
+                .historyDetail(mapHistoryToResponse(history))
+                .restoredAttendances(restoredCount)
+                .removedAttendances(removedCount)
+                .build();
+    }
+
+    private void updateAssignmentWorkDays(Assignment assignment, LocalDate referenceDate) {
+        YearMonth ym = YearMonth.from(referenceDate);
+        LocalDate monthStart = ym.atDay(1);
+        LocalDate monthEnd = ym.atEndOfMonth();
+
+        int workDays = attendanceRepository
+                .findByEmployeeAndDateBetween(assignment.getEmployee().getId(), monthStart, monthEnd)
+                .size();
+
+        assignment.setWorkDays(workDays);
+        assignmentRepository.save(assignment);
+    }
+
+    private AssignmentHistoryResponse mapHistoryToResponse(AssignmentHistory history) {
+        return AssignmentHistoryResponse.builder()
+                .id(history.getId())
+                .oldAssignmentId(history.getOldAssignment() != null ? history.getOldAssignment().getId() : null)
+                .newAssignmentId(history.getNewAssignment() != null ? history.getNewAssignment().getId() : null)
+                .replacedEmployeeId(history.getReplacedEmployeeId())
+                .replacedEmployeeName(history.getReplacedEmployeeName())
+                .replacementEmployeeId(history.getReplacementEmployeeId())
+                .replacementEmployeeName(history.getReplacementEmployeeName())
+                .contractId(history.getContractId())
+                .customerName(history.getCustomerName())
+                .reassignmentDates(history.getReassignmentDates())
+                .reassignmentType(history.getReassignmentType())
+                .notes(history.getNotes())
+                .status(history.getStatus())
+                .createdByUsername(history.getCreatedBy() != null ? history.getCreatedBy().getUsername() : null)
+                .createdAt(history.getCreatedAt())
+                .rollbackByUsername(history.getRollbackBy() != null ? history.getRollbackBy().getUsername() : null)
+                .rollbackAt(history.getRollbackAt())
+                .build();
     }
 }

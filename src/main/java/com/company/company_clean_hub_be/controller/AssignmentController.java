@@ -3,8 +3,10 @@ package com.company.company_clean_hub_be.controller;
 import com.company.company_clean_hub_be.dto.request.AssignmentRequest;
 import com.company.company_clean_hub_be.dto.request.TemporaryReassignmentRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
+import com.company.company_clean_hub_be.dto.response.AssignmentHistoryResponse;
 import com.company.company_clean_hub_be.dto.response.AssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.RollbackResponse;
 import com.company.company_clean_hub_be.dto.response.TemporaryAssignmentResponse;
 import com.company.company_clean_hub_be.schedule.AssignmentScheduler;
 import com.company.company_clean_hub_be.service.AssignmentService;
@@ -143,6 +145,48 @@ public class AssignmentController {
         return ApiResponse.success(
                 "Đã chạy job cập nhật phân công cố định, kiểm tra console log để xem kết quả", 
                 "OK", 
+                HttpStatus.OK.value()
+        );
+    }
+
+    // ==================== LỊCH SỬ ĐIỀU ĐỘNG ====================
+
+    @GetMapping("/history/employee/{employeeId}")
+    public ApiResponse<List<AssignmentHistoryResponse>> getReassignmentHistory(@PathVariable Long employeeId) {
+        List<AssignmentHistoryResponse> history = assignmentService.getReassignmentHistory(employeeId);
+        return ApiResponse.success(
+                "Lấy lịch sử điều động thành công",
+                history,
+                HttpStatus.OK.value()
+        );
+    }
+
+    @GetMapping("/history/contract/{contractId}")
+    public ApiResponse<List<AssignmentHistoryResponse>> getReassignmentHistoryByContract(@PathVariable Long contractId) {
+        List<AssignmentHistoryResponse> history = assignmentService.getReassignmentHistoryByContract(contractId);
+        return ApiResponse.success(
+                "Lấy lịch sử điều động theo hợp đồng thành công",
+                history,
+                HttpStatus.OK.value()
+        );
+    }
+
+    @GetMapping("/history/{historyId}")
+    public ApiResponse<AssignmentHistoryResponse> getHistoryDetail(@PathVariable Long historyId) {
+        AssignmentHistoryResponse history = assignmentService.getHistoryDetail(historyId);
+        return ApiResponse.success(
+                "Lấy chi tiết lịch sử điều động thành công",
+                history,
+                HttpStatus.OK.value()
+        );
+    }
+
+    @PostMapping("/history/{historyId}/rollback")
+    public ApiResponse<RollbackResponse> rollbackReassignment(@PathVariable Long historyId) {
+        RollbackResponse response = assignmentService.rollbackReassignment(historyId);
+        return ApiResponse.success(
+                "Rollback điều động thành công",
+                response,
                 HttpStatus.OK.value()
         );
     }
