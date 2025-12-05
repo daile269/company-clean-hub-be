@@ -26,4 +26,7 @@ public class ServiceRequest {
     @PositiveOrZero(message = "Giá phải lớn hơn hoặc bằng 0")
     private BigDecimal price;
 
+    @PositiveOrZero(message = "VAT phải lớn hơn hoặc bằng 0")
+    private BigDecimal vat;
+
 }

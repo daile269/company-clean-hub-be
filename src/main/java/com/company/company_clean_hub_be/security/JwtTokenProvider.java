@@ -1,5 +1,7 @@
 package com.company.company_clean_hub_be.security;
 
+import com.company.company_clean_hub_be.exception.AppException;
+import com.company.company_clean_hub_be.exception.ErrorCode;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -93,16 +95,15 @@ public class JwtTokenProvider {
                     .parseClaimsJws(authToken);
             return true;
         } catch (SecurityException ex) {
-            System.err.println("Invalid JWT signature");
+            throw new AppException(ErrorCode.INVALID_TOKEN);
         } catch (MalformedJwtException ex) {
-            System.err.println("Invalid JWT token");
+            throw new AppException(ErrorCode.INVALID_TOKEN);
         } catch (ExpiredJwtException ex) {
-            System.err.println("Expired JWT token");
+            throw new AppException(ErrorCode.TOKEN_EXPIRED);
         } catch (UnsupportedJwtException ex) {
-            System.err.println("Unsupported JWT token");
+            throw new AppException(ErrorCode.UNSUPPORTED_TOKEN);
         } catch (IllegalArgumentException ex) {
-            System.err.println("JWT claims string is empty");
+            throw new AppException(ErrorCode.TOKEN_CLAIMS_EMPTY);
         }
-        return false;
     }
 }

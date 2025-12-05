@@ -66,6 +66,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .price(request.getPrice())
+                .vat(request.getVat())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -82,10 +83,34 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
         service.setTitle(request.getTitle());
         service.setDescription(request.getDescription());
         service.setPrice(request.getPrice());
+        service.setVat(request.getVat());
         service.setUpdatedAt(LocalDateTime.now());
 
         ServiceEntity updatedService = serviceEntityRepository.save(service);
+        
+        // Cập nhật lại finalPrice cho tất cả hợp đồng có sử dụng dịch vụ này
+        updateContractPricesForService(updatedService);
+        
         return mapToResponse(updatedService);
+    }
+    
+    private void updateContractPricesForService(ServiceEntity service) {
+        // Lấy tất cả hợp đồng có sử dụng dịch vụ này
+        service.getContracts().forEach(contract -> {
+            // Tính lại tổng giá trị hợp đồng
+            java.math.BigDecimal total = contract.getServices().stream()
+                    .map(s -> {
+                        java.math.BigDecimal price = s.getPrice() != null ? s.getPrice() : java.math.BigDecimal.ZERO;
+                        java.math.BigDecimal vat = s.getVat() != null ? s.getVat() : java.math.BigDecimal.ZERO;
+                        // Giá phải trả = Giá dịch vụ + (Giá dịch vụ × VAT / 100)
+                        java.math.BigDecimal vatAmount = price.multiply(vat).divide(new java.math.BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP);
+                        return price.add(vatAmount);
+                    })
+                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            
+            contract.setFinalPrice(total);
+            contract.setUpdatedAt(LocalDateTime.now());
+        });
     }
 
     @Override
@@ -101,6 +126,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
                 .title(service.getTitle())
                 .description(service.getDescription())
                 .price(service.getPrice())
+                .vat(service.getVat())
                 .createdAt(service.getCreatedAt())
                 .updatedAt(service.getUpdatedAt())
                 .build();

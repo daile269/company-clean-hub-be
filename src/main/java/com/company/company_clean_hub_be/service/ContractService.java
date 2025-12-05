@@ -15,4 +15,5 @@ public interface ContractService {
     List<ContractResponse> getContractsByCustomer(Long customerId);
     ContractResponse addServiceToContract(Long contractId, Long serviceId);
     ContractResponse removeServiceFromContract(Long contractId, Long serviceId);
+    ContractResponse getContractByAssignmentId(Long assignmentId);
 }

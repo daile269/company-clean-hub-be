@@ -63,6 +63,12 @@ public class ContractController {
         return ApiResponse.success("Lấy danh sách hợp đồng của khách hàng thành công", contracts, HttpStatus.OK.value());
     }
 
+    @GetMapping("/assignment/{assignmentId}")
+    public ApiResponse<ContractResponse> getContractByAssignmentId(@PathVariable Long assignmentId) {
+        ContractResponse contract = contractService.getContractByAssignmentId(assignmentId);
+        return ApiResponse.success("Lấy thông tin hợp đồng từ phân công thành công", contract, HttpStatus.OK.value());
+    }
+
     @PostMapping
     public ApiResponse<ContractResponse> createContract(@Valid @RequestBody ContractRequest request) {
         ContractResponse contract = contractService.createContract(request);

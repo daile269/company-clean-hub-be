@@ -38,12 +38,12 @@ public class Assignment {
     private Employee employee;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "customer_id")
+    @JoinColumn(name = "contract_id")
     @NotNull
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     @JsonIgnore
-    private Customer customer;
+    private Contract contract;
 
     @Column(name = "start_date")
     @NotNull
@@ -68,7 +68,7 @@ public class Assignment {
     @CollectionTable(name = "assignment_working_days", joinColumns = @JoinColumn(name = "assignment_id"))
     @Column(name = "day_of_week")
     @Enumerated(EnumType.STRING)
-    private List<DayOfWeek> workingDaysPerWeek;
+    private List<java.time.DayOfWeek> workingDaysPerWeek;
 
     @Column(name = "additional_allowance")
     @PositiveOrZero

@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.repository;
 
+import com.company.company_clean_hub_be.entity.AssignmentStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Page;
@@ -36,10 +37,12 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     boolean existsByPhone(String phone);
 
     boolean existsByPhoneAndIdNot(String phone, Long id);
-    
-    @Query("SELECT e FROM Employee e WHERE e.id NOT IN (" +
-           "SELECT a.employee.id FROM Assignment a " +
-           "WHERE a.customer.id = :customerId AND a.status = 'IN_PROGRESS')")
+
+    @Query("SELECT e FROM Employee e " +
+            "WHERE e.id NOT IN (" +
+            "SELECT a.employee.id FROM Assignment a " +
+            "WHERE a.contract.customer.id = :customerId " +
+            "AND a.status = 'IN_PROGRESS')")
     Page<Employee> findEmployeesNotAssignedToCustomer(
             @Param("customerId") Long customerId,
             Pageable pageable

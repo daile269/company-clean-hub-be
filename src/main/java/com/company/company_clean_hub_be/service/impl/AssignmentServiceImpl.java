@@ -9,14 +9,12 @@ import com.company.company_clean_hub_be.dto.response.TemporaryAssignmentResponse
 import com.company.company_clean_hub_be.entity.*;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
-import com.company.company_clean_hub_be.repository.AssignmentRepository;
-import com.company.company_clean_hub_be.repository.AttendanceRepository;
-import com.company.company_clean_hub_be.repository.CustomerRepository;
-import com.company.company_clean_hub_be.repository.EmployeeRepository;
+import com.company.company_clean_hub_be.repository.*;
 import com.company.company_clean_hub_be.service.AssignmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,6 +31,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     private final AssignmentRepository assignmentRepository;
     private final EmployeeRepository employeeRepository;
     private final CustomerRepository customerRepository;
+    private final ContractRepository contractRepository;
     private final AttendanceRepository attendanceRepository;
 
     @Override
@@ -71,18 +70,24 @@ public class AssignmentServiceImpl implements AssignmentService {
 
 
     @Override
+    @Transactional
     public AssignmentResponse createAssignment(AssignmentRequest request) {
 
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
-        Customer customer = customerRepository.findById(request.getCustomerId())
-                .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
+        Contract contract = contractRepository.findById(request.getContractId())
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
-        // Kiểm tra nhân viên đã được phân công phụ trách khách hàng này chưa (status IN_PROGRESS)
+        // Kiểm tra ngày bắt đầu assignment không được trước ngày bắt đầu contract
+        if (request.getStartDate().isBefore(contract.getStartDate())) {
+            throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
+        }
+
+        // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (status IN_PROGRESS)
         if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
             List<Assignment> existingAssignments = assignmentRepository
-                    .findActiveAssignmentByEmployeeAndCustomer(request.getEmployeeId(), request.getCustomerId());
+                    .findActiveAssignmentByEmployeeAndContract(request.getEmployeeId(), request.getContractId());
             if (!existingAssignments.isEmpty()) {
                 throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
             }
@@ -90,11 +95,13 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         Assignment assignment = Assignment.builder()
                 .employee(employee)
-                .customer(customer)
+                .contract(contract)
                 .startDate(request.getStartDate())
                 .status(request.getStatus())
                 .salaryAtTime(request.getSalaryAtTime())
-                .workingDaysPerWeek(request.getWorkingDaysPerWeek())
+                .workingDaysPerWeek(contract.getWorkingDaysPerWeek() != null 
+                    ? new ArrayList<>(contract.getWorkingDaysPerWeek()) 
+                    : null)
                 .additionalAllowance(request.getAdditionalAllowance())
                 .description(request.getDescription())
                 .assignmentType(AssignmentType.valueOf(request.getAssignmentType()))
@@ -106,8 +113,8 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         // Tự động tạo chấm công nếu có workingDaysPerWeek và status là IN_PROGRESS
         if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus()) && 
-            request.getWorkingDaysPerWeek() != null && 
-            !request.getWorkingDaysPerWeek().isEmpty()) {
+            contract.getWorkingDaysPerWeek() != null &&
+            !contract.getWorkingDaysPerWeek().isEmpty()) {
             
             autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
         }
@@ -116,6 +123,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     @Override
+    @Transactional
     public AssignmentResponse updateAssignment(Long id, AssignmentRequest request) {
 
         Assignment assignment = assignmentRepository.findById(id)
@@ -124,15 +132,20 @@ public class AssignmentServiceImpl implements AssignmentService {
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
-        Customer customer = customerRepository.findById(request.getCustomerId())
-                .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
+        Contract contract = contractRepository.findById(request.getContractId())
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
-        // Kiểm tra nhân viên đã được phân công phụ trách khách hàng này chưa (status IN_PROGRESS)
+        // Kiểm tra ngày bắt đầu assignment không được trước ngày bắt đầu contract
+        if (request.getStartDate().isBefore(contract.getStartDate())) {
+            throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
+        }
+
+        // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (status IN_PROGRESS)
         if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
             List<Assignment> existingAssignments = assignmentRepository
-                    .findActiveAssignmentByEmployeeAndCustomerAndIdNot(
+                    .findActiveAssignmentByEmployeeAndContractAndIdNot(
                             request.getEmployeeId(), 
-                            request.getCustomerId(), 
+                            request.getContractId(), 
                             id
                     );
             if (!existingAssignments.isEmpty()) {
@@ -141,11 +154,13 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
 
         assignment.setEmployee(employee);
-        assignment.setCustomer(customer);
+        assignment.setContract(contract);
         assignment.setStartDate(request.getStartDate());
         assignment.setStatus(request.getStatus());
         assignment.setSalaryAtTime(request.getSalaryAtTime());
-        assignment.setWorkingDaysPerWeek(request.getWorkingDaysPerWeek());
+        assignment.setWorkingDaysPerWeek(contract.getWorkingDaysPerWeek() != null 
+            ? new ArrayList<>(contract.getWorkingDaysPerWeek()) 
+            : null);
         assignment.setAdditionalAllowance(request.getAdditionalAllowance());
         assignment.setDescription(request.getDescription());
         assignment.setUpdatedAt(LocalDateTime.now());
@@ -176,6 +191,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     @Override
+    @Transactional
     public TemporaryAssignmentResponse temporaryReassignment(TemporaryReassignmentRequest request) {
 
         System.out.println("=== BẮT ĐẦU ĐIỀU ĐỘNG TẠM THỜI ===");
@@ -183,7 +199,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 + ", replacedEmployeeId=" + request.getReplacedEmployeeId()
                 + ", dates=" + request.getDates()
                 + ", salaryAtTime=" + request.getSalaryAtTime());
-
+        
         Employee replacementEmployee = employeeRepository.findById(request.getReplacementEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         System.out.println("Người thay: " + replacementEmployee.getName() + " (ID: " + replacementEmployee.getId() + ")");
@@ -221,7 +237,7 @@ public class AssignmentServiceImpl implements AssignmentService {
             // Tạo temporary assignment
             Assignment temporaryAssignment = Assignment.builder()
                     .employee(replacementEmployee)
-                    .customer(replacedAssignmentEntity.getCustomer())
+                    .contract(replacedAssignmentEntity.getContract())
                     .assignmentType(AssignmentType.TEMPORARY)
                     .workDays(1)
                     .salaryAtTime(request.getSalaryAtTime())
@@ -244,9 +260,13 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             System.out.println("Kiểm tra người thay đã có attendance vào ngày " + date + ": "
                     + (existingAttendance.isPresent() ? "CÓ RỒI" : "CHƯA CÓ"));
+            
+            // Nếu người thay đã có attendance vào ngày này, xóa attendance cũ đi (cho phép điều động lại)
             if (existingAttendance.isPresent()) {
-                System.out.println("❌ LỖI: Người thay đã có attendance vào ngày này (ID: " + existingAttendance.get().getId() + ")");
-                throw new AppException(ErrorCode.REPLACEMENT_EMPLOYEE_HAS_ATTENDANCE);
+                System.out.println("⚠️ Người thay đã có attendance vào ngày này (ID: " + existingAttendance.get().getId() + ")");
+                System.out.println("→ Xóa attendance cũ để thay thế bằng attendance mới từ điều động");
+                attendanceRepository.delete(existingAttendance.get());
+                System.out.println("✓ Đã xóa attendance cũ của người thay");
             }
 
             // Lưu attendance bị xóa
@@ -470,8 +490,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .employeeCode(employee != null ? employee.getEmployeeCode() : null)
                 .assignmentId(assignment != null ? assignment.getId() : null)
                 .assignmentType(assignment != null && assignment.getAssignmentType() != null ? assignment.getAssignmentType().name() : null)
-                .customerId(assignment != null && assignment.getCustomer() != null ? assignment.getCustomer().getId() : null)
-                .customerName(assignment != null && assignment.getCustomer() != null ? assignment.getCustomer().getName() : null)
+                .customerId(assignment != null && assignment.getContract().getCustomer() != null ? assignment.getContract().getCustomer().getId() : null)
+                .customerName(assignment != null && assignment.getContract() != null ? assignment.getContract().getCustomer().getName() : null)
                 .date(attendance.getDate())
                 .workHours(attendance.getWorkHours())
                 .bonus(attendance.getBonus())
@@ -492,9 +512,11 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .employeeName(assignment.getEmployee().getName())
                 .employeeCode(assignment.getEmployee().getEmployeeCode())
                 .assignmentType(assignment.getAssignmentType().name())
-                .customerId(assignment.getCustomer().getId())
-                .customerName(assignment.getCustomer().getName())
-                .customerCode(assignment.getCustomer().getCustomerCode())
+                .customerId(assignment.getContract().getCustomer().getId())
+                .customerName(assignment.getContract().getCustomer().getName())
+                .customerCode(assignment.getContract().getCustomer().getCustomerCode())
+                .contractId(assignment.getContract().getId())
+                .contractDescription(assignment.getContract().getDescription())
                 .startDate(assignment.getStartDate())
                 .status(assignment.getStatus())
                 .salaryAtTime(assignment.getSalaryAtTime())
@@ -510,57 +532,88 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     /**
      * Tự động tạo chấm công cho assignment dựa vào workingDaysPerWeek
-     * Từ startDate đến cuối tháng hiện tại
+     * - Nếu hợp đồng ONE_TIME: chỉ tạo 1 attendance ngày đầu tiên
+     * - Nếu hợp đồng khác: tạo từ startDate đến cuối tháng hiện tại
      */
     private void autoGenerateAttendancesForAssignment(Assignment assignment, LocalDate startDate) {
         if (assignment.getWorkingDaysPerWeek() == null || assignment.getWorkingDaysPerWeek().isEmpty()) {
             return;
         }
 
-        // Tính ngày cuối tháng
-        YearMonth yearMonth = YearMonth.from(startDate);
-        LocalDate endDate = yearMonth.atEndOfMonth();
-
+        Contract contract = assignment.getContract();
         List<Attendance> attendances = new ArrayList<>();
 
-        // Chuyển đổi DayOfWeek từ entity sang java.time.DayOfWeek
-        List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek().stream()
-                .map(day -> java.time.DayOfWeek.valueOf(day.name()))
-                .collect(Collectors.toList());
+        // Nếu là hợp đồng ONE_TIME, chỉ tạo 1 attendance ngày đầu tiên
+        if (contract.getContractType() == ContractType.ONE_TIME) {
+            // Kiểm tra đã có chấm công ngày này chưa
+            boolean alreadyExists = attendanceRepository.findByEmployeeAndDate(
+                    assignment.getEmployee().getId(),
+                    startDate
+            ).isPresent();
 
-        // Duyệt qua tất cả các ngày từ startDate đến cuối tháng
-        LocalDate currentDate = startDate;
-        while (!currentDate.isAfter(endDate)) {
-            // Kiểm tra ngày hiện tại có nằm trong danh sách ngày làm việc không
-            if (workingDays.contains(currentDate.getDayOfWeek())) {
-                // Kiểm tra đã có chấm công ngày này chưa
-                boolean alreadyExists = attendanceRepository.findByEmployeeAndDate(
-                        assignment.getEmployee().getId(),
-                        currentDate
-                ).isPresent();
+            if (!alreadyExists) {
+                Attendance attendance = Attendance.builder()
+                        .employee(assignment.getEmployee())
+                        .assignment(assignment)
+                        .date(startDate)
+                        .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
+                        .bonus(java.math.BigDecimal.ZERO)
+                        .penalty(java.math.BigDecimal.ZERO)
+                        .supportCost(java.math.BigDecimal.ZERO)
+                        .isOvertime(false)
+                        .overtimeAmount(java.math.BigDecimal.ZERO)
+                        .description("Tự động tạo từ phân công (Hợp đồng 1 lần)")
+                        .createdAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now())
+                        .build();
 
-                // Nếu chưa tồn tại thì tạo mới
-                if (!alreadyExists) {
-                    Attendance attendance = Attendance.builder()
-                            .employee(assignment.getEmployee())
-                            .assignment(assignment)
-                            .date(currentDate)
-                            .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
-                            .bonus(java.math.BigDecimal.ZERO)
-                            .penalty(java.math.BigDecimal.ZERO)
-                            .supportCost(java.math.BigDecimal.ZERO)
-                            .isOvertime(false)
-                            .overtimeAmount(java.math.BigDecimal.ZERO)
-                            .description("Tự động tạo từ phân công")
-                            .createdAt(LocalDateTime.now())
-                            .updatedAt(LocalDateTime.now())
-                            .build();
-
-                    attendances.add(attendance);
-                }
+                attendances.add(attendance);
             }
+        } else {
+            // Hợp đồng MONTHLY_FIXED hoặc MONTHLY_ACTUAL: tạo theo workingDaysPerWeek
+            // Tính ngày cuối tháng
+            YearMonth yearMonth = YearMonth.from(startDate);
+            LocalDate endDate = yearMonth.atEndOfMonth();
 
-            currentDate = currentDate.plusDays(1);
+            // Chuyển đổi DayOfWeek từ entity sang java.time.DayOfWeek
+            List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek().stream()
+                    .map(day -> java.time.DayOfWeek.valueOf(day.name()))
+                    .collect(Collectors.toList());
+
+            // Duyệt qua tất cả các ngày từ startDate đến cuối tháng
+            LocalDate currentDate = startDate;
+            while (!currentDate.isAfter(endDate)) {
+                // Kiểm tra ngày hiện tại có nằm trong danh sách ngày làm việc không
+                if (workingDays.contains(currentDate.getDayOfWeek())) {
+                    // Kiểm tra đã có chấm công ngày này chưa
+                    boolean alreadyExists = attendanceRepository.findByEmployeeAndDate(
+                            assignment.getEmployee().getId(),
+                            currentDate
+                    ).isPresent();
+
+                    // Nếu chưa tồn tại thì tạo mới
+                    if (!alreadyExists) {
+                        Attendance attendance = Attendance.builder()
+                                .employee(assignment.getEmployee())
+                                .assignment(assignment)
+                                .date(currentDate)
+                                .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
+                                .bonus(java.math.BigDecimal.ZERO)
+                                .penalty(java.math.BigDecimal.ZERO)
+                                .supportCost(java.math.BigDecimal.ZERO)
+                                .isOvertime(false)
+                                .overtimeAmount(java.math.BigDecimal.ZERO)
+                                .description("Tự động tạo từ phân công")
+                                .createdAt(LocalDateTime.now())
+                                .updatedAt(LocalDateTime.now())
+                                .build();
+
+                        attendances.add(attendance);
+                    }
+                }
+
+                currentDate = currentDate.plusDays(1);
+            }
         }
 
         // Lưu tất cả chấm công
@@ -578,7 +631,8 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             assignment.setWorkDays(totalWorkDays);
             assignment.setPlannedDays(totalWorkDays);
-            assignmentRepository.save(assignment);
+            // Không cần save lại assignment nếu nó đang trong transaction với createAssignment
+            // JPA sẽ tự động save khi transaction commit
         }
     }
 }

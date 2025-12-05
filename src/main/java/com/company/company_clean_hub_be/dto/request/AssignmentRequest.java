@@ -23,8 +23,8 @@ public class AssignmentRequest {
     @NotNull(message = "ID nhân viên không được để trống")
     private Long employeeId;
 
-    @NotNull(message = "ID khách hàng không được để trống")
-    private Long customerId;
+    @NotNull(message = "ID hợp đồng không được để trống")
+    private Long contractId;
 
     @NotNull(message = "Ngày bắt đầu không được để trống")
     private LocalDate startDate;
@@ -35,8 +35,6 @@ public class AssignmentRequest {
 
     @PositiveOrZero(message = "Lương tại thời điểm phải lớn hơn hoặc bằng 0")
     private BigDecimal salaryAtTime;
-
-    private List<DayOfWeek> workingDaysPerWeek;
 
     @PositiveOrZero(message = "Phụ cấp thêm phải lớn hơn hoặc bằng 0")
     private BigDecimal additionalAllowance;
