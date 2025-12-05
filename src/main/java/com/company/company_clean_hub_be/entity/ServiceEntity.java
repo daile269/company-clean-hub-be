@@ -48,6 +48,10 @@ public class ServiceEntity {
     @PositiveOrZero
     private BigDecimal price;
 
+    @Column(name = "vat")
+    @PositiveOrZero
+    private BigDecimal vat;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

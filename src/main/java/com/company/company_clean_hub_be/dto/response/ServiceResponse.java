@@ -18,6 +18,7 @@ public class ServiceResponse {
     private String title;
     private String description;
     private BigDecimal price;
+    private BigDecimal vat;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

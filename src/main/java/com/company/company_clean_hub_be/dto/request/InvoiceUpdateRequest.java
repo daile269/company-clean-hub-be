@@ -1,0 +1,15 @@
+package com.company.company_clean_hub_be.dto.request;
+
+import com.company.company_clean_hub_be.entity.InvoiceStatus;
+import lombok.*;
+import lombok.experimental.FieldDefaults;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@FieldDefaults(level = AccessLevel.PRIVATE)
+public class InvoiceUpdateRequest {
+    InvoiceStatus status;
+    String notes;
+}

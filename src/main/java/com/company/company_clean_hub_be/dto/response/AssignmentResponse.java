@@ -1,13 +1,13 @@
 package com.company.company_clean_hub_be.dto.response;
 
 import com.company.company_clean_hub_be.entity.AssignmentStatus;
-import com.company.company_clean_hub_be.entity.DayOfWeek;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +25,8 @@ public class AssignmentResponse {
     private Long customerId;
     private String customerName;
     private String customerCode;
+    private Long contractId;
+    private String contractDescription;
     private LocalDate startDate;
     private AssignmentStatus status;
     private BigDecimal salaryAtTime;

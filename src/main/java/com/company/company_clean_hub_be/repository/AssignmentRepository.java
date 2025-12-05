@@ -15,7 +15,8 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     
     @Query("SELECT a FROM Assignment a " +
            "LEFT JOIN a.employee e " +
-           "LEFT JOIN a.customer c " +
+           "LEFT JOIN a.contract cont " +
+           "LEFT JOIN cont.customer c " +
            "WHERE (:keyword IS NULL OR :keyword = '' OR " +
            "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
@@ -36,37 +37,37 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     );
     
     @Query("SELECT a FROM Assignment a " +
-           "WHERE a.customer.id = :customerId " +
+           "WHERE a.contract.customer.id = :customerId " +
            "AND a.status = 'IN_PROGRESS' " +
            "ORDER BY a.startDate DESC")
     List<Assignment> findActiveAssignmentsByCustomer(@Param("customerId") Long customerId);
     
     @Query("SELECT a FROM Assignment a " +
-           "WHERE a.customer.id = :customerId " +
+           "WHERE a.contract.customer.id = :customerId " +
            "ORDER BY a.startDate ASC")
     List<Assignment> findAllAssignmentsByCustomer(@Param("customerId") Long customerId);
     
     @Query("SELECT a FROM Assignment a " +
            "WHERE a.employee.id = :employeeId " +
-           "AND a.customer.id = :customerId " +
+           "AND a.contract.id = :contractId " +
            "AND a.status = 'IN_PROGRESS'")
-    List<Assignment> findActiveAssignmentByEmployeeAndCustomer(
+    List<Assignment> findActiveAssignmentByEmployeeAndContract(
             @Param("employeeId") Long employeeId,
-            @Param("customerId") Long customerId
+            @Param("contractId") Long contractId
     );
     
     @Query("SELECT a FROM Assignment a " +
            "WHERE a.employee.id = :employeeId " +
-           "AND a.customer.id = :customerId " +
+           "AND a.contract.id = :contractId " +
            "AND a.status = 'IN_PROGRESS' " +
            "AND a.id != :assignmentId")
-    List<Assignment> findActiveAssignmentByEmployeeAndCustomerAndIdNot(
+    List<Assignment> findActiveAssignmentByEmployeeAndContractAndIdNot(
             @Param("employeeId") Long employeeId,
-            @Param("customerId") Long customerId,
+            @Param("contractId") Long contractId,
             @Param("assignmentId") Long assignmentId
     );
 
-       @Query("SELECT DISTINCT a.customer FROM Assignment a " +
+       @Query("SELECT DISTINCT a.contract.customer FROM Assignment a " +
                  "WHERE a.employee.id = :employeeId " +
                  "AND a.status = 'IN_PROGRESS'")
        List<com.company.company_clean_hub_be.entity.Customer> findActiveCustomersByEmployee(@Param("employeeId") Long employeeId);

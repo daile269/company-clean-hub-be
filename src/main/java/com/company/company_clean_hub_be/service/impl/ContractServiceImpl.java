@@ -4,11 +4,13 @@ import com.company.company_clean_hub_be.dto.request.ContractRequest;
 import com.company.company_clean_hub_be.dto.response.ContractResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.ServiceResponse;
+import com.company.company_clean_hub_be.entity.Assignment;
 import com.company.company_clean_hub_be.entity.Contract;
 import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.ServiceEntity;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
+import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.ContractRepository;
 import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.ServiceEntityRepository;
@@ -34,6 +36,7 @@ public class ContractServiceImpl implements ContractService {
     private final ContractRepository contractRepository;
     private final CustomerRepository customerRepository;
     private final ServiceEntityRepository serviceEntityRepository;
+    private final AssignmentRepository assignmentRepository;
 
     @Override
     public List<ContractResponse> getAllContracts() {
@@ -81,17 +84,17 @@ public class ContractServiceImpl implements ContractService {
             services.add(service);
         }
 
+        // Tự động tính tổng giá trị hợp đồng dựa trên các dịch vụ (bao gồm VAT)
+        java.math.BigDecimal calculatedTotal = calculateTotalFromServices(services);
+
         Contract contract = Contract.builder()
                 .customer(customer)
                 .services(services)
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
-                .basePrice(request.getBasePrice())
-                .vat(request.getVat())
-                .total(request.getTotal())
-                .extraCost(request.getExtraCost())
-                .discountCost(request.getDiscountCost())
-                .finalPrice(request.getFinalPrice())
+                .workingDaysPerWeek(request.getWorkingDaysPerWeek())
+                .contractType(request.getContractType())
+                .finalPrice(calculatedTotal)
                 .paymentStatus(request.getPaymentStatus())
                 .description(request.getDescription())
                 .createdAt(LocalDateTime.now())
@@ -117,16 +120,16 @@ public class ContractServiceImpl implements ContractService {
             services.add(service);
         }
 
+        // Tự động tính lại tổng giá trị hợp đồng dựa trên các dịch vụ (bao gồm VAT)
+        java.math.BigDecimal calculatedTotal = calculateTotalFromServices(services);
+
         contract.setCustomer(customer);
         contract.setServices(services);
         contract.setStartDate(request.getStartDate());
         contract.setEndDate(request.getEndDate());
-        contract.setBasePrice(request.getBasePrice());
-        contract.setVat(request.getVat());
-        contract.setTotal(request.getTotal());
-        contract.setExtraCost(request.getExtraCost());
-        contract.setDiscountCost(request.getDiscountCost());
-        contract.setFinalPrice(request.getFinalPrice());
+        contract.setWorkingDaysPerWeek(request.getWorkingDaysPerWeek());
+        contract.setContractType(request.getContractType());
+        contract.setFinalPrice(calculatedTotal);
         contract.setPaymentStatus(request.getPaymentStatus());
         contract.setDescription(request.getDescription());
         contract.setUpdatedAt(LocalDateTime.now());
@@ -163,6 +166,10 @@ public class ContractServiceImpl implements ContractService {
                 .orElseThrow(() -> new AppException(ErrorCode.SERVICE_NOT_FOUND));
         
         contract.getServices().add(service);
+        
+        // Tự động tính lại tổng giá trị hợp đồng sau khi thêm dịch vụ
+        java.math.BigDecimal calculatedTotal = calculateTotalFromServices(contract.getServices());
+        contract.setFinalPrice(calculatedTotal);
         contract.setUpdatedAt(LocalDateTime.now());
         
         Contract updatedContract = contractRepository.save(contract);
@@ -178,6 +185,10 @@ public class ContractServiceImpl implements ContractService {
                 .orElseThrow(() -> new AppException(ErrorCode.SERVICE_NOT_FOUND));
         
         contract.getServices().remove(service);
+        
+        // Tự động tính lại tổng giá trị hợp đồng sau khi xóa dịch vụ
+        java.math.BigDecimal calculatedTotal = calculateTotalFromServices(contract.getServices());
+        contract.setFinalPrice(calculatedTotal);
         contract.setUpdatedAt(LocalDateTime.now());
         
         Contract updatedContract = contractRepository.save(contract);
@@ -191,6 +202,7 @@ public class ContractServiceImpl implements ContractService {
                         .title(service.getTitle())
                         .description(service.getDescription())
                         .price(service.getPrice())
+                        .vat(service.getVat())
                         .createdAt(service.getCreatedAt())
                         .updatedAt(service.getUpdatedAt())
                         .build())
@@ -203,16 +215,38 @@ public class ContractServiceImpl implements ContractService {
                 .services(services)
                 .startDate(contract.getStartDate())
                 .endDate(contract.getEndDate())
-                .basePrice(contract.getBasePrice())
-                .vat(contract.getVat())
-                .total(contract.getTotal())
-                .extraCost(contract.getExtraCost())
-                .discountCost(contract.getDiscountCost())
+                .workingDaysPerWeek(contract.getWorkingDaysPerWeek())
+                .contractType(contract.getContractType())
                 .finalPrice(contract.getFinalPrice())
                 .paymentStatus(contract.getPaymentStatus())
                 .description(contract.getDescription())
                 .createdAt(contract.getCreatedAt())
                 .updatedAt(contract.getUpdatedAt())
                 .build();
+    }
+
+    private java.math.BigDecimal calculateTotalFromServices(Set<ServiceEntity> services) {
+        return services.stream()
+                .map(service -> {
+                    java.math.BigDecimal price = service.getPrice() != null ? service.getPrice() : java.math.BigDecimal.ZERO;
+                    java.math.BigDecimal vat = service.getVat() != null ? service.getVat() : java.math.BigDecimal.ZERO;
+                    // Giá phải trả = Giá dịch vụ + (Giá dịch vụ × VAT / 100)
+                    java.math.BigDecimal vatAmount = price.multiply(vat).divide(new java.math.BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP);
+                    return price.add(vatAmount);
+                })
+                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+    }
+
+    @Override
+    public ContractResponse getContractByAssignmentId(Long assignmentId) {
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+        
+        Contract contract = assignment.getContract();
+        if (contract == null) {
+            throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
+        }
+        
+        return mapToResponse(contract);
     }
 }
