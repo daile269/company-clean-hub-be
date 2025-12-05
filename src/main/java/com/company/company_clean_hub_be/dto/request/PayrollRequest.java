@@ -20,4 +20,10 @@ public class PayrollRequest {
 
     @NotNull(message = "Năm không được để trống")
     private Integer year;
+
+    // Bảo hiểm (có thể null)
+    private java.math.BigDecimal insuranceAmount;
+
+    // Tiền ứng lương (có thể null)
+    private java.math.BigDecimal advanceSalary;
 }

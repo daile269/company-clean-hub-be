@@ -1,16 +1,17 @@
 package com.company.company_clean_hub_be.dto.response;
 
-import com.company.company_clean_hub_be.entity.AssignmentStatus;
-import com.company.company_clean_hub_be.entity.DayOfWeek;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+
+import com.company.company_clean_hub_be.entity.AssignmentStatus;
+import com.company.company_clean_hub_be.entity.DayOfWeek;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
@@ -29,6 +30,7 @@ public class AssignmentResponse {
     private AssignmentStatus status;
     private BigDecimal salaryAtTime;
     private Integer workDays;
+    private Integer plannedDays;
     private List<DayOfWeek> workingDaysPerWeek;
     private BigDecimal additionalAllowance;
     private String description;

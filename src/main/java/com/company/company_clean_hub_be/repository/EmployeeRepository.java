@@ -10,6 +10,8 @@ import org.springframework.data.repository.query.Param;
 
 import com.company.company_clean_hub_be.entity.Employee;
 
+import java.util.List;
+
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     
     boolean existsByEmployeeCode(String employeeCode);
@@ -41,5 +43,16 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     Page<Employee> findEmployeesNotAssignedToCustomer(
             @Param("customerId") Long customerId,
             Pageable pageable
+    );
+    @Query("""
+        SELECT DISTINCT e 
+        FROM Employee e
+        JOIN Assignment a ON e.id = a.employee.id
+        WHERE FUNCTION('MONTH', a.startDate) = :month
+          AND FUNCTION('YEAR', a.startDate) = :year
+    """)
+    List<Employee> findDistinctEmployeesByAssignmentMonthYear(
+            @Param("month") int month,
+            @Param("year") int year
     );
 }

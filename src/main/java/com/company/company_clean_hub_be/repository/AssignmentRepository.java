@@ -34,6 +34,17 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
             @Param("employeeId") Long employeeId,
             @Param("endDate") LocalDate endDate
     );
+
+    @Query(value = "SELECT * FROM assignments " +
+            "WHERE employee_id = :employeeId " +
+            "AND MONTH(start_date) = :month " +
+            "AND YEAR(start_date) = :year",
+            nativeQuery = true)
+    List<Assignment> findAssignmentsByEmployeeAndMonthAndYear(
+            @Param("employeeId") Long employeeId,
+            @Param("month") Integer month,
+            @Param("year") Integer year
+    );
     
     @Query("SELECT a FROM Assignment a " +
            "WHERE a.customer.id = :customerId " +

@@ -410,6 +410,18 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     @Override
+    public List<AssignmentResponse> getAssignmentsByEmployeeMonthYear(Long employeeId, Integer month, Integer year) {
+        // validate employee exists
+        employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+        List<Assignment> assignments = assignmentRepository.findAssignmentsByEmployeeAndMonthAndYear(employeeId, month,year);
+
+        return assignments.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> getEmployeesNotAssignedToCustomer(
             Long customerId, int page, int pageSize) {
         customerRepository.findById(customerId)
@@ -487,6 +499,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .status(assignment.getStatus())
                 .salaryAtTime(assignment.getSalaryAtTime())
                 .workDays(assignment.getWorkDays())
+                .plannedDays(assignment.getPlannedDays())
                 .workingDaysPerWeek(assignment.getWorkingDaysPerWeek())
                 .additionalAllowance(assignment.getAdditionalAllowance())
                 .description(assignment.getDescription())
