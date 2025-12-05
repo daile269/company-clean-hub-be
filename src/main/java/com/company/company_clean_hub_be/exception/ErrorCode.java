@@ -36,6 +36,10 @@ public enum ErrorCode {
     NO_ATTENDANCE_DATA(400,"Không tìm thấy dữ liệu chấm công cho nhân viên trong thời gian yêu cầu"),
     NO_ASSIGNMENT_DATA(400,"Không tìm thấy dữ liệu phân công cho nhân viên trong thời gian yêu cầu"),
     ASSIGNMENT_START_DATE_BEFORE_CONTRACT(400,"Ngày bắt đầu phân công không được trước ngày bắt đầu hợp đồng"),
+    
+    INVOICE_NOT_FOUND(404,"Hóa đơn không tồn tại"),
+    INVOICE_ALREADY_EXISTS(400,"Hóa đơn tháng này cho hợp đồng đã tồn tại"),
+    INVALID_ACTUAL_WORKING_DAYS(400,"Số ngày làm thực tế không hợp lệ"),
 
     INVALID_TOKEN(401,"Token không hợp lệ"),
     TOKEN_EXPIRED(401,"Token đã hết hạn, vui lòng đăng nhập lại"),
