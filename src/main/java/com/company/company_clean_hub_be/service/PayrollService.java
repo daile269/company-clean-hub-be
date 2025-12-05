@@ -4,12 +4,15 @@ import java.util.List;
 
 import com.company.company_clean_hub_be.dto.request.PayrollRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.PayRollExportExcel;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
 
 import jakarta.validation.Valid;
 
 public interface PayrollService {
-//    PayrollResponse calculatePayroll(PayrollRequest request);
+    List<PayRollExportExcel> getAllPayRoll(Integer month, Integer year);
+
+    //    PayrollResponse calculatePayroll(PayrollRequest request);
     PayrollResponse getPayrollById(Long id);
     List<PayrollResponse> getAllPayrolls();
     PageResponse<PayrollResponse> getPayrollsWithFilter(String keyword, Integer month, Integer year, Boolean isPaid, int page, int pageSize);

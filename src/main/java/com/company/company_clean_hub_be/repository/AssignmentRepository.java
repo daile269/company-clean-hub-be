@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.repository;
 
+import com.company.company_clean_hub_be.entity.AssignmentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -34,6 +35,17 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     List<Assignment> findActiveAssignmentsByEmployee(
             @Param("employeeId") Long employeeId,
             @Param("endDate") LocalDate endDate
+    );
+
+    @Query(value = "SELECT * FROM assignments " +
+            "WHERE employee_id = :employeeId " +
+            "AND MONTH(start_date) = :month " +
+            "AND YEAR(start_date) = :year",
+            nativeQuery = true)
+    List<Assignment> findAssignmentsByEmployeeAndMonthAndYear(
+            @Param("employeeId") Long employeeId,
+            @Param("month") Integer month,
+            @Param("year") Integer year
     );
     
     @Query("SELECT a FROM Assignment a " +
@@ -75,11 +87,13 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
             "JOIN a.attendances att " +
             "WHERE a.employee.id = :employeeId " +
             "AND FUNCTION('MONTH', att.date) = :month " +
+            "AND (:status IS NULL OR a.status = :status)"+
             "AND FUNCTION('YEAR', att.date) = :year")
     List<Assignment> findDistinctAssignmentsByAttendanceMonthAndEmployee(
             @Param("month") Integer month,
             @Param("year") Integer year,
-            @Param("employeeId") Long employeeId);
+            @Param("employeeId") Long employeeId,
+            @Param("status") AssignmentStatus status);
 
        @Query("SELECT a FROM Assignment a " +
               "WHERE a.assignmentType = 'TEMPORARY' " +

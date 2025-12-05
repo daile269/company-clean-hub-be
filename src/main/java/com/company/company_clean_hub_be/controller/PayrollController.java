@@ -2,7 +2,14 @@ package com.company.company_clean_hub_be.controller;
 
 import java.util.List;
 
+import com.company.company_clean_hub_be.dto.response.PayRollExportExcel;
+import com.company.company_clean_hub_be.service.ExcelExportService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,12 +33,16 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping(value = "/api/payrolls")
+@Slf4j
 public class PayrollController {
     private final PayrollService payrollService;
-
+    private final ExcelExportService excelExportService;
     @PostMapping("/calculate")
     public ApiResponse<PayrollResponse> calculatePayroll(@Valid @RequestBody PayrollRequest request) {
         PayrollResponse payroll = payrollService.calculatePayroll(request);
+        if (payroll == null){
+            return ApiResponse.success("Nhân viên không có công làm trong thời gian này ", null, HttpStatus.CREATED.value());
+        }
         return ApiResponse.success("Tính lương thành công", payroll, HttpStatus.CREATED.value());
     }
 
@@ -81,4 +92,35 @@ public class PayrollController {
         payrollService.deletePayroll(id);
         return ApiResponse.success("Xóa bảng lương thành công", null, HttpStatus.OK.value());
     }
+    @GetMapping("export/excel/{month}/{year}")
+    public ResponseEntity<ByteArrayResource> exportPayroll(
+            @PathVariable Integer month,
+            @PathVariable Integer year) {
+
+        log.info("🔵 [EXPORT PAYROLL] Request nhận được: month={}, year={}", month, year);
+
+        List<PayRollExportExcel> payRollExportExcels = payrollService.getAllPayRoll(month, year);
+        log.info("🟢 [EXPORT PAYROLL] Số lượng dòng payroll lấy được: {}",
+                payRollExportExcels != null ? payRollExportExcels.size() : 0);
+
+        ByteArrayResource excelFile = excelExportService.exportUsersToExcel(payRollExportExcels, month, year);
+
+        if (excelFile == null) {
+            log.warn("⚠️ [EXPORT PAYROLL] excelFile = null → Không tạo được file Excel!");
+        } else {
+            log.info("🟩 [EXPORT PAYROLL] File Excel đã tạo. Kích thước: {} bytes",
+                    excelFile.contentLength());
+        }
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=payroll_" + month + "_" + year + ".xlsx")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .contentLength(excelFile.contentLength())
+                .body(excelFile);
+    }
+
+
+
 }

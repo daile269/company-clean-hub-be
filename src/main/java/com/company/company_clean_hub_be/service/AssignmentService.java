@@ -20,9 +20,12 @@ public interface AssignmentService {
     TemporaryAssignmentResponse temporaryReassignment(TemporaryReassignmentRequest request);
     List<AssignmentResponse> getEmployeesByCustomer(Long customerId);
     List<AssignmentResponse> getAllEmployeesByCustomer(Long customerId);
-        List<com.company.company_clean_hub_be.dto.response.CustomerResponse> getCustomersByEmployee(Long employeeId);
+    List<com.company.company_clean_hub_be.dto.response.CustomerResponse> getCustomersByEmployee(Long employeeId);
+
+    List<AssignmentResponse> getAssignmentsByEmployeeMonthYear(Long employeeId, Integer month, Integer year);
+
     PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> getEmployeesNotAssignedToCustomer(Long customerId, int page, int pageSize);
-        List<AssignmentResponse> getAssignmentsByEmployee(Long employeeId);
+    List<AssignmentResponse> getAssignmentsByEmployee(Long employeeId);
     
     // Lịch sử điều động
     List<AssignmentHistoryResponse> getReassignmentHistory(Long employeeId);

@@ -22,7 +22,7 @@ public class PayrollResponse {
     private Integer month;
     private Integer year;
     private Integer totalDays;
-    
+    private BigDecimal salaryBase;
     private BigDecimal bonusTotal;
     private BigDecimal penaltyTotal;
     private BigDecimal advanceTotal;
