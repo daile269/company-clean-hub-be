@@ -40,6 +40,7 @@ public enum ErrorCode {
     INVOICE_NOT_FOUND(404,"Hóa đơn không tồn tại"),
     INVOICE_ALREADY_EXISTS(400,"Hóa đơn tháng này cho hợp đồng đã tồn tại"),
     INVALID_ACTUAL_WORKING_DAYS(400,"Số ngày làm thực tế không hợp lệ"),
+    INVOICE_DATE_BEFORE_CONTRACT_START(400,"Ngày xuất hóa đơn phải sau hoặc bằng ngày bắt đầu hợp đồng"),
 
     INVALID_TOKEN(401,"Token không hợp lệ"),
     TOKEN_EXPIRED(401,"Token đã hết hạn, vui lòng đăng nhập lại"),

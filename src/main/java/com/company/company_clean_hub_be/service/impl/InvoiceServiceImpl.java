@@ -52,6 +52,9 @@ public class InvoiceServiceImpl implements InvoiceService {
         Contract contract = contractRepository.findById(request.getContractId())
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
+        // Kiểm tra ngày xuất hóa đơn phải >= ngày bắt đầu hợp đồng
+        validateInvoiceDate(contract, request.getInvoiceMonth(), request.getInvoiceYear());
+
         // Lấy thông tin user đang đăng nhập
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User createdBy = userRepository.findByUsername(username)
@@ -344,5 +347,23 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .paidAt(invoice.getPaidAt())
                 .createdByUsername(invoice.getCreatedBy() != null ? invoice.getCreatedBy().getUsername() : null)
                 .build();
+    }
+
+    private void validateInvoiceDate(Contract contract, Integer invoiceMonth, Integer invoiceYear) {
+        // Tạo ngày đầu tháng của invoice (ví dụ: 2025-12-01)
+        java.time.LocalDate invoiceDate = java.time.LocalDate.of(invoiceYear, invoiceMonth, 1);
+        
+        // Ngày bắt đầu hợp đồng
+        java.time.LocalDate contractStartDate = contract.getStartDate();
+        
+        // Kiểm tra: ngày xuất hóa đơn phải >= ngày bắt đầu hợp đồng
+        if (invoiceDate.isBefore(contractStartDate)) {
+            log.error("Invoice date {}-{} is before contract start date {}", 
+                    invoiceYear, invoiceMonth, contractStartDate);
+            throw new AppException(ErrorCode.INVOICE_DATE_BEFORE_CONTRACT_START);
+        }
+        
+        log.info("Invoice date validation passed: {}-{} >= contract start {}", 
+                invoiceYear, invoiceMonth, contractStartDate);
     }
 }
