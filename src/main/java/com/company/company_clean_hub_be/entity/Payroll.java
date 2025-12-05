@@ -64,6 +64,13 @@ public class Payroll {
     private LocalDateTime paymentDate;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "employee_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
+    private Employee employee;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "accountant_id")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude

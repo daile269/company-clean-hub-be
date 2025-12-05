@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import com.company.company_clean_hub_be.dto.request.PayrollRequest;
@@ -48,16 +49,17 @@ public class PayrollServiceImpl implements PayrollService {
         log.info("Request: employeeId={}, month={}, year={}",
                 request.getEmployeeId(), request.getMonth(), request.getYear());
 
+        // Load employee
+        Employee employee = employeeRepository.findById(request.getEmployeeId())
+                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
         // Kiểm tra bảng lương đã tồn tại
-        payrollRepository.findByEmployeeAndMonthAndYear(
-                request.getEmployeeId(),
-                request.getMonth(),
-                request.getYear()
-        ).ifPresent(p -> {
+        Optional<Payroll> payrollCheck = payrollRepository.findByEmployeeAndMonthAndYear(request.getEmployeeId(),  request.getMonth(),  request.getYear() );
+        if (payrollCheck.isPresent()) {
             log.error("Payroll already exists for employeeId={} month={} year={}",
                     request.getEmployeeId(), request.getMonth(), request.getYear());
             throw new AppException(ErrorCode.PAYROLL_ALREADY_EXISTS);
-        });
+        }
 
         BigDecimal amountTotal = BigDecimal.ZERO;
         BigDecimal totalBonus = BigDecimal.ZERO;
@@ -69,7 +71,7 @@ public class PayrollServiceImpl implements PayrollService {
 
         List<Assignment> assignments = assignmentRepository
                 .findDistinctAssignmentsByAttendanceMonthAndEmployee(
-                        request.getMonth(), request.getYear(), request.getEmployeeId());
+                        request.getMonth(), request.getYear(), request.getEmployeeId(),null);
         log.info("Assignments found: {}", assignments.size());
 
         // Validate: Check if there are any assignments for this employee in the requested period
@@ -92,7 +94,9 @@ public class PayrollServiceImpl implements PayrollService {
             log.info("Processing Assignment id={}, type={}, salary={}, workDays={}",
                     assignment.getId(), assignment.getAssignmentType(),
                     assignment.getSalaryAtTime(), assignment.getWorkDays());
-
+            if (assignment.getStatus().equals(AssignmentStatus.IN_PROGRESS)){
+                continue;
+            }
             // Tính lương theo loại assignment
             if (assignment.getAssignmentType() == AssignmentType.FIXED_BY_CONTRACT) {
                 if (assignment.getPlannedDays() != null && assignment.getPlannedDays() > 0) {
@@ -152,6 +156,7 @@ public class PayrollServiceImpl implements PayrollService {
                 });
 
         Payroll payroll = Payroll.builder()
+                .employee(employee)
                 .totalDays(totalDays)
                 .bonusTotal(totalBonus)
                 .penaltyTotal(totalPenalties)
@@ -168,16 +173,15 @@ public class PayrollServiceImpl implements PayrollService {
 
         Payroll savedPayroll = payrollRepository.save(payroll);
         log.info("Payroll saved with id={}", savedPayroll.getId());
-
-        // Cập nhật payroll cho attendance
-        List<Attendance> attendances = attendanceRepository.findAttendancesByMonthYearAndEmployee(
-                request.getMonth(), request.getYear(), request.getEmployeeId());
-        log.info("Attendances found for payroll: {}", attendances.size());
-        if (attendances != null && !attendances.isEmpty()) {
-            for (Attendance a : attendances) {
+        log.info("Attendances found for payroll: {}", attendancesValidation.size());
+        if (attendancesValidation != null && !attendancesValidation.isEmpty() ) {
+            for (Attendance a : attendancesValidation) {
+                if (a.getAssignment().getStatus().equals(AssignmentStatus.IN_PROGRESS)){
+                    continue;
+                }
                 a.setPayroll(savedPayroll);
             }
-            attendanceRepository.saveAll(attendances);
+            attendanceRepository.saveAll(attendancesValidation);
             log.info("Updated payroll for all attendances");
         }
 
@@ -208,7 +212,7 @@ public class PayrollServiceImpl implements PayrollService {
                     employeeId, employee.getName());
 
             List<Assignment> assignments = assignmentRepository
-                    .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId);
+                    .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId,AssignmentStatus.COMPLETED);
             log.info("[PAYROLL-EXPORT] Employee {} has {} assignments",
                     employeeId, assignments != null ? assignments.size() : null);
 
@@ -224,7 +228,7 @@ public class PayrollServiceImpl implements PayrollService {
             }
 
             List<String> projectCompanies = assignments.stream()
-                    .map(a -> a.getCustomer() != null ? a.getCustomer().getCompany() : null)
+                    .map(a -> a.getContract().getCustomer() != null ?  a.getContract().getCustomer().getCompany() : null)
                     .filter(Objects::nonNull)
                     .distinct()
                     .collect(Collectors.toList());
@@ -444,35 +448,11 @@ public class PayrollServiceImpl implements PayrollService {
         log.info("[PAYROLL-DEBUG] Payroll createdAt={}, month={}, year={}",
                 createdAt, month, year);
 
-        // derive employeeId
+        // Get employeeId directly from payroll.employee (new architecture)
         Long employeeId = null;
-        log.info("[PAYROLL-DEBUG] payroll.getAttendances(): size={}",
-                payroll.getAttendances() != null ? payroll.getAttendances().size() : null);
-
-        if (payroll.getAttendances() != null && !payroll.getAttendances().isEmpty()) {
-            Attendance any = payroll.getAttendances().get(0);
-            log.info("[PAYROLL-DEBUG] Pulled employee from payroll-attendance: {}", any);
-
-            if (any != null && any.getAssignment() != null && any.getAssignment().getEmployee() != null) {
-                employeeId = any.getAssignment().getEmployee().getId();
-            }
-        }
-
-        if (employeeId == null) {
-            log.info("[PAYROLL-DEBUG] employeeId not found. Trying attendanceRepository.findByPayrollId...");
-            List<Attendance> byPayroll = attendanceRepository.findByPayrollId(payroll.getId());
-
-            log.info("[PAYROLL-DEBUG] findByPayrollId result size={}",
-                    byPayroll != null ? byPayroll.size() : null);
-
-            if (byPayroll != null && !byPayroll.isEmpty()) {
-                Attendance any = byPayroll.get(0);
-                log.info("[PAYROLL-DEBUG] Pulled employee from attendanceRepository result: {}", any);
-
-                if (any.getAssignment() != null && any.getAssignment().getEmployee() != null) {
-                    employeeId = any.getAssignment().getEmployee().getId();
-                }
-            }
+        if (payroll.getEmployee() != null) {
+            employeeId = payroll.getEmployee().getId();
+            log.info("[PAYROLL-DEBUG] Employee ID from payroll.employee: {}", employeeId);
         }
 
         log.info("[PAYROLL-DEBUG] RESOLVED employeeId={}", employeeId);
@@ -492,7 +472,7 @@ public class PayrollServiceImpl implements PayrollService {
                 month, year, employeeId);
 
         List<Assignment> assignments =
-                assignmentRepository.findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId);
+                assignmentRepository.findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId,AssignmentStatus.COMPLETED);
 
         log.info("[PAYROLL-DEBUG] Total assignments found={}", assignments.size());
 
@@ -631,83 +611,26 @@ public class PayrollServiceImpl implements PayrollService {
         String employeeName = null;
         String employeeCode = null;
         BigDecimal salaryBase = BigDecimal.ZERO;
-        // (1) Kiểm tra attendances trong payroll
-        log.info("Step 1: Check payroll.getAttendances() ...");
-        if (payroll.getAttendances() != null && !payroll.getAttendances().isEmpty()) {
-            Attendance any = payroll.getAttendances().get(0);
-            log.info("Payroll attendances count: {}", payroll.getAttendances().size());
 
-            if (any != null && any.getAssignment() != null && any.getAssignment().getEmployee() != null) {
-                Employee emp = any.getAssignment().getEmployee();
-                employeeId = emp.getId();
-                employeeName = emp.getName();
-                employeeCode = emp.getEmployeeCode();
-                salaryBase = salaryBase.add(any.getAssignment().getSalaryAtTime());
-                log.info("Employee found from payroll attendances: id={}, name={}, code={}",
-                        employeeId, employeeName, employeeCode);
-            } else {
-                log.info("Payroll attendance exists nhưng không có assignment -> employee.");
+        // Get employee directly from payroll (new architecture)
+        log.info("Step 1: Check payroll.getEmployee() ...");
+        if (payroll.getEmployee() != null) {
+            Employee emp = payroll.getEmployee();
+            employeeId = emp.getId();
+            employeeName = emp.getName();
+            employeeCode = emp.getEmployeeCode();
+            log.info("Employee found from payroll.employee: id={}, name={}, code={}",
+                    employeeId, employeeName, employeeCode);
+
+            // Get salary base from first assignment if available
+            List<Assignment> assignments = assignmentRepository
+                    .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId, null);
+            if (!assignments.isEmpty()) {
+                salaryBase = assignments.get(0).getSalaryAtTime();
+                log.info("Salary base from assignment: {}", salaryBase);
             }
         } else {
-            log.info("Payroll attendances rỗng hoặc null.");
-        }
-
-        // (2) Nếu chưa tìm được → thử tìm bằng attendanceRepository.findByPayrollId
-        log.info("Step 2: Check attendanceRepository.findByPayrollId ...");
-        if (employeeId == null && payroll.getId() != null) {
-            List<Attendance> byPayroll = attendanceRepository.findByPayrollId(payroll.getId());
-            log.info("Attendances by payrollId {}: {}", payroll.getId(),
-                    byPayroll != null ? byPayroll.size() : null);
-
-            if (byPayroll != null && !byPayroll.isEmpty()) {
-                Attendance any = byPayroll.get(0);
-                if (any.getAssignment() != null && any.getAssignment().getEmployee() != null) {
-                    Employee emp = any.getAssignment().getEmployee();
-                    employeeId = emp.getId();
-                    employeeName = emp.getName();
-                    employeeCode = emp.getEmployeeCode();
-                    salaryBase = salaryBase.add(any.getAssignment().getSalaryAtTime());
-                    log.info("Employee found from findByPayrollId: id={}, name={}, code={}",
-                            employeeId, employeeName, employeeCode);
-                } else {
-                    log.info("Attendance found nhưng không có assignment -> employee.");
-                }
-            } else {
-                log.info("Không tìm thấy attendances bằng payrollId.");
-            }
-        }
-
-        // (3) Thử tìm bằng fallback employee + month/year
-
-        log.info("Step 3: Check fallbackEmployeeId attendances for month/year ...");
-        if (employeeId == null && fallbackEmployeeId != null) {
-            log.info("Query attendances by month={}, year={}, fallbackEmployeeId={}",
-                    month, year, fallbackEmployeeId);
-
-            List<Attendance> monthAttendances =
-                    attendanceRepository.findAttendancesByMonthYearAndEmployee(month, year, fallbackEmployeeId);
-
-            log.info("Attendances found for fallback: {}", monthAttendances != null ? monthAttendances.size() : null);
-
-            if (monthAttendances != null && !monthAttendances.isEmpty()) {
-                Attendance any = monthAttendances.get(0);
-                if (any.getAssignment() != null && any.getAssignment().getEmployee() != null) {
-                    Employee emp = any.getAssignment().getEmployee();
-                    employeeId = emp.getId();
-                    employeeName = emp.getName();
-                    employeeCode = emp.getEmployeeCode();
-
-                    salaryBase = salaryBase.add(any.getAssignment().getSalaryAtTime());
-                    log.info("Employee found from fallback: id={}, name={}, code={}", employeeId, employeeName, employeeCode);
-                    log.info("Salary base from fallback attendance: {}", salaryBase);
-                } else {
-                    log.info("Fallback attendance found nhưng thiếu assignment->employee.");
-                }
-            }
-        }
-
-        if (employeeId == null) {
-            log.info("WARNING: Không thể tìm employee bằng bất kỳ phương pháp nào!");
+            log.info("WARNING: payroll.getEmployee() is null!");
         }
 
         log.info("Building PayrollResponse ...");

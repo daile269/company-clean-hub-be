@@ -12,10 +12,8 @@ import com.company.company_clean_hub_be.entity.Payroll;
 
 public interface PayrollRepository extends JpaRepository<Payroll, Long> {
     
-    @Query("SELECT DISTINCT p FROM Payroll p " +
-            "JOIN p.attendances a " +
-            "JOIN a.assignment asn " +
-            "WHERE asn.employee.id = :employeeId " +
+    @Query("SELECT p FROM Payroll p " +
+            "WHERE p.employee.id = :employeeId " +
             "AND MONTH(p.createdAt) = :month AND YEAR(p.createdAt) = :year")
     Optional<Payroll> findByEmployeeAndMonthAndYear(
             @Param("employeeId") Long employeeId,
@@ -23,10 +21,8 @@ public interface PayrollRepository extends JpaRepository<Payroll, Long> {
             @Param("year") Integer year
     );
     
-    @Query("SELECT DISTINCT p FROM Payroll p " +
-            "LEFT JOIN p.attendances a " +
-            "LEFT JOIN a.assignment asn " +
-            "LEFT JOIN asn.employee e " +
+    @Query("SELECT p FROM Payroll p " +
+            "LEFT JOIN p.employee e " +
             "WHERE (:keyword IS NULL OR :keyword = '' OR " +
             "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
