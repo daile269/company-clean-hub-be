@@ -433,6 +433,36 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     @Override
+    public PageResponse<AssignmentResponse> getAllEmployeesByCustomerWithFilters(
+            Long customerId, 
+            ContractType contractType,
+            AssignmentStatus status,
+            Integer month,
+            Integer year,
+            int page, 
+            int pageSize) {
+        
+        customerRepository.findById(customerId)
+                .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
+        Pageable pageable = PageRequest.of(page-1, pageSize, Sort.by("startDate").descending());
+        Page<Assignment> assignmentPage = assignmentRepository.findAllAssignmentsByCustomerWithFilters(
+                customerId, contractType, status, month, year, pageable);
+
+        List<AssignmentResponse> items = assignmentPage.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+        return PageResponse.<AssignmentResponse>builder()
+                .content(items)
+                .page(assignmentPage.getNumber())
+                .pageSize(assignmentPage.getSize())
+                .totalElements(assignmentPage.getTotalElements())
+                .totalPages(assignmentPage.getTotalPages())
+                .first(assignmentPage.isFirst())
+                .last(assignmentPage.isLast())
+                .build();
+    }
+
+    @Override
     public List<com.company.company_clean_hub_be.dto.response.CustomerResponse> getCustomersByEmployee(Long employeeId) {
         employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
@@ -485,12 +515,21 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     public PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> getEmployeesNotAssignedToCustomer(
-            Long customerId, int page, int pageSize) {
+            Long customerId, Integer month, Integer year, int page, int pageSize) {
         customerRepository.findById(customerId)
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
-        Page<Employee> employeePage = employeeRepository.findEmployeesNotAssignedToCustomer(customerId, pageable);
+        Page<Employee> employeePage;
+        
+        if (month != null && year != null) {
+            // Lọc theo tháng năm
+            employeePage = employeeRepository.findEmployeesNotAssignedToCustomerByMonth(
+                    customerId, month, year, pageable);
+        } else {
+            // Không lọc tháng năm (chỉ lấy chưa có assignment IN_PROGRESS)
+            employeePage = employeeRepository.findEmployeesNotAssignedToCustomer(customerId, pageable);
+        }
 
         List<com.company.company_clean_hub_be.dto.response.EmployeeResponse> items = employeePage.getContent().stream()
                 .map(this::mapEmployeeToResponse)

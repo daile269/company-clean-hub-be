@@ -89,8 +89,16 @@ public class AssignmentController {
     }
 
     @GetMapping("/customer/{customerId}/all")
-    public ApiResponse<List<AssignmentResponse>> getAllEmployeesByCustomer(@PathVariable Long customerId) {
-        List<AssignmentResponse> assignments = assignmentService.getAllEmployeesByCustomer(customerId);
+    public ApiResponse<PageResponse<AssignmentResponse>> getAllEmployeesByCustomer(
+            @PathVariable Long customerId,
+            @RequestParam(required = false) com.company.company_clean_hub_be.entity.ContractType contractType,
+            @RequestParam(required = false) com.company.company_clean_hub_be.entity.AssignmentStatus status,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<AssignmentResponse> assignments = assignmentService.getAllEmployeesByCustomerWithFilters(
+                customerId, contractType, status, month, year, page, pageSize);
         return ApiResponse.success(
                 "Lấy tất cả danh sách nhân viên phụ trách khách hàng thành công", 
                 assignments, 
@@ -134,10 +142,12 @@ public class AssignmentController {
     @GetMapping("/customer/{customerId}/not-assigned")
     public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse>> getEmployeesNotAssignedToCustomer(
             @PathVariable Long customerId,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> employees = 
-                assignmentService.getEmployeesNotAssignedToCustomer(customerId, page, pageSize);
+                assignmentService.getEmployeesNotAssignedToCustomer(customerId, month, year, page, pageSize);
         return ApiResponse.success(
                 "Lấy danh sách nhân viên chưa phân công thành công", 
                 employees, 
@@ -160,6 +170,16 @@ public class AssignmentController {
         assignmentScheduler.executeUpdateExpiredFixedAssignments();
         return ApiResponse.success(
                 "Đã chạy job cập nhật phân công cố định, kiểm tra console log để xem kết quả", 
+                "OK", 
+                HttpStatus.OK.value()
+        );
+    }
+
+    @PostMapping("/generate-monthly-attendances")
+    public ApiResponse<String> testGenerateMonthlyAttendances() {
+        assignmentScheduler.executeGenerateMonthlyAttendances();
+        return ApiResponse.success(
+                "Đã chạy job sinh chấm công tháng mới, kiểm tra console log để xem kết quả", 
                 "OK", 
                 HttpStatus.OK.value()
         );

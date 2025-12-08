@@ -47,6 +47,19 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
             @Param("customerId") Long customerId,
             Pageable pageable
     );
+    
+    @Query("SELECT e FROM Employee e " +
+            "WHERE e.id NOT IN (" +
+            "SELECT a.employee.id FROM Assignment a " +
+            "WHERE a.contract.customer.id = :customerId " +
+            "AND (:month IS NULL OR MONTH(a.startDate) = :month) " +
+            "AND (:year IS NULL OR YEAR(a.startDate) = :year))")
+    Page<Employee> findEmployeesNotAssignedToCustomerByMonth(
+            @Param("customerId") Long customerId,
+            @Param("month") Integer month,
+            @Param("year") Integer year,
+            Pageable pageable
+    );
     @Query("""
         SELECT DISTINCT e 
         FROM Employee e

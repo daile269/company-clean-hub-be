@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     
@@ -60,6 +61,22 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     List<Assignment> findAllAssignmentsByCustomer(@Param("customerId") Long customerId);
     
     @Query("SELECT a FROM Assignment a " +
+           "WHERE a.contract.customer.id = :customerId " +
+           "AND (:contractType IS NULL OR a.contract.contractType = :contractType) " +
+           "AND (:status IS NULL OR a.status = :status) " +
+           "AND (:month IS NULL OR MONTH(a.startDate) = :month) " +
+           "AND (:year IS NULL OR YEAR(a.startDate) = :year) " +
+           "ORDER BY a.startDate DESC")
+    Page<Assignment> findAllAssignmentsByCustomerWithFilters(
+            @Param("customerId") Long customerId,
+            @Param("contractType") com.company.company_clean_hub_be.entity.ContractType contractType,
+            @Param("status") AssignmentStatus status,
+            @Param("month") Integer month,
+            @Param("year") Integer year,
+            Pageable pageable
+    );
+    
+    @Query("SELECT a FROM Assignment a " +
            "WHERE a.employee.id = :employeeId " +
            "AND a.contract.id = :contractId " +
            "AND a.status = 'IN_PROGRESS'")
@@ -100,6 +117,18 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
               "AND a.status = 'IN_PROGRESS' " +
               "AND a.startDate <= :date")
        List<Assignment> findExpiredTemporaryAssignments(@Param("date") LocalDate date);
+       
+       @Query("SELECT a FROM Assignment a " +
+              "WHERE a.employee.id = :employeeId " +
+              "AND a.contract.id = :contractId " +
+              "AND YEAR(a.startDate) = :year " +
+              "AND MONTH(a.startDate) = :month")
+       Optional<Assignment> findByEmployeeAndContractAndMonth(
+               @Param("employeeId") Long employeeId,
+               @Param("contractId") Long contractId,
+               @Param("year") int year,
+               @Param("month") int month
+       );
        
        @Query("SELECT a FROM Assignment a " +
               "WHERE (a.assignmentType = 'FIXED_BY_CONTRACT' OR a.assignmentType = 'FIXED_BY_DAY') " +
