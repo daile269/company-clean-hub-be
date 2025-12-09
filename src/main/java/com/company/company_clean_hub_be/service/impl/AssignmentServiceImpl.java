@@ -359,8 +359,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                     .createdBy(currentUser)
                     .build();
             
-                        assignmentHistoryRepository.save(history);
-                        log.info("Saved assignment history id={} by user={}", history.getId(), username);
+            assignmentHistoryRepository.save(history);
+            log.info("Saved assignment history id={} by user={}", history.getId(), username);
         }
 
         // Tính công trong tháng (lấy tháng của ngày đầu tiên)
@@ -499,11 +499,37 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
         // Use existing repository method to find active assignments up to today
-        List<Assignment> assignments = assignmentRepository.findActiveAssignmentsByEmployee(employeeId, java.time.LocalDate.now());
+        List<Assignment> assignments = assignmentRepository.findByEmployeeId(employeeId);
 
         return assignments.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResponse<AssignmentResponse> getAssignmentsByEmployeeWithFilters(Long employeeId, Long customerId, Integer month, Integer year, int page, int pageSize) {
+        // validate employee exists
+        employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("startDate").descending());
+        Page<Assignment> assignmentPage = assignmentRepository.findAssignmentsByEmployeeWithFilters(
+                employeeId, customerId, month, year, pageable
+        );
+
+        List<AssignmentResponse> items = assignmentPage.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        return PageResponse.<AssignmentResponse>builder()
+                .content(items)
+                .page(assignmentPage.getNumber())
+                .pageSize(assignmentPage.getSize())
+                .totalElements(assignmentPage.getTotalElements())
+                .totalPages(assignmentPage.getTotalPages())
+                .first(assignmentPage.isFirst())
+                .last(assignmentPage.isLast())
+                .build();
     }
 
     @Override
