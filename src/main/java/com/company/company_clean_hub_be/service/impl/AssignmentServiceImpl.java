@@ -122,10 +122,71 @@ public class AssignmentServiceImpl implements AssignmentService {
             contract.getWorkingDaysPerWeek() != null &&
             !contract.getWorkingDaysPerWeek().isEmpty()) {
             
-            autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+            // Nếu startDate trong quá khứ, tạo assignment và attendance cho các tháng từ startDate đến hiện tại
+            LocalDate today = LocalDate.now();
+            YearMonth startMonth = YearMonth.from(request.getStartDate());
+            YearMonth currentMonth = YearMonth.from(today);
+            
+            if (startMonth.isBefore(currentMonth)) {
+                log.info("StartDate {} is in the past. Creating assignments and attendances from {} to {}",
+                        request.getStartDate(), startMonth, currentMonth);
+                
+                // Tạo attendance cho tháng đầu tiên (savedAssignment đã được tạo ở trên)
+                autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+                
+                // Tạo assignment và attendance cho các tháng tiếp theo (từ tháng sau startMonth đến currentMonth)
+                YearMonth nextMonth = startMonth.plusMonths(1);
+                while (!nextMonth.isAfter(currentMonth)) {
+                    LocalDate monthStartDate = nextMonth.atDay(1);
+                    
+                    // Kiểm tra đã có assignment cho tháng này chưa
+                    Optional<Assignment> existingMonthAssignment = assignmentRepository
+                            .findByEmployeeAndContractAndMonth(
+                                    request.getEmployeeId(),
+                                    request.getContractId(),
+                                    nextMonth.getYear(),
+                                    nextMonth.getMonthValue()
+                            );
+                    
+                    if (existingMonthAssignment.isEmpty()) {
+                        // Tạo assignment mới cho tháng này
+                        Assignment monthlyAssignment = Assignment.builder()
+                                .employee(employee)
+                                .contract(contract)
+                                .startDate(monthStartDate)
+                                .status(request.getStatus())
+                                .salaryAtTime(request.getSalaryAtTime())
+                                .workingDaysPerWeek(contract.getWorkingDaysPerWeek() != null 
+                                    ? new ArrayList<>(contract.getWorkingDaysPerWeek()) 
+                                    : null)
+                                .additionalAllowance(request.getAdditionalAllowance())
+                                .description(request.getDescription())
+                                .assignmentType(AssignmentType.valueOf(request.getAssignmentType()))
+                                .createdAt(LocalDateTime.now())
+                                .updatedAt(LocalDateTime.now())
+                                .build();
+                        
+                        Assignment savedMonthlyAssignment = assignmentRepository.save(monthlyAssignment);
+                        log.info("Created monthly assignment for {}/{}: assignmentId={}",
+                                nextMonth.getMonthValue(), nextMonth.getYear(), savedMonthlyAssignment.getId());
+                        
+                        // Tạo attendance cho tháng này
+                        autoGenerateAttendancesForAssignment(savedMonthlyAssignment, monthStartDate);
+                    } else {
+                        log.info("Assignment already exists for employee={}, contract={}, month={}/{}",
+                                request.getEmployeeId(), request.getContractId(),
+                                nextMonth.getMonthValue(), nextMonth.getYear());
+                    }
+                    
+                    nextMonth = nextMonth.plusMonths(1);
+                }
+            } else {
+                // StartDate là tháng hiện tại hoặc tương lai - chỉ tạo cho tháng đó
+                autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+            }
         }
-                log.info("createAssignment completed by {}: assignmentId={} (employee={}, contract={})",
-                                username, savedAssignment.getId(), savedAssignment.getEmployee().getId(), savedAssignment.getContract().getId());
+        log.info("createAssignment completed by {}: assignmentId={} (employee={}, contract={})",
+                username, savedAssignment.getId(), savedAssignment.getEmployee().getId(), savedAssignment.getContract().getId());
 
         return mapToResponse(savedAssignment);
     }
@@ -645,7 +706,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     /**
      * Tự động tạo chấm công cho assignment dựa vào workingDaysPerWeek
      * - Nếu hợp đồng ONE_TIME: chỉ tạo 1 attendance ngày đầu tiên
-     * - Nếu hợp đồng khác: tạo từ startDate đến cuối tháng hiện tại
+     * - Nếu hợp đồng khác: tạo từ startDate đến cuối tháng của startDate (hoặc cuối tháng hiện tại nếu là tháng hiện tại)
      */
     private void autoGenerateAttendancesForAssignment(Assignment assignment, LocalDate startDate) {
         if (assignment.getWorkingDaysPerWeek() == null || assignment.getWorkingDaysPerWeek().isEmpty()) {
@@ -683,16 +744,21 @@ public class AssignmentServiceImpl implements AssignmentService {
             }
         } else {
             // Hợp đồng MONTHLY_FIXED hoặc MONTHLY_ACTUAL: tạo theo workingDaysPerWeek
-            // Tính ngày cuối tháng
             YearMonth yearMonth = YearMonth.from(startDate);
+            
+            // Tính ngày kết thúc: lấy min của (cuối tháng, ngày kết thúc hợp đồng nếu có)
             LocalDate endDate = yearMonth.atEndOfMonth();
+            System.out.println("EndDate " + contract.getEndDate());
+            if (contract.getEndDate() != null && contract.getEndDate().isBefore(endDate)) {
+                endDate = contract.getEndDate();
+            }
 
             // Chuyển đổi DayOfWeek từ entity sang java.time.DayOfWeek
             List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek().stream()
                     .map(day -> java.time.DayOfWeek.valueOf(day.name()))
                     .collect(Collectors.toList());
 
-            // Duyệt qua tất cả các ngày từ startDate đến cuối tháng
+            // Duyệt qua tất cả các ngày từ startDate đến endDate
             LocalDate currentDate = startDate;
             while (!currentDate.isAfter(endDate)) {
                 // Kiểm tra ngày hiện tại có nằm trong danh sách ngày làm việc không
@@ -731,18 +797,13 @@ public class AssignmentServiceImpl implements AssignmentService {
         // Lưu tất cả chấm công
         if (!attendances.isEmpty()) {
             attendanceRepository.saveAll(attendances);
+            log.info("Auto-generated {} attendances for assignmentId={} from {} to {}",
+                    attendances.size(), assignment.getId(), startDate,
+                    attendances.get(attendances.size() - 1).getDate());
 
-            // Tính lại workDays dựa vào số chấm công thực tế trong tháng
-            YearMonth ym = YearMonth.from(startDate);
-            LocalDate monthStart = ym.atDay(1);
-            LocalDate monthEnd = ym.atEndOfMonth();
-
-            int totalWorkDays = attendanceRepository
-                    .findByEmployeeAndDateBetween(assignment.getEmployee().getId(), monthStart, monthEnd)
-                    .size();
-
-            assignment.setWorkDays(totalWorkDays);
-            assignment.setPlannedDays(totalWorkDays);
+            // Cập nhật workDays và plannedDays dựa vào số attendance vừa tạo cho assignment này
+            assignment.setWorkDays(attendances.size());
+            assignment.setPlannedDays(attendances.size());
             // Không cần save lại assignment nếu nó đang trong transaction với createAssignment
             // JPA sẽ tự động save khi transaction commit
         }

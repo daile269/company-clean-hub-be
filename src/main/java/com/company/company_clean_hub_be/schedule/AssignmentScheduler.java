@@ -238,18 +238,14 @@ public class AssignmentScheduler {
                         savedAssignment.getEmployee().getName(),
                         savedAssignment.getAssignmentType());
 
-                // Xác định ngày kết thúc: cuối tháng HOẶC ngày hết hạn hợp đồng (nếu trong tháng này)
+                // Xác định ngày kết thúc: min của (cuối tháng, ngày hết hạn hợp đồng)
                 LocalDate endOfMonth = currentMonth.atEndOfMonth();
                 LocalDate endDate = endOfMonth;
                 
-                if (contract.getEndDate() != null) {
-                    YearMonth contractEndMonth = YearMonth.from(contract.getEndDate());
-                    if (contractEndMonth.equals(currentMonth)) {
-                        // Hợp đồng hết hạn trong tháng này
-                        endDate = contract.getEndDate();
-                        log.info("Hợp đồng ID {} sẽ hết hạn ngày {}, chỉ sinh chấm công tới ngày đó", 
-                                contract.getId(), endDate);
-                    }
+                if (contract.getEndDate() != null && contract.getEndDate().isBefore(endDate)) {
+                    endDate = contract.getEndDate();
+                    log.info("Hợp đồng ID {} sẽ hết hạn ngày {}, chỉ sinh chấm công tới ngày đó", 
+                            contract.getId(), endDate);
                 }
 
                 // Lấy thông tin từ Assignment mới để sinh chấm công
