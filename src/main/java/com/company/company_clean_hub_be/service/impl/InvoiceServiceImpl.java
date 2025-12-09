@@ -20,13 +20,20 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -404,5 +411,244 @@ public class InvoiceServiceImpl implements InvoiceService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    @Override
+    public ByteArrayOutputStream exportInvoiceToExcel(Long invoiceId) {
+        String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
+        log.info("exportInvoiceToExcel requested by {}: invoiceId={}", actor, invoiceId);
+
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new AppException(ErrorCode.INVOICE_NOT_FOUND));
+
+        Contract contract = invoice.getContract();
+        Customer customer = contract.getCustomer();
+
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("Hóa đơn");
+
+            // Styles
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            CellStyle boldStyle = createBoldStyle(workbook);
+            CellStyle centerStyle = createCenterStyle(workbook);
+            CellStyle numberStyle = createNumberStyle(workbook);
+            CellStyle currencyStyle = createCurrencyStyle(workbook);
+
+            int rowNum = 0;
+
+            // Row 0-2: Company header (optional - you can customize)
+            Row row0 = sheet.createRow(rowNum++);
+            Cell companyCell = row0.createCell(0);
+            companyCell.setCellValue("HÓA ĐƠN GIÁ TRỊ GIA TĂNG");
+            companyCell.setCellStyle(boldStyle);
+
+            rowNum++; // Empty row
+
+            // Customer info
+            Row custRow1 = sheet.createRow(rowNum++);
+            custRow1.createCell(0).setCellValue("Khách hàng:");
+            custRow1.createCell(1).setCellValue(invoice.getCustomerName());
+
+            Row custRow2 = sheet.createRow(rowNum++);
+            custRow2.createCell(0).setCellValue("Địa chỉ:");
+            custRow2.createCell(1).setCellValue(invoice.getCustomerAddress() != null ? invoice.getCustomerAddress() : "");
+
+            Row custRow3 = sheet.createRow(rowNum++);
+            custRow3.createCell(0).setCellValue("Mã số thuế:");
+            custRow3.createCell(1).setCellValue(invoice.getCustomerTaxCode() != null ? invoice.getCustomerTaxCode() : "");
+
+            Row custRow4 = sheet.createRow(rowNum++);
+            custRow4.createCell(0).setCellValue("Số điện thoại:");
+            custRow4.createCell(1).setCellValue(customer.getPhone() != null ? customer.getPhone() : "");
+
+            Row invoiceInfoRow = sheet.createRow(rowNum++);
+            invoiceInfoRow.createCell(0).setCellValue("Hóa đơn tháng:");
+            invoiceInfoRow.createCell(1).setCellValue(invoice.getInvoiceMonth() + "/" + invoice.getInvoiceYear());
+
+            rowNum++; // Empty row
+
+            // Table header
+            Row headerRow = sheet.createRow(rowNum++);
+            String[] headers = {"STT", "Tên hàng hóa, dịch vụ", "Đơn vị tính", "Số lượng", "Đơn giá", 
+                               "Thành tiền", "Thuế suất GTGT", "Tiền thuế GTGT"};
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            // Service rows
+            Set<ServiceEntity> services = contract.getServices();
+            int stt = 1;
+            BigDecimal totalSubtotal = BigDecimal.ZERO;
+            BigDecimal totalVat = BigDecimal.ZERO;
+
+            for (ServiceEntity service : services) {
+                Row serviceRow = sheet.createRow(rowNum++);
+                
+                // STT
+                Cell sttCell = serviceRow.createCell(0);
+                sttCell.setCellValue(stt++);
+                sttCell.setCellStyle(centerStyle);
+
+                // Tên dịch vụ
+                serviceRow.createCell(1).setCellValue(service.getTitle());
+
+                // Đơn vị tính
+                String unit = getUnitByContractType(invoice.getInvoiceType());
+                serviceRow.createCell(2).setCellValue(unit);
+
+                // Số lượng
+                BigDecimal quantity = getQuantityByContractType(invoice, contract);
+                Cell qtyCell = serviceRow.createCell(3);
+                qtyCell.setCellValue(quantity.doubleValue());
+                qtyCell.setCellStyle(numberStyle);
+
+                // Đơn giá
+                BigDecimal unitPrice = service.getPrice();
+                Cell priceCell = serviceRow.createCell(4);
+                priceCell.setCellValue(unitPrice.doubleValue());
+                priceCell.setCellStyle(currencyStyle);
+
+                // Thành tiền
+                BigDecimal amount = calculateServiceAmount(service, invoice, contract);
+                Cell amountCell = serviceRow.createCell(5);
+                amountCell.setCellValue(amount.doubleValue());
+                amountCell.setCellStyle(currencyStyle);
+                totalSubtotal = totalSubtotal.add(amount);
+
+                // Thuế suất VAT
+                BigDecimal vatRate = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+                Cell vatRateCell = serviceRow.createCell(6);
+                vatRateCell.setCellValue(vatRate.doubleValue() + "%");
+                vatRateCell.setCellStyle(centerStyle);
+
+                // Tiền thuế VAT
+                BigDecimal vatAmount = calculateServiceVat(service, invoice, contract);
+                Cell vatAmountCell = serviceRow.createCell(7);
+                vatAmountCell.setCellValue(vatAmount.doubleValue());
+                vatAmountCell.setCellStyle(currencyStyle);
+                totalVat = totalVat.add(vatAmount);
+            }
+
+            rowNum++; // Empty row
+
+            // Total rows
+            Row totalRow1 = sheet.createRow(rowNum++);
+            totalRow1.createCell(4).setCellValue("Tổng tiền trước thuế:");
+            Cell subtotalCell = totalRow1.createCell(5);
+            subtotalCell.setCellValue(totalSubtotal.doubleValue());
+            subtotalCell.setCellStyle(currencyStyle);
+
+            Row totalRow2 = sheet.createRow(rowNum++);
+            totalRow2.createCell(4).setCellValue("Tổng tiền thuế GTGT:");
+            Cell totalVatCell = totalRow2.createCell(5);
+            totalVatCell.setCellValue(totalVat.doubleValue());
+            totalVatCell.setCellStyle(currencyStyle);
+
+            Row totalRow3 = sheet.createRow(rowNum++);
+            Cell totalLabelCell = totalRow3.createCell(4);
+            totalLabelCell.setCellValue("Tổng cộng thanh toán:");
+            totalLabelCell.setCellStyle(boldStyle);
+            Cell totalAmountCell = totalRow3.createCell(5);
+            totalAmountCell.setCellValue(invoice.getTotalAmount().doubleValue());
+            totalAmountCell.setCellStyle(currencyStyle);
+
+            // Auto-size columns
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(out);
+            log.info("exportInvoiceToExcel completed by {}: invoiceId={}", actor, invoiceId);
+            return out;
+
+        } catch (IOException e) {
+            log.error("Error exporting invoice to Excel: invoiceId={}", invoiceId, e);
+            throw new AppException(ErrorCode.INVOICE_NOT_FOUND);
+        }
+    }
+
+    private String getUnitByContractType(ContractType type) {
+        return switch (type) {
+            case MONTHLY_FIXED, MONTHLY_ACTUAL -> "Tháng";
+            case ONE_TIME -> "Lần";
+        };
+    }
+
+    private BigDecimal getQuantityByContractType(Invoice invoice, Contract contract) {
+        if (invoice.getInvoiceType() == ContractType.MONTHLY_ACTUAL && invoice.getActualWorkingDays() != null) {
+            return BigDecimal.valueOf(invoice.getActualWorkingDays());
+        }
+        return BigDecimal.valueOf(1); // Default to 1 for fixed or one-time
+    }
+
+    private BigDecimal calculateServiceAmount(ServiceEntity service, Invoice invoice, Contract contract) {
+        BigDecimal servicePrice = service.getPrice();
+        
+        if (invoice.getInvoiceType() == ContractType.MONTHLY_ACTUAL && invoice.getActualWorkingDays() != null) {
+            Integer contractWorkingDays = contract.getWorkingDaysPerWeek() != null && !contract.getWorkingDaysPerWeek().isEmpty()
+                    ? contract.getWorkingDaysPerWeek().size() * 4
+                    : 20;
+            
+            BigDecimal actualDays = BigDecimal.valueOf(invoice.getActualWorkingDays());
+            BigDecimal contractDays = BigDecimal.valueOf(contractWorkingDays);
+            return servicePrice.multiply(actualDays).divide(contractDays, 2, RoundingMode.HALF_UP);
+        }
+        
+        return servicePrice;
+    }
+
+    private BigDecimal calculateServiceVat(ServiceEntity service, Invoice invoice, Contract contract) {
+        BigDecimal amount = calculateServiceAmount(service, invoice, contract);
+        BigDecimal vatRate = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+        return amount.multiply(vatRate).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+    }
+
+    private CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 11);
+        style.setFont(font);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return style;
+    }
+
+    private CellStyle createBoldStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setBold(true);
+        style.setFont(font);
+        return style;
+    }
+
+    private CellStyle createCenterStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setAlignment(HorizontalAlignment.CENTER);
+        return style;
+    }
+
+    private CellStyle createNumberStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        DataFormat format = workbook.createDataFormat();
+        style.setDataFormat(format.getFormat("#,##0.00"));
+        style.setAlignment(HorizontalAlignment.RIGHT);
+        return style;
+    }
+
+    private CellStyle createCurrencyStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        DataFormat format = workbook.createDataFormat();
+        style.setDataFormat(format.getFormat("#,##0"));
+        style.setAlignment(HorizontalAlignment.RIGHT);
+        return style;
     }
 }
