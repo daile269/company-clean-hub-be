@@ -375,34 +375,43 @@ public class PayrollServiceImpl implements PayrollService {
 
     @Override
     public PayrollResponse getPayrollById(Long id) {
+        log.info("getPayrollById requested: id={}", id);
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
         
         LocalDateTime createdAt = payroll.getCreatedAt();
-        return mapToResponse(payroll, createdAt.getMonthValue(), createdAt.getYear(), null);
+                PayrollResponse resp = mapToResponse(payroll, createdAt.getMonthValue(), createdAt.getYear(), null);
+                log.info("getPayrollById completed: id={}, employeeId={}", id, resp.getEmployeeId());
+                return resp;
     }
 
     @Override
     public List<PayrollResponse> getAllPayrolls() {
-        return payrollRepository.findAll().stream()
-                .map(p -> {
-                    LocalDateTime createdAt = p.getCreatedAt();
-                    return mapToResponse(p, createdAt.getMonthValue(), createdAt.getYear(), null);
-                })
-                .collect(Collectors.toList());
+                log.info("getAllPayrolls requested");
+                List<PayrollResponse> result = payrollRepository.findAll().stream()
+                                .map(p -> {
+                                        LocalDateTime createdAt = p.getCreatedAt();
+                                        return mapToResponse(p, createdAt.getMonthValue(), createdAt.getYear(), null);
+                                })
+                                .collect(Collectors.toList());
+                log.info("getAllPayrolls completed: count={}", result.size());
+                return result;
     }
 
     @Override
     public PageResponse<PayrollResponse> getPayrollsWithFilter(String keyword, Integer month, Integer year, Boolean isPaid, int page, int pageSize) {
-        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+                log.info("getPayrollsWithFilter requested: keyword='{}', month={}, year={}, isPaid={}, page={}, pageSize={}", keyword, month, year, isPaid, page, pageSize);
+                Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         Page<Payroll> payrollPage = payrollRepository.findByFilters(keyword, month, year, isPaid, pageable);
 
-        List<PayrollResponse> payrolls = payrollPage.getContent().stream()
+                List<PayrollResponse> payrolls = payrollPage.getContent().stream()
                 .map(p -> {
                     LocalDateTime createdAt = p.getCreatedAt();
                     return mapToResponse(p, createdAt.getMonthValue(), createdAt.getYear(), null);
                 })
                 .collect(Collectors.toList());
+
+                log.info("getPayrollsWithFilter completed: returned={}, totalElements={}", payrolls.size(), payrollPage.getTotalElements());
 
         return PageResponse.<PayrollResponse>builder()
                 .content(payrolls)
@@ -417,6 +426,7 @@ public class PayrollServiceImpl implements PayrollService {
 
     @Override
     public PayrollResponse updatePaymentStatus(Long id, Boolean isPaid) {
+                log.info("updatePaymentStatus requested: id={}, isPaid={}", id, isPaid);
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
         
@@ -427,6 +437,7 @@ public class PayrollServiceImpl implements PayrollService {
         payroll.setUpdatedAt(LocalDateTime.now());
         
         Payroll updatedPayroll = payrollRepository.save(payroll);
+                log.info("updatePaymentStatus completed: id={}, isPaid={}", id, isPaid);
         LocalDateTime createdAt = updatedPayroll.getCreatedAt();
         return mapToResponse(updatedPayroll, createdAt.getMonthValue(), createdAt.getYear(), null);
     }
@@ -592,10 +603,12 @@ public class PayrollServiceImpl implements PayrollService {
 
     @Override
     public void deletePayroll(Long id) {
+                log.info("deletePayroll requested: id={}", id);
         if (!payrollRepository.existsById(id)) {
             throw new AppException(ErrorCode.PAYROLL_NOT_FOUND);
         }
         payrollRepository.deleteById(id);
+                log.info("deletePayroll completed: id={}", id);
     }
 
     private PayrollResponse mapToResponse(Payroll payroll, Integer month, Integer year, Long fallbackEmployeeId) {

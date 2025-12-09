@@ -11,6 +11,7 @@ import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.service.EmployeeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class EmployeeServiceImpl implements EmployeeService {
     private final EmployeeRepository employeeRepository;
     private final RoleRepository roleRepository;
@@ -33,6 +35,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public List<EmployeeResponse> getAllEmployees() {
+        log.info("getAllEmployees requested");
         return employeeRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -40,6 +43,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, int page, int pageSize) {
+        log.info("getEmployeesWithFilter requested: keyword='{}', page={}, pageSize={}", keyword, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         Page<Employee> employeePage = employeeRepository.findByFilters(keyword, pageable);
 
@@ -60,6 +64,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public EmployeeResponse getEmployeeById(Long id) {
+        log.info("getEmployeeById requested: id={}", id);
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         return mapToResponse(employee);
@@ -67,6 +72,9 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public EmployeeResponse createEmployee(EmployeeRequest request) {
+        String username = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication().getName();
+        log.info("createEmployee by {}: username={}, employeeCode={}", username, request.getUsername(), request.getEmployeeCode());
         // Kiểm tra trùng username
         if (employeeRepository.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
@@ -114,11 +122,15 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .build();
 
         Employee savedEmployee = employeeRepository.save(employee);
+        log.info("createEmployee completed by {}: employeeId={}", username, savedEmployee.getId());
         return mapToResponse(savedEmployee);
     }
 
     @Override
     public EmployeeResponse updateEmployee(Long id, EmployeeRequest request) {
+        String username = org.springframework.security.core.context.SecurityContextHolder
+            .getContext().getAuthentication().getName();
+        log.info("updateEmployee by {}: id={}, employeeCode={}", username, id, request.getEmployeeCode());
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
@@ -162,15 +174,20 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setUpdatedAt(LocalDateTime.now());
 
         Employee updatedEmployee = employeeRepository.save(employee);
+        log.info("updateEmployee completed by {}: id={}", username, updatedEmployee.getId());
         return mapToResponse(updatedEmployee);
     }
 
     @Override
     public void deleteEmployee(Long id) {
+        String username = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication().getName();
+        log.info("deleteEmployee requested by {}: id={}", username, id);
         if (!employeeRepository.existsById(id)) {
             throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
         }
         employeeRepository.deleteById(id);
+        log.info("deleteEmployee completed: id={}", id);
     }
 
     private EmployeeResponse mapToResponse(Employee employee) {

@@ -11,6 +11,7 @@ import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.service.CustomerService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class CustomerServiceImpl implements CustomerService {
     private final CustomerRepository customerRepository;
     private final RoleRepository roleRepository;
@@ -62,11 +64,15 @@ public class CustomerServiceImpl implements CustomerService {
     public CustomerResponse getCustomerById(Long id) {
         Customer customer = customerRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
+        log.info("getCustomerById requested: id={}", id);
         return mapToResponse(customer);
     }
 
     @Override
     public CustomerResponse createCustomer(CustomerRequest request) {
+        String username = org.springframework.security.core.context.SecurityContextHolder
+            .getContext().getAuthentication().getName();
+        log.info("createCustomer by {}: username={}, customerCode={}", username, request.getUsername(), request.getCustomerCode());
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
@@ -89,11 +95,15 @@ public class CustomerServiceImpl implements CustomerService {
                 .build();
 
         Customer savedCustomer = customerRepository.save(customer);
+        log.info("createCustomer completed by {}: customerId={}", username, savedCustomer.getId());
         return mapToResponse(savedCustomer);
     }
 
     @Override
     public CustomerResponse updateCustomer(Long id, CustomerRequest request) {
+        String username = org.springframework.security.core.context.SecurityContextHolder
+            .getContext().getAuthentication().getName();
+        log.info("updateCustomer by {}: id={}, username={}", username, id, request.getUsername());
         Customer customer = customerRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
@@ -118,15 +128,20 @@ public class CustomerServiceImpl implements CustomerService {
         customer.setUpdatedAt(LocalDateTime.now());
 
         Customer updatedCustomer = customerRepository.save(customer);
+        log.info("updateCustomer completed by {}: id={}", username, updatedCustomer.getId());
         return mapToResponse(updatedCustomer);
     }
 
     @Override
     public void deleteCustomer(Long id) {
+        String username = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication().getName();
+        log.info("deleteCustomer requested by {}: id={}", username, id);
         if (!customerRepository.existsById(id)) {
             throw new AppException(ErrorCode.CUSTOMER_NOT_FOUND);
         }
         customerRepository.deleteById(id);
+        log.info("deleteCustomer completed: id={}", id);
     }
 
     private CustomerResponse mapToResponse(Customer customer) {
