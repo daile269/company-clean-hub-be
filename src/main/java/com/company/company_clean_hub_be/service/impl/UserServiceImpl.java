@@ -11,6 +11,7 @@ import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -36,6 +38,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public List<UserResponse> getAllUsers() {
+    log.info("getAllUsers requested by {}", getCurrentUsername());
         return userRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -43,6 +46,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public PageResponse<UserResponse> getUsersWithFilter(String keyword, Long roleId, int page, int pageSize) {
+        log.info("getUsersWithFilter requested by {}: keyword='{}', roleId={}, page={}, pageSize={}", getCurrentUsername(), keyword, roleId, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         Page<User> userPage = userRepository.findByFilters(keyword, roleId, pageable);
 
@@ -63,6 +67,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserResponse getUserById(Long id) {
+        log.info("getUserById requested by {}: id={}", getCurrentUsername(), id);
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
         return mapToResponse(user);
@@ -70,6 +75,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserResponse createUser(UserRequest request) {
+        String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
+        log.info("createUser requested by {}: username='{}', phone={}", actor, request.getUsername(), request.getPhone());
         // Kiểm tra trùng username
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
@@ -95,11 +102,14 @@ public class UserServiceImpl implements UserService {
                 .build();
 
         User savedUser = userRepository.save(user);
+        log.info("createUser completed by {}: id={}", actor, savedUser.getId());
         return mapToResponse(savedUser);
     }
 
     @Override
     public UserResponse updateUser(Long id, UserRequest request) {
+        String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
+        log.info("updateUser requested by {}: id={}, username='{}'", actor, id, request.getUsername());
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
 
@@ -127,15 +137,19 @@ public class UserServiceImpl implements UserService {
         user.setUpdatedAt(LocalDateTime.now());
 
         User updatedUser = userRepository.save(user);
+        log.info("updateUser completed by {}: id={}", actor, updatedUser.getId());
         return mapToResponse(updatedUser);
     }
 
     @Override
     public void deleteUser(Long id) {
+        String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
+        log.info("deleteUser requested by {}: id={}", actor, id);
         if (!userRepository.existsById(id)) {
             throw new AppException(ErrorCode.USER_IS_NOT_EXISTS);
         }
         userRepository.deleteById(id);
+        log.info("deleteUser completed by {}: id={}", actor, id);
     }
 
     private UserResponse mapToResponse(User user) {
