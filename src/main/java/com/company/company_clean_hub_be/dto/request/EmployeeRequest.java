@@ -35,7 +35,6 @@ public class EmployeeRequest {
     @Size(max = 50, message = "CCCD không được vượt quá 50 ký tự")
     private String cccd;
 
-    @Size(max = 255, message = "Địa chỉ không được vượt quá 255 ký tự")
     private String address;
 
     @NotBlank(message = "Tên nhân viên bắt buộc")
