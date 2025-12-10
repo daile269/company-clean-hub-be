@@ -74,12 +74,15 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
             if (auth != null && auth.getName() != null) username = auth.getName();
         } catch (Exception ignored) {
         }
-        log.info("createService requested by {}: title='{}', price={}", username, request.getTitle(), request.getPrice());
+        log.info("createService requested by {}: title='{}', price={}, effectiveFrom={}, serviceType={}", 
+                username, request.getTitle(), request.getPrice(), request.getEffectiveFrom(), request.getServiceType());
         ServiceEntity service = ServiceEntity.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .price(request.getPrice())
                 .vat(request.getVat())
+                .effectiveFrom(request.getEffectiveFrom())
+                .serviceType(request.getServiceType())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -106,6 +109,8 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
         service.setDescription(request.getDescription());
         service.setPrice(request.getPrice());
         service.setVat(request.getVat());
+        service.setEffectiveFrom(request.getEffectiveFrom());
+        service.setServiceType(request.getServiceType());
         service.setUpdatedAt(LocalDateTime.now());
 
         ServiceEntity updatedService = serviceEntityRepository.save(service);
@@ -160,6 +165,8 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
                 .description(service.getDescription())
                 .price(service.getPrice())
                 .vat(service.getVat())
+                .effectiveFrom(service.getEffectiveFrom())
+                .serviceType(service.getServiceType())
                 .createdAt(service.getCreatedAt())
                 .updatedAt(service.getUpdatedAt())
                 .build();

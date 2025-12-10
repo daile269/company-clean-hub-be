@@ -28,7 +28,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -203,7 +205,10 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     private BigDecimal calculateSubtotal(Contract contract, InvoiceCreationRequest request) {
-        BigDecimal totalServicePrice = contract.getServices().stream()
+        // Lọc services theo thời gian hiệu lực và loại dịch vụ
+        List<ServiceEntity> applicableServices = getApplicableServices(contract, request.getInvoiceMonth(), request.getInvoiceYear());
+        
+        BigDecimal totalServicePrice = applicableServices.stream()
                 .map(ServiceEntity::getPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -240,10 +245,13 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     private BigDecimal calculateTotalVat(Contract contract, BigDecimal subtotal, InvoiceCreationRequest request) {
+        // Lọc services theo thời gian hiệu lực và loại dịch vụ
+        List<ServiceEntity> applicableServices = getApplicableServices(contract, request.getInvoiceMonth(), request.getInvoiceYear());
+        
         // Tính tổng VAT dựa trên từng service
         BigDecimal totalVat = BigDecimal.ZERO;
         
-        for (ServiceEntity service : contract.getServices()) {
+        for (ServiceEntity service : applicableServices) {
             BigDecimal servicePrice = service.getPrice();
             BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
             
@@ -266,6 +274,42 @@ public class InvoiceServiceImpl implements InvoiceService {
         
         log.info("Total VAT calculated: {} for subtotal: {}", totalVat, subtotal);
         return totalVat;
+    }
+    
+    /**
+     * Lọc services áp dụng cho tháng/năm cụ thể dựa trên effectiveFrom và serviceType
+     */
+    private List<ServiceEntity> getApplicableServices(Contract contract, Integer month, Integer year) {
+        YearMonth invoiceMonth = YearMonth.of(year, month);
+        LocalDate firstDayOfMonth = invoiceMonth.atDay(1);
+        LocalDate lastDayOfMonth = invoiceMonth.atEndOfMonth();
+        
+        return contract.getServices().stream()
+                .filter(service -> {
+                    // Kiểm tra effectiveFrom
+                    if (service.getEffectiveFrom() == null) {
+                        log.warn("Service {} has null effectiveFrom, skipping", service.getId());
+                        return false;
+                    }
+                    
+                    // Với dịch vụ ONE_TIME: chỉ áp dụng trong tháng có effectiveFrom
+                    if (service.getServiceType() == ServiceType.ONE_TIME) {
+                        YearMonth serviceMonth = YearMonth.from(service.getEffectiveFrom());
+                        boolean applicable = serviceMonth.equals(invoiceMonth);
+                        log.info("Service {} (ONE_TIME, effectiveFrom={}): {} for invoice {}/{}",
+                                service.getId(), service.getEffectiveFrom(), 
+                                applicable ? "APPLICABLE" : "NOT APPLICABLE", month, year);
+                        return applicable;
+                    }
+                    
+                    // Với dịch vụ RECURRING: áp dụng từ effectiveFrom trở đi
+                    boolean applicable = !service.getEffectiveFrom().isAfter(lastDayOfMonth);
+                    log.info("Service {} (RECURRING, effectiveFrom={}): {} for invoice {}/{}",
+                            service.getId(), service.getEffectiveFrom(), 
+                            applicable ? "APPLICABLE" : "NOT APPLICABLE", month, year);
+                    return applicable;
+                })
+                .collect(Collectors.toList());
     }
 
     @Override

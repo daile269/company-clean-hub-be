@@ -1,6 +1,7 @@
 package com.company.company_clean_hub_be.entity;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -13,6 +14,8 @@ import jakarta.validation.constraints.Size;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -51,6 +54,14 @@ public class ServiceEntity {
     @Column(name = "vat")
     @PositiveOrZero
     private BigDecimal vat;
+
+    @Column(name = "effective_from", nullable = false)
+    private LocalDate effectiveFrom;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "service_type", nullable = false, length = 16)
+    @Builder.Default
+    private ServiceType serviceType = ServiceType.RECURRING;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
