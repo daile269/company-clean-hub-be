@@ -26,9 +26,11 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
            "(:keyword IS NULL OR :keyword = '' OR " +
            "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(e.phone) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+           "LOWER(e.phone) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+           "AND (:employmentType IS NULL OR e.employmentType = :employmentType)")
     Page<Employee> findByFilters(
             @Param("keyword") String keyword,
+            @Param("employmentType") com.company.company_clean_hub_be.entity.EmploymentType employmentType,
             Pageable pageable
     );
 
@@ -39,7 +41,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     boolean existsByPhoneAndIdNot(String phone, Long id);
 
     @Query("SELECT e FROM Employee e " +
-            "WHERE e.id NOT IN (" +
+            "WHERE e.employmentType = 'CONTRACT_STAFF' " +
+            "AND e.id NOT IN (" +
             "SELECT a.employee.id FROM Assignment a " +
             "WHERE a.contract.customer.id = :customerId " +
             "AND a.status = 'IN_PROGRESS')")
@@ -49,7 +52,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     );
     
     @Query("SELECT e FROM Employee e " +
-            "WHERE e.id NOT IN (" +
+            "WHERE e.employmentType = 'CONTRACT_STAFF' " +
+            "AND e.id NOT IN (" +
             "SELECT a.employee.id FROM Assignment a " +
             "WHERE a.contract.customer.id = :customerId " +
             "AND (:month IS NULL OR MONTH(a.startDate) = :month) " +

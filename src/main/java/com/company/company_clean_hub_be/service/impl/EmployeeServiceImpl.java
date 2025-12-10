@@ -42,10 +42,10 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     @Override
-    public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, int page, int pageSize) {
-        log.info("getEmployeesWithFilter requested: keyword='{}', page={}, pageSize={}", keyword, page, pageSize);
+    public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, com.company.company_clean_hub_be.entity.EmploymentType employmentType, int page, int pageSize) {
+        log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, page={}, pageSize={}", keyword, employmentType, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
-        Page<Employee> employeePage = employeeRepository.findByFilters(keyword, pageable);
+        Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, pageable);
 
         List<EmployeeResponse> employees = employeePage.getContent().stream()
                 .map(this::mapToResponse)
@@ -112,6 +112,10 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .bankAccount(request.getBankAccount())
                 .bankName(request.getBankName())
                 .description(request.getDescription())
+                .employmentType(request.getEmploymentType())
+                .monthlySalary(request.getMonthlySalary())
+                .allowance(request.getAllowance())
+                .insuranceSalary(request.getInsuranceSalary())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -166,6 +170,10 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setBankAccount(request.getBankAccount());
         employee.setBankName(request.getBankName());
         employee.setDescription(request.getDescription());
+        employee.setEmploymentType(request.getEmploymentType());
+        employee.setMonthlySalary(request.getMonthlySalary());
+        employee.setAllowance(request.getAllowance());
+        employee.setInsuranceSalary(request.getInsuranceSalary());
         employee.setUpdatedAt(LocalDateTime.now());
 
         Employee updatedEmployee = employeeRepository.save(employee);
@@ -201,6 +209,10 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .bankAccount(employee.getBankAccount())
                 .bankName(employee.getBankName())
                 .description(employee.getDescription())
+                .employmentType(employee.getEmploymentType())
+                .monthlySalary(employee.getMonthlySalary())
+                .allowance(employee.getAllowance())
+                .insuranceSalary(employee.getInsuranceSalary())
                 .createdAt(employee.getCreatedAt())
                 .updatedAt(employee.getUpdatedAt())
                 .build();

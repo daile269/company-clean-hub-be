@@ -1,10 +1,12 @@
 package com.company.company_clean_hub_be.dto.response;
 
+import com.company.company_clean_hub_be.entity.EmploymentType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -28,4 +30,12 @@ public class EmployeeResponse {
     private String description;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    private EmploymentType employmentType;
+
+    // COMPANY_STAFF fields
+    private BigDecimal monthlySalary;
+    private BigDecimal allowance;
+    private BigDecimal insuranceSalary;
+
 }

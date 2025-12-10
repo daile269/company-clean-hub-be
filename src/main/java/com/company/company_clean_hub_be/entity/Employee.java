@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -8,6 +9,8 @@ import jakarta.validation.constraints.Size;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.PrimaryKeyJoinColumn;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -45,14 +48,30 @@ public class Employee extends User {
     @NotBlank
     @Size(max = 150)
     private String name;
-    
-    @Column(name = "bank_account", unique = true)
+
     private String bankAccount;
 
     @Column(name = "bank_name")
     private String bankName;
 
     private String description;
+
+    // Loại nhân viên: COMPANY_STAFF (văn phòng) hoặc CONTRACT_STAFF (hợp đồng)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "employment_type", nullable = false, length = 20)
+    private EmploymentType employmentType = EmploymentType.CONTRACT_STAFF;
+
+    // Chỉ cho COMPANY_STAFF: Lương cố định tháng
+    @Column(name = "monthly_salary", precision = 18, scale = 2)
+    private BigDecimal monthlySalary;
+
+    // Chỉ cho COMPANY_STAFF: Phụ cấp
+    @Column(name = "allowance", precision = 18, scale = 2)
+    private BigDecimal allowance;
+
+    // Chỉ cho COMPANY_STAFF: Mức lương đóng BHXH/BHYT
+    @Column(name = "insurance_salary", precision = 18, scale = 2)
+    private BigDecimal insuranceSalary;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

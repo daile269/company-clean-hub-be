@@ -82,6 +82,11 @@ public class AssignmentServiceImpl implements AssignmentService {
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
+        // Kiểm tra loại nhân viên - chỉ CONTRACT_STAFF mới được phân công
+        if (employee.getEmploymentType() == EmploymentType.COMPANY_STAFF) {
+            throw new AppException(ErrorCode.COMPANY_STAFF_CANNOT_BE_ASSIGNED);
+        }
+
         Contract contract = contractRepository.findById(request.getContractId())
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
@@ -275,9 +280,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         System.out.println("Người thay: " + replacementEmployee.getName() + " (ID: " + replacementEmployee.getId() + ")");
 
+        // Kiểm tra loại nhân viên - chỉ CONTRACT_STAFF mới được điều động
+        if (replacementEmployee.getEmploymentType() == EmploymentType.COMPANY_STAFF) {
+            throw new AppException(ErrorCode.COMPANY_STAFF_CANNOT_BE_REASSIGNED);
+        }
+
         Employee replacedEmployee = employeeRepository.findById(request.getReplacedEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         System.out.println("Người bị thay: " + replacedEmployee.getName() + " (ID: " + replacedEmployee.getId() + ")");
+
+        // Kiểm tra người bị thay cũng phải là CONTRACT_STAFF
+        if (replacedEmployee.getEmploymentType() == EmploymentType.COMPANY_STAFF) {
+            throw new AppException(ErrorCode.COMPANY_STAFF_CANNOT_BE_REASSIGNED);
+        }
 
         // Lấy thông tin user đang thực hiện
         User currentUser = userRepository.findByUsername(username).orElse(null);
