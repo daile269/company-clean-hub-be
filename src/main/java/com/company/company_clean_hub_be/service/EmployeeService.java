@@ -8,7 +8,7 @@ import java.util.List;
 
 public interface EmployeeService {
     List<EmployeeResponse> getAllEmployees();
-    PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, int page, int pageSize);
+    PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, com.company.company_clean_hub_be.entity.EmploymentType employmentType, int page, int pageSize);
     EmployeeResponse getEmployeeById(Long id);
     EmployeeResponse createEmployee(EmployeeRequest request);
     EmployeeResponse updateEmployee(Long id, EmployeeRequest request);

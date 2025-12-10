@@ -1,6 +1,8 @@
 package com.company.company_clean_hub_be.dto.request;
 
+import com.company.company_clean_hub_be.entity.ServiceType;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -9,6 +11,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 @NoArgsConstructor
@@ -29,4 +32,10 @@ public class ServiceRequest {
     @PositiveOrZero(message = "VAT phải lớn hơn hoặc bằng 0")
     private BigDecimal vat;
 
+    @NotNull(message = "Ngày bắt đầu áp dụng không được để trống")
+    private LocalDate effectiveFrom;
+
+    @NotNull(message = "Loại dịch vụ không được để trống")
+    @Builder.Default
+    private ServiceType serviceType = ServiceType.RECURRING;
 }

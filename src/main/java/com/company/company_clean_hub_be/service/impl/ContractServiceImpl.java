@@ -231,6 +231,8 @@ public class ContractServiceImpl implements ContractService {
                         .description(service.getDescription())
                         .price(service.getPrice())
                         .vat(service.getVat())
+                        .effectiveFrom(service.getEffectiveFrom())
+                        .serviceType(service.getServiceType())
                         .createdAt(service.getCreatedAt())
                         .updatedAt(service.getUpdatedAt())
                         .build())
