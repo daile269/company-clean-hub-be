@@ -7,6 +7,7 @@ import com.company.company_clean_hub_be.dto.response.AssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.RollbackResponse;
 import com.company.company_clean_hub_be.dto.response.TemporaryAssignmentResponse;
+import com.company.company_clean_hub_be.dto.response.AttendanceResponse;
 
 import java.util.List;
 
@@ -37,6 +38,8 @@ public interface AssignmentService {
     PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> getEmployeesNotAssignedToCustomer(
             Long customerId, com.company.company_clean_hub_be.entity.EmploymentType employmentType, Integer month, Integer year, int page, int pageSize);
     List<AssignmentResponse> getAssignmentsByEmployee(Long employeeId);
+
+    PageResponse<AttendanceResponse> getAttendancesByAssignment(Long assignmentId, Integer month, Integer year, int page, int pageSize);
     
     // Lịch sử điều động
     List<AssignmentHistoryResponse> getReassignmentHistory(Long employeeId);
