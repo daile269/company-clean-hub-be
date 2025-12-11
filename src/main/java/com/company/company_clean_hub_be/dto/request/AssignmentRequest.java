@@ -23,11 +23,14 @@ public class AssignmentRequest {
     @NotNull(message = "ID nhân viên không được để trống")
     private Long employeeId;
 
-    @NotNull(message = "ID hợp đồng không được để trống")
+    // Optional for COMPANY scope, required for CONTRACT scope
     private Long contractId;
 
     @NotNull(message = "Ngày bắt đầu không được để trống")
     private LocalDate startDate;
+
+    @Builder.Default
+    private com.company.company_clean_hub_be.entity.AssignmentScope scope = com.company.company_clean_hub_be.entity.AssignmentScope.CONTRACT;
 
     private AssignmentStatus status;
 
@@ -38,6 +41,9 @@ public class AssignmentRequest {
 
     @PositiveOrZero(message = "Phụ cấp thêm phải lớn hơn hoặc bằng 0")
     private BigDecimal additionalAllowance;
+
+    // Required for COMPANY scope (days per week employee works)
+    private List<java.time.DayOfWeek> workingDaysPerWeek;
 
     private String description;
 }

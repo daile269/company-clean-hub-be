@@ -76,5 +76,17 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     @Query("SELECT a FROM Attendance a WHERE a.payroll.id = :payrollId")
     List<Attendance> findByPayrollId(@Param("payrollId") Long payrollId);
 
+    @Query("SELECT a FROM Attendance a " +
+            "WHERE a.assignment.id = :assignmentId " +
+            "AND (:month IS NULL OR MONTH(a.date) = :month) " +
+            "AND (:year IS NULL OR YEAR(a.date) = :year) " +
+            "ORDER BY a.date DESC")
+    Page<Attendance> findByAssignmentAndFilters(
+            @Param("assignmentId") Long assignmentId,
+            @Param("month") Integer month,
+            @Param("year") Integer year,
+            Pageable pageable
+    );
+
 
 }
