@@ -39,17 +39,17 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public List<EmployeeResponse> getAllEmployees() {
-        log.debug("getAllEmployees requested");
+        log.info("getAllEmployees requested");
         return employeeRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, int page, int pageSize) {
-        log.debug("getEmployeesWithFilter requested: keyword='{}', page={}, pageSize={}", keyword, page, pageSize);
+    public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, com.company.company_clean_hub_be.entity.EmploymentType employmentType, int page, int pageSize) {
+        log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, page={}, pageSize={}", keyword, employmentType, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
-        Page<Employee> employeePage = employeeRepository.findByFilters(keyword, pageable);
+        Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, pageable);
 
         List<EmployeeResponse> employees = employeePage.getContent().stream()
                 .map(this::mapToResponse)
@@ -68,7 +68,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public EmployeeResponse getEmployeeById(Long id) {
-        log.debug("getEmployeeById requested: id={}", id);
+        log.info("getEmployeeById requested: id={}", id);
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         return mapToResponse(employee);
@@ -78,7 +78,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     public EmployeeResponse createEmployee(EmployeeRequest request) {
         String username = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();
-        log.debug("createEmployee by {}: username={}, employeeCode={}", username, request.getUsername(), request.getEmployeeCode());
+        log.info("createEmployee by {}: username={}, employeeCode={}", username, request.getUsername(), request.getEmployeeCode());
         // Kiểm tra trùng username
         if (employeeRepository.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
@@ -99,11 +99,6 @@ public class EmployeeServiceImpl implements EmployeeService {
             throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
         }
         
-        // Kiểm tra trùng bankAccount
-        if (request.getBankAccount() != null && employeeRepository.existsByBankAccount(request.getBankAccount())) {
-            throw new AppException(ErrorCode.BANK_ACCOUNT_ALREADY_EXISTS);
-        }
-        
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
@@ -121,12 +116,16 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .bankAccount(request.getBankAccount())
                 .bankName(request.getBankName())
                 .description(request.getDescription())
+                .employmentType(request.getEmploymentType())
+                .monthlySalary(request.getMonthlySalary())
+                .allowance(request.getAllowance())
+                .insuranceSalary(request.getInsuranceSalary())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
 
         Employee savedEmployee = employeeRepository.save(employee);
-        log.debug("createEmployee completed by {}: employeeId={}", username, savedEmployee.getId());
+        log.info("createEmployee completed by {}: employeeId={}", username, savedEmployee.getId());
         return mapToResponse(savedEmployee);
     }
 
@@ -134,7 +133,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     public EmployeeResponse updateEmployee(Long id, EmployeeRequest request) {
         String username = org.springframework.security.core.context.SecurityContextHolder
             .getContext().getAuthentication().getName();
-        log.debug("updateEmployee by {}: id={}, employeeCode={}", username, id, request.getEmployeeCode());
+        log.info("updateEmployee by {}: id={}, employeeCode={}", username, id, request.getEmployeeCode());
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
@@ -175,10 +174,14 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setBankAccount(request.getBankAccount());
         employee.setBankName(request.getBankName());
         employee.setDescription(request.getDescription());
+        employee.setEmploymentType(request.getEmploymentType());
+        employee.setMonthlySalary(request.getMonthlySalary());
+        employee.setAllowance(request.getAllowance());
+        employee.setInsuranceSalary(request.getInsuranceSalary());
         employee.setUpdatedAt(LocalDateTime.now());
 
         Employee updatedEmployee = employeeRepository.save(employee);
-        log.debug("updateEmployee completed by {}: id={}", username, updatedEmployee.getId());
+        log.info("updateEmployee completed by {}: id={}", username, updatedEmployee.getId());
         return mapToResponse(updatedEmployee);
     }
 
@@ -186,12 +189,12 @@ public class EmployeeServiceImpl implements EmployeeService {
     public void deleteEmployee(Long id) {
         String username = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();
-        log.debug("deleteEmployee requested by {}: id={}", username, id);
+        log.info("deleteEmployee requested by {}: id={}", username, id);
         if (!employeeRepository.existsById(id)) {
             throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
         }
         employeeRepository.deleteById(id);
-        log.debug("deleteEmployee completed: id={}", id);
+        log.info("deleteEmployee completed: id={}", id);
     }
 
     private EmployeeResponse mapToResponse(Employee employee) {
@@ -210,6 +213,10 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .bankAccount(employee.getBankAccount())
                 .bankName(employee.getBankName())
                 .description(employee.getDescription())
+                .employmentType(employee.getEmploymentType())
+                .monthlySalary(employee.getMonthlySalary())
+                .allowance(employee.getAllowance())
+                .insuranceSalary(employee.getInsuranceSalary())
                 .createdAt(employee.getCreatedAt())
                 .updatedAt(employee.getUpdatedAt())
                 .build();
@@ -217,7 +224,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public List<EmployeeExportDto> getAllEmployeesForExport() {
-        log.debug("getAllEmployeesForExport requested");
+        log.info("getAllEmployeesForExport requested");
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
         return employeeRepository.findAll().stream()
                 .map(employee -> EmployeeExportDto.builder()

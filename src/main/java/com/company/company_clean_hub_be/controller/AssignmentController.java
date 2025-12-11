@@ -59,7 +59,7 @@ public class AssignmentController {
             @PathVariable Long id,
             @Valid @RequestBody AssignmentRequest request) {
         AssignmentResponse assignment = assignmentService.updateAssignment(id, request);
-        log.debug("cập nhập assign:{}",request);
+        log.info("cập nhập assign:{}",request);
         return ApiResponse.success("Cập nhật phân công thành công", assignment, HttpStatus.OK.value());
     }
 
@@ -117,21 +117,28 @@ public class AssignmentController {
         );
     }
 
-    @GetMapping("/employee/{employeeId}")
-    public ApiResponse<List<AssignmentResponse>> getAssignmentsByEmployee(@PathVariable Long employeeId) {
-        List<AssignmentResponse> assignments = assignmentService.getAssignmentsByEmployee(employeeId);
+        @GetMapping("/employee/{employeeId}")
+        public ApiResponse<PageResponse<AssignmentResponse>> getAssignmentsByEmployee(
+            @PathVariable Long employeeId,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+
+        PageResponse<AssignmentResponse> assignments = assignmentService.getAssignmentsByEmployeeWithFilters(
+            employeeId, customerId, month, year, page, pageSize);
+
         return ApiResponse.success(
-                "Lấy danh sách phân công của nhân viên thành công",
-                assignments,
-                HttpStatus.OK.value()
+            "Lấy danh sách phân công của nhân viên thành công",
+            assignments,
+            HttpStatus.OK.value()
         );
-    }
+        }
     @GetMapping("/assignments/{employeeId}/{month}/" +
             "{year}")
     public ApiResponse<List<AssignmentResponse>> getAssignmentsByEmployeeMonthYear(@PathVariable Long employeeId, @PathVariable Integer month, @PathVariable Integer year) {
         List<AssignmentResponse> assignments = assignmentService.getAssignmentsByEmployeeMonthYear(employeeId,month,year);
-        System.out.println("kich thuoc mang ass" +
-                ""+assignments.size());
         return ApiResponse.success(
                 "Lấy danh sách phân công của nhân viên thành công",
                 assignments,

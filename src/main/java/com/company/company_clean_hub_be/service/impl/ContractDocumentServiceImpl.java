@@ -30,7 +30,7 @@ public class ContractDocumentServiceImpl implements ContractDocumentService {
 
     @Override
     public ContractDocument uploadDocument(Long contractId, MultipartFile file) throws IOException {
-        log.debug("Start uploadDocument: contractId={}, fileName={}", contractId, file.getOriginalFilename());
+        log.info("Start uploadDocument: contractId={}, fileName={}", contractId, file.getOriginalFilename());
         
         Contract contract = contractRepository.findById(contractId)
                 .orElseThrow(() -> new RuntimeException("Contract not found with id: " + contractId));
@@ -49,7 +49,7 @@ public class ContractDocumentServiceImpl implements ContractDocumentService {
                 .build();
         
         ContractDocument saved = contractDocumentRepository.save(document);
-        log.debug("Upload successful: contractId={}, documentId={}, publicId={}, type={}", 
+        log.info("Upload successful: contractId={}, documentId={}, publicId={}, type={}", 
                 contractId, saved.getId(), publicId, documentType);
         
         return saved;
@@ -57,7 +57,7 @@ public class ContractDocumentServiceImpl implements ContractDocumentService {
 
     @Override
     public List<ContractDocument> uploadDocuments(Long contractId, MultipartFile[] files) throws IOException {
-        log.debug("Start uploadDocuments: contractId={}, fileCount={}", contractId, files.length);
+        log.info("Start uploadDocuments: contractId={}, fileCount={}", contractId, files.length);
         
         Contract contract = contractRepository.findById(contractId)
                 .orElseThrow(() -> new RuntimeException("Contract not found with id: " + contractId));
@@ -66,7 +66,7 @@ public class ContractDocumentServiceImpl implements ContractDocumentService {
         
         for (int i = 0; i < files.length; i++) {
             MultipartFile file = files[i];
-            log.debug("Uploading file {}/{}: fileName={}, size={}, contentType={}",
+            log.info("Uploading file {}/{}: fileName={}, size={}, contentType={}",
                     i + 1, files.length, file.getOriginalFilename(), file.getSize(), file.getContentType());
             
             try {
@@ -85,7 +85,7 @@ public class ContractDocumentServiceImpl implements ContractDocumentService {
                 
                 ContractDocument saved = contractDocumentRepository.save(document);
                 uploadedDocuments.add(saved);
-                log.debug("Upload successful: contractId={}, documentId={}, publicId={}, type={}", 
+                log.info("Upload successful: contractId={}, documentId={}, publicId={}, type={}", 
                         contractId, saved.getId(), publicId, documentType);
             } catch (IOException ex) {
                 log.error("Failed to upload file {}/{} for contractId={}: {}", 
@@ -99,7 +99,7 @@ public class ContractDocumentServiceImpl implements ContractDocumentService {
 
     @Override
     public void deleteDocument(Long contractId, Long documentId) throws IOException {
-        log.debug("Start deleteDocument: contractId={}, documentId={}", contractId, documentId);
+        log.info("Start deleteDocument: contractId={}, documentId={}", contractId, documentId);
         
         ContractDocument document = contractDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new RuntimeException("Document not found with id: " + documentId));
@@ -111,7 +111,7 @@ public class ContractDocumentServiceImpl implements ContractDocumentService {
         try {
             fileStorageService.deleteFile(document.getCloudinaryPublicId());
             contractDocumentRepository.delete(document);
-            log.debug("Delete successful: contractId={}, documentId={}, publicId={}", 
+            log.info("Delete successful: contractId={}, documentId={}, publicId={}", 
                     contractId, documentId, document.getCloudinaryPublicId());
         } catch (IOException ex) {
             log.error("Failed to delete document {}: {}", documentId, ex.getMessage(), ex);
@@ -121,10 +121,10 @@ public class ContractDocumentServiceImpl implements ContractDocumentService {
 
     @Override
     public List<ContractDocument> getContractDocuments(Long contractId) {
-        log.debug("Fetching contract documents: contractId={}", contractId);
+        log.info("Fetching contract documents: contractId={}", contractId);
         
         List<ContractDocument> documents = contractDocumentRepository.findByContractId(contractId);
-        log.debug("Found {} documents for contractId={}", documents.size(), contractId);
+        log.info("Found {} documents for contractId={}", documents.size(), contractId);
         
         return documents;
     }

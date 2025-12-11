@@ -41,6 +41,9 @@ public enum ErrorCode {
     INVOICE_ALREADY_EXISTS(400,"Hóa đơn tháng này cho hợp đồng đã tồn tại"),
     INVALID_ACTUAL_WORKING_DAYS(400,"Số ngày làm thực tế không hợp lệ"),
     INVOICE_DATE_BEFORE_CONTRACT_START(400,"Ngày xuất hóa đơn phải sau hoặc bằng ngày bắt đầu hợp đồng"),
+    
+    COMPANY_STAFF_CANNOT_BE_ASSIGNED(400,"Nhân viên văn phòng không thể được phân công làm việc cho khách hàng"),
+    COMPANY_STAFF_CANNOT_BE_REASSIGNED(400,"Nhân viên văn phòng không thể được điều động thay thế"),
 
     INVALID_TOKEN(401,"Token không hợp lệ"),
     TOKEN_EXPIRED(401,"Token đã hết hạn, vui lòng đăng nhập lại"),

@@ -20,13 +20,22 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,7 +53,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public InvoiceResponse createInvoice(InvoiceCreationRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.debug("createInvoice requested by {}: contractId={}, month={}, year={}", actor, request.getContractId(), request.getInvoiceMonth(), request.getInvoiceYear());
+        log.info("createInvoice requested by {}: contractId={}, month={}, year={}", actor, request.getContractId(), request.getInvoiceMonth(), request.getInvoiceYear());
 
         // Kiểm tra hóa đơn đã tồn tại chưa
         if (invoiceRepository.existsByContractIdAndMonthAndYear(
@@ -94,7 +103,7 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .build();
 
         invoice = invoiceRepository.save(invoice);
-        log.debug("Created invoice {} for contract {} - Month {}/{} by {}", 
+        log.info("Created invoice {} for contract {} - Month {}/{} by {}", 
             invoice.getId(), contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), actor);
 
         return toInvoiceResponse(invoice);
@@ -104,7 +113,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public BulkInvoiceResponse createInvoicesForCustomer(InvoiceCreationRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.debug("createInvoicesForCustomer requested by {}: customerId={}, month={}, year={}", actor, request.getCustomerId(), request.getInvoiceMonth(), request.getInvoiceYear());
+        log.info("createInvoicesForCustomer requested by {}: customerId={}, month={}, year={}", actor, request.getCustomerId(), request.getInvoiceMonth(), request.getInvoiceYear());
 
         // Validate input
         if (request.getCustomerId() == null) {
@@ -182,9 +191,9 @@ public class InvoiceServiceImpl implements InvoiceService {
             }
         }
 
-        log.debug("Bulk invoice creation for customer {} - Total: {}, Success: {}, Failed: {}", 
+        log.info("Bulk invoice creation for customer {} - Total: {}, Success: {}, Failed: {}", 
             customer.getId(), contracts.size(), successCount, failCount);
-        log.debug("createInvoicesForCustomer completed by {}: success={}, failed={}", actor, successCount, failCount);
+        log.info("createInvoicesForCustomer completed by {}: success={}, failed={}", actor, successCount, failCount);
 
         return BulkInvoiceResponse.builder()
                 .totalContracts(contracts.size())
@@ -196,19 +205,22 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     private BigDecimal calculateSubtotal(Contract contract, InvoiceCreationRequest request) {
-        BigDecimal totalServicePrice = contract.getServices().stream()
+        // Lọc services theo thời gian hiệu lực và loại dịch vụ
+        List<ServiceEntity> applicableServices = getApplicableServices(contract, request.getInvoiceMonth(), request.getInvoiceYear());
+        
+        BigDecimal totalServicePrice = applicableServices.stream()
                 .map(ServiceEntity::getPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return switch (contract.getContractType()) {
             case ONE_TIME -> {
                 // Hợp đồng 1 lần: tính tổng giá dịch vụ
-                log.debug("ONE_TIME contract - Total service price: {}", totalServicePrice);
+                log.info("ONE_TIME contract - Total service price: {}", totalServicePrice);
                 yield totalServicePrice;
             }
             case MONTHLY_FIXED -> {
                 // Hợp đồng cố định hàng tháng: tính theo giá cố định
-                log.debug("MONTHLY_FIXED contract - Fixed monthly price: {}", totalServicePrice);
+                log.info("MONTHLY_FIXED contract - Fixed monthly price: {}", totalServicePrice);
                 yield totalServicePrice;
             }
             case MONTHLY_ACTUAL -> {
@@ -225,7 +237,7 @@ public class InvoiceServiceImpl implements InvoiceService {
                 BigDecimal contractDays = BigDecimal.valueOf(contractWorkingDays);
                 BigDecimal result = totalServicePrice.multiply(actualDays).divide(contractDays, 2, RoundingMode.HALF_UP);
                 
-                log.debug("MONTHLY_ACTUAL contract - Service price: {}, Actual days: {}, Contract days: {}, Result: {}",
+                log.info("MONTHLY_ACTUAL contract - Service price: {}, Actual days: {}, Contract days: {}, Result: {}",
                         totalServicePrice, actualDays, contractDays, result);
                 yield result;
             }
@@ -233,10 +245,13 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     private BigDecimal calculateTotalVat(Contract contract, BigDecimal subtotal, InvoiceCreationRequest request) {
+        // Lọc services theo thời gian hiệu lực và loại dịch vụ
+        List<ServiceEntity> applicableServices = getApplicableServices(contract, request.getInvoiceMonth(), request.getInvoiceYear());
+        
         // Tính tổng VAT dựa trên từng service
         BigDecimal totalVat = BigDecimal.ZERO;
         
-        for (ServiceEntity service : contract.getServices()) {
+        for (ServiceEntity service : applicableServices) {
             BigDecimal servicePrice = service.getPrice();
             BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
             
@@ -257,57 +272,93 @@ public class InvoiceServiceImpl implements InvoiceService {
             totalVat = totalVat.add(vatAmount);
         }
         
-        log.debug("Total VAT calculated: {} for subtotal: {}", totalVat, subtotal);
+        log.info("Total VAT calculated: {} for subtotal: {}", totalVat, subtotal);
         return totalVat;
+    }
+    
+    /**
+     * Lọc services áp dụng cho tháng/năm cụ thể dựa trên effectiveFrom và serviceType
+     */
+    private List<ServiceEntity> getApplicableServices(Contract contract, Integer month, Integer year) {
+        YearMonth invoiceMonth = YearMonth.of(year, month);
+        LocalDate firstDayOfMonth = invoiceMonth.atDay(1);
+        LocalDate lastDayOfMonth = invoiceMonth.atEndOfMonth();
+        
+        return contract.getServices().stream()
+                .filter(service -> {
+                    // Kiểm tra effectiveFrom
+                    if (service.getEffectiveFrom() == null) {
+                        log.warn("Service {} has null effectiveFrom, skipping", service.getId());
+                        return false;
+                    }
+                    
+                    // Với dịch vụ ONE_TIME: chỉ áp dụng trong tháng có effectiveFrom
+                    if (service.getServiceType() == ServiceType.ONE_TIME) {
+                        YearMonth serviceMonth = YearMonth.from(service.getEffectiveFrom());
+                        boolean applicable = serviceMonth.equals(invoiceMonth);
+                        log.info("Service {} (ONE_TIME, effectiveFrom={}): {} for invoice {}/{}",
+                                service.getId(), service.getEffectiveFrom(), 
+                                applicable ? "APPLICABLE" : "NOT APPLICABLE", month, year);
+                        return applicable;
+                    }
+                    
+                    // Với dịch vụ RECURRING: áp dụng từ effectiveFrom trở đi
+                    boolean applicable = !service.getEffectiveFrom().isAfter(lastDayOfMonth);
+                    log.info("Service {} (RECURRING, effectiveFrom={}): {} for invoice {}/{}",
+                            service.getId(), service.getEffectiveFrom(), 
+                            applicable ? "APPLICABLE" : "NOT APPLICABLE", month, year);
+                    return applicable;
+                })
+                .collect(Collectors.toList());
     }
 
     @Override
     public InvoiceResponse getInvoice(Long id) {
-        log.debug("getInvoice requested: id={}", id);
+        log.info("getInvoice requested: id={}", id);
         Invoice invoice = invoiceRepository.findById(id)
             .orElseThrow(() -> new AppException(ErrorCode.INVOICE_NOT_FOUND));
         InvoiceResponse resp = toInvoiceResponse(invoice);
-        log.debug("getInvoice completed: id={}, contractId={}", id, invoice.getContract() != null ? invoice.getContract().getId() : null);
+        log.info("getInvoice completed: id={}, contractId={}", id, invoice.getContract() != null ? invoice.getContract().getId() : null);
         return resp;
     }
 
     @Override
     public List<InvoiceResponse> getInvoicesByContract(Long contractId) {
-        log.debug("getInvoicesByContract requested: contractId={}", contractId);
+        log.info("getInvoicesByContract requested: contractId={}", contractId);
         List<InvoiceResponse> resp = invoiceRepository.findByContractId(contractId).stream()
             .map(this::toInvoiceResponse)
             .collect(Collectors.toList());
-        log.debug("getInvoicesByContract completed: contractId={}, count={}", contractId, resp.size());
+        log.info("getInvoicesByContract completed: contractId={}, count={}", contractId, resp.size());
         return resp;
     }
 
     @Override
     public List<InvoiceResponse> getInvoicesByCustomer(Long customerId) {
-        log.debug("getInvoicesByCustomer requested: customerId={}", customerId);
+        log.info("getInvoicesByCustomer requested: customerId={}", customerId);
         List<InvoiceResponse> resp = invoiceRepository.findByCustomerId(customerId).stream()
             .map(this::toInvoiceResponse)
             .collect(Collectors.toList());
-        log.debug("getInvoicesByCustomer completed: customerId={}, count={}", customerId, resp.size());
+        log.info("getInvoicesByCustomer completed: customerId={}, count={}", customerId, resp.size());
         return resp;
     }
 
     @Override
     public List<InvoiceResponse> getInvoicesByStatus(InvoiceStatus status) {
-        log.debug("getInvoicesByStatus requested: status={}", status);
+        log.info("getInvoicesByStatus requested: status={}", status);
         List<InvoiceResponse> resp = invoiceRepository.findByStatus(status).stream()
             .map(this::toInvoiceResponse)
             .collect(Collectors.toList());
-        log.debug("getInvoicesByStatus completed: status={}, count={}", status, resp.size());
+        log.info("getInvoicesByStatus completed: status={}, count={}", status, resp.size());
         return resp;
     }
 
     @Override
     public List<InvoiceResponse> getInvoicesByMonthAndYear(Integer month, Integer year) {
-        log.debug("getInvoicesByMonthAndYear requested: month={}, year={}", month, year);
+        log.info("getInvoicesByMonthAndYear requested: month={}, year={}", month, year);
         List<InvoiceResponse> resp = invoiceRepository.findByMonthAndYear(month, year).stream()
             .map(this::toInvoiceResponse)
             .collect(Collectors.toList());
-        log.debug("getInvoicesByMonthAndYear completed: month={}, year={}, count={}", month, year, resp.size());
+        log.info("getInvoicesByMonthAndYear completed: month={}, year={}, count={}", month, year, resp.size());
         return resp;
     }
 
@@ -315,7 +366,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public InvoiceResponse updateInvoice(Long id, InvoiceUpdateRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.debug("updateInvoice requested by {}: id={}, status={}, notesPresent={}", actor, id, request.getStatus(), request.getNotes() != null);
+        log.info("updateInvoice requested by {}: id={}, status={}, notesPresent={}", actor, id, request.getStatus(), request.getNotes() != null);
 
         Invoice invoice = invoiceRepository.findById(id)
             .orElseThrow(() -> new AppException(ErrorCode.INVOICE_NOT_FOUND));
@@ -332,7 +383,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
 
         invoice = invoiceRepository.save(invoice);
-        log.debug("Updated invoice {} by {}", id, actor);
+        log.info("Updated invoice {} by {}", id, actor);
 
         return toInvoiceResponse(invoice);
     }
@@ -341,13 +392,13 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public void deleteInvoice(Long id) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.debug("deleteInvoice requested by {}: id={}", actor, id);
+        log.info("deleteInvoice requested by {}: id={}", actor, id);
 
         if (!invoiceRepository.existsById(id)) {
             throw new AppException(ErrorCode.INVOICE_NOT_FOUND);
         }
         invoiceRepository.deleteById(id);
-        log.debug("Deleted invoice {} by {}", id, actor);
+        log.info("Deleted invoice {} by {}", id, actor);
     }
 
     private InvoiceResponse toInvoiceResponse(Invoice invoice) {
@@ -392,7 +443,7 @@ public class InvoiceServiceImpl implements InvoiceService {
             throw new AppException(ErrorCode.INVOICE_DATE_BEFORE_CONTRACT_START);
         }
         
-        log.debug("Invoice date validation passed: {}-{} >= contract start {}", 
+        log.info("Invoice date validation passed: {}-{} >= contract start {}", 
                 invoiceYear, invoiceMonth, contractStartDate);
     }
 
@@ -404,5 +455,244 @@ public class InvoiceServiceImpl implements InvoiceService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    @Override
+    public ByteArrayOutputStream exportInvoiceToExcel(Long invoiceId) {
+        String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
+        log.info("exportInvoiceToExcel requested by {}: invoiceId={}", actor, invoiceId);
+
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new AppException(ErrorCode.INVOICE_NOT_FOUND));
+
+        Contract contract = invoice.getContract();
+        Customer customer = contract.getCustomer();
+
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("Hóa đơn");
+
+            // Styles
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            CellStyle boldStyle = createBoldStyle(workbook);
+            CellStyle centerStyle = createCenterStyle(workbook);
+            CellStyle numberStyle = createNumberStyle(workbook);
+            CellStyle currencyStyle = createCurrencyStyle(workbook);
+
+            int rowNum = 0;
+
+            // Row 0-2: Company header (optional - you can customize)
+            Row row0 = sheet.createRow(rowNum++);
+            Cell companyCell = row0.createCell(0);
+            companyCell.setCellValue("HÓA ĐƠN GIÁ TRỊ GIA TĂNG");
+            companyCell.setCellStyle(boldStyle);
+
+            rowNum++; // Empty row
+
+            // Customer info
+            Row custRow1 = sheet.createRow(rowNum++);
+            custRow1.createCell(0).setCellValue("Khách hàng:");
+            custRow1.createCell(1).setCellValue(invoice.getCustomerName());
+
+            Row custRow2 = sheet.createRow(rowNum++);
+            custRow2.createCell(0).setCellValue("Địa chỉ:");
+            custRow2.createCell(1).setCellValue(invoice.getCustomerAddress() != null ? invoice.getCustomerAddress() : "");
+
+            Row custRow3 = sheet.createRow(rowNum++);
+            custRow3.createCell(0).setCellValue("Mã số thuế:");
+            custRow3.createCell(1).setCellValue(invoice.getCustomerTaxCode() != null ? invoice.getCustomerTaxCode() : "");
+
+            Row custRow4 = sheet.createRow(rowNum++);
+            custRow4.createCell(0).setCellValue("Số điện thoại:");
+            custRow4.createCell(1).setCellValue(customer.getPhone() != null ? customer.getPhone() : "");
+
+            Row invoiceInfoRow = sheet.createRow(rowNum++);
+            invoiceInfoRow.createCell(0).setCellValue("Hóa đơn tháng:");
+            invoiceInfoRow.createCell(1).setCellValue(invoice.getInvoiceMonth() + "/" + invoice.getInvoiceYear());
+
+            rowNum++; // Empty row
+
+            // Table header
+            Row headerRow = sheet.createRow(rowNum++);
+            String[] headers = {"STT", "Tên hàng hóa, dịch vụ", "Đơn vị tính", "Số lượng", "Đơn giá", 
+                               "Thành tiền", "Thuế suất GTGT", "Tiền thuế GTGT"};
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            // Service rows
+            Set<ServiceEntity> services = contract.getServices();
+            int stt = 1;
+            BigDecimal totalSubtotal = BigDecimal.ZERO;
+            BigDecimal totalVat = BigDecimal.ZERO;
+
+            for (ServiceEntity service : services) {
+                Row serviceRow = sheet.createRow(rowNum++);
+                
+                // STT
+                Cell sttCell = serviceRow.createCell(0);
+                sttCell.setCellValue(stt++);
+                sttCell.setCellStyle(centerStyle);
+
+                // Tên dịch vụ
+                serviceRow.createCell(1).setCellValue(service.getTitle());
+
+                // Đơn vị tính
+                String unit = getUnitByContractType(invoice.getInvoiceType());
+                serviceRow.createCell(2).setCellValue(unit);
+
+                // Số lượng
+                BigDecimal quantity = getQuantityByContractType(invoice, contract);
+                Cell qtyCell = serviceRow.createCell(3);
+                qtyCell.setCellValue(quantity.doubleValue());
+                qtyCell.setCellStyle(numberStyle);
+
+                // Đơn giá
+                BigDecimal unitPrice = service.getPrice();
+                Cell priceCell = serviceRow.createCell(4);
+                priceCell.setCellValue(unitPrice.doubleValue());
+                priceCell.setCellStyle(currencyStyle);
+
+                // Thành tiền
+                BigDecimal amount = calculateServiceAmount(service, invoice, contract);
+                Cell amountCell = serviceRow.createCell(5);
+                amountCell.setCellValue(amount.doubleValue());
+                amountCell.setCellStyle(currencyStyle);
+                totalSubtotal = totalSubtotal.add(amount);
+
+                // Thuế suất VAT
+                BigDecimal vatRate = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+                Cell vatRateCell = serviceRow.createCell(6);
+                vatRateCell.setCellValue(vatRate.doubleValue() + "%");
+                vatRateCell.setCellStyle(centerStyle);
+
+                // Tiền thuế VAT
+                BigDecimal vatAmount = calculateServiceVat(service, invoice, contract);
+                Cell vatAmountCell = serviceRow.createCell(7);
+                vatAmountCell.setCellValue(vatAmount.doubleValue());
+                vatAmountCell.setCellStyle(currencyStyle);
+                totalVat = totalVat.add(vatAmount);
+            }
+
+            rowNum++; // Empty row
+
+            // Total rows
+            Row totalRow1 = sheet.createRow(rowNum++);
+            totalRow1.createCell(4).setCellValue("Tổng tiền trước thuế:");
+            Cell subtotalCell = totalRow1.createCell(5);
+            subtotalCell.setCellValue(totalSubtotal.doubleValue());
+            subtotalCell.setCellStyle(currencyStyle);
+
+            Row totalRow2 = sheet.createRow(rowNum++);
+            totalRow2.createCell(4).setCellValue("Tổng tiền thuế GTGT:");
+            Cell totalVatCell = totalRow2.createCell(5);
+            totalVatCell.setCellValue(totalVat.doubleValue());
+            totalVatCell.setCellStyle(currencyStyle);
+
+            Row totalRow3 = sheet.createRow(rowNum++);
+            Cell totalLabelCell = totalRow3.createCell(4);
+            totalLabelCell.setCellValue("Tổng cộng thanh toán:");
+            totalLabelCell.setCellStyle(boldStyle);
+            Cell totalAmountCell = totalRow3.createCell(5);
+            totalAmountCell.setCellValue(invoice.getTotalAmount().doubleValue());
+            totalAmountCell.setCellStyle(currencyStyle);
+
+            // Auto-size columns
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(out);
+            log.info("exportInvoiceToExcel completed by {}: invoiceId={}", actor, invoiceId);
+            return out;
+
+        } catch (IOException e) {
+            log.error("Error exporting invoice to Excel: invoiceId={}", invoiceId, e);
+            throw new AppException(ErrorCode.INVOICE_NOT_FOUND);
+        }
+    }
+
+    private String getUnitByContractType(ContractType type) {
+        return switch (type) {
+            case MONTHLY_FIXED, MONTHLY_ACTUAL -> "Tháng";
+            case ONE_TIME -> "Lần";
+        };
+    }
+
+    private BigDecimal getQuantityByContractType(Invoice invoice, Contract contract) {
+        if (invoice.getInvoiceType() == ContractType.MONTHLY_ACTUAL && invoice.getActualWorkingDays() != null) {
+            return BigDecimal.valueOf(invoice.getActualWorkingDays());
+        }
+        return BigDecimal.valueOf(1); // Default to 1 for fixed or one-time
+    }
+
+    private BigDecimal calculateServiceAmount(ServiceEntity service, Invoice invoice, Contract contract) {
+        BigDecimal servicePrice = service.getPrice();
+        
+        if (invoice.getInvoiceType() == ContractType.MONTHLY_ACTUAL && invoice.getActualWorkingDays() != null) {
+            Integer contractWorkingDays = contract.getWorkingDaysPerWeek() != null && !contract.getWorkingDaysPerWeek().isEmpty()
+                    ? contract.getWorkingDaysPerWeek().size() * 4
+                    : 20;
+            
+            BigDecimal actualDays = BigDecimal.valueOf(invoice.getActualWorkingDays());
+            BigDecimal contractDays = BigDecimal.valueOf(contractWorkingDays);
+            return servicePrice.multiply(actualDays).divide(contractDays, 2, RoundingMode.HALF_UP);
+        }
+        
+        return servicePrice;
+    }
+
+    private BigDecimal calculateServiceVat(ServiceEntity service, Invoice invoice, Contract contract) {
+        BigDecimal amount = calculateServiceAmount(service, invoice, contract);
+        BigDecimal vatRate = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+        return amount.multiply(vatRate).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+    }
+
+    private CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 11);
+        style.setFont(font);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return style;
+    }
+
+    private CellStyle createBoldStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setBold(true);
+        style.setFont(font);
+        return style;
+    }
+
+    private CellStyle createCenterStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setAlignment(HorizontalAlignment.CENTER);
+        return style;
+    }
+
+    private CellStyle createNumberStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        DataFormat format = workbook.createDataFormat();
+        style.setDataFormat(format.getFormat("#,##0.00"));
+        style.setAlignment(HorizontalAlignment.RIGHT);
+        return style;
+    }
+
+    private CellStyle createCurrencyStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        DataFormat format = workbook.createDataFormat();
+        style.setDataFormat(format.getFormat("#,##0"));
+        style.setAlignment(HorizontalAlignment.RIGHT);
+        return style;
     }
 }

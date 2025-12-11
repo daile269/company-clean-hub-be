@@ -38,7 +38,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public List<UserResponse> getAllUsers() {
-    log.debug("getAllUsers requested by {}", getCurrentUsername());
+    log.info("getAllUsers requested by {}", getCurrentUsername());
         return userRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -46,7 +46,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public PageResponse<UserResponse> getUsersWithFilter(String keyword, Long roleId, int page, int pageSize) {
-        log.debug("getUsersWithFilter requested by {}: keyword='{}', roleId={}, page={}, pageSize={}", getCurrentUsername(), keyword, roleId, page, pageSize);
+        log.info("getUsersWithFilter requested by {}: keyword='{}', roleId={}, page={}, pageSize={}", getCurrentUsername(), keyword, roleId, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         Page<User> userPage = userRepository.findByFilters(keyword, roleId, pageable);
 
@@ -67,7 +67,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserResponse getUserById(Long id) {
-        log.debug("getUserById requested by {}: id={}", getCurrentUsername(), id);
+        log.info("getUserById requested by {}: id={}", getCurrentUsername(), id);
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
         return mapToResponse(user);
@@ -76,7 +76,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserResponse createUser(UserRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.debug("createUser requested by {}: username='{}', phone={}", actor, request.getUsername(), request.getPhone());
+        log.info("createUser requested by {}: username='{}', phone={}", actor, request.getUsername(), request.getPhone());
         // Kiểm tra trùng username
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
@@ -102,14 +102,14 @@ public class UserServiceImpl implements UserService {
                 .build();
 
         User savedUser = userRepository.save(user);
-        log.debug("createUser completed by {}: id={}", actor, savedUser.getId());
+        log.info("createUser completed by {}: id={}", actor, savedUser.getId());
         return mapToResponse(savedUser);
     }
 
     @Override
     public UserResponse updateUser(Long id, UserRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.debug("updateUser requested by {}: id={}, username='{}'", actor, id, request.getUsername());
+        log.info("updateUser requested by {}: id={}, username='{}'", actor, id, request.getUsername());
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
 
@@ -137,19 +137,19 @@ public class UserServiceImpl implements UserService {
         user.setUpdatedAt(LocalDateTime.now());
 
         User updatedUser = userRepository.save(user);
-        log.debug("updateUser completed by {}: id={}", actor, updatedUser.getId());
+        log.info("updateUser completed by {}: id={}", actor, updatedUser.getId());
         return mapToResponse(updatedUser);
     }
 
     @Override
     public void deleteUser(Long id) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.debug("deleteUser requested by {}: id={}", actor, id);
+        log.info("deleteUser requested by {}: id={}", actor, id);
         if (!userRepository.existsById(id)) {
             throw new AppException(ErrorCode.USER_IS_NOT_EXISTS);
         }
         userRepository.deleteById(id);
-        log.debug("deleteUser completed by {}: id={}", actor, id);
+        log.info("deleteUser completed by {}: id={}", actor, id);
     }
 
     private UserResponse mapToResponse(User user) {

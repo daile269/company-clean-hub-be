@@ -42,7 +42,7 @@ public class ContractServiceImpl implements ContractService {
 
     @Override
     public List<ContractResponse> getAllContracts() {
-                log.debug("getAllContracts requested");
+                log.info("getAllContracts requested");
         return contractRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -50,7 +50,7 @@ public class ContractServiceImpl implements ContractService {
 
     @Override
     public PageResponse<ContractResponse> getContractsWithFilter(String keyword, int page, int pageSize) {
-        log.debug("getContractsWithFilter requested: keyword='{}', page={}, pageSize={}", keyword, page, pageSize);
+        log.info("getContractsWithFilter requested: keyword='{}', page={}, pageSize={}", keyword, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         Page<Contract> contractPage = contractRepository.findByFilters(keyword, pageable);
 
@@ -71,7 +71,7 @@ public class ContractServiceImpl implements ContractService {
 
     @Override
     public ContractResponse getContractById(Long id) {
-        log.debug("getContractById requested: id={}", id);
+        log.info("getContractById requested: id={}", id);
         Contract contract = contractRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
         return mapToResponse(contract);
@@ -81,7 +81,7 @@ public class ContractServiceImpl implements ContractService {
     public ContractResponse createContract(ContractRequest request) {
         String username = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();
-        log.debug("createContract by {}: customerId={}, serviceCount={}", username, request.getCustomerId(),
+        log.info("createContract by {}: customerId={}, serviceCount={}", username, request.getCustomerId(),
                 request.getServiceIds() != null ? request.getServiceIds().size() : 0);
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
@@ -111,7 +111,7 @@ public class ContractServiceImpl implements ContractService {
                 .build();
 
         Contract savedContract = contractRepository.save(contract);
-                log.debug("createContract completed by {}: contractId={}", username, savedContract.getId());
+                log.info("createContract completed by {}: contractId={}", username, savedContract.getId());
         return mapToResponse(savedContract);
     }
 
@@ -119,7 +119,7 @@ public class ContractServiceImpl implements ContractService {
     public ContractResponse updateContract(Long id, ContractRequest request) {
         String username = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();
-        log.debug("updateContract by {}: id={}, serviceCount={}", username, id,
+        log.info("updateContract by {}: id={}, serviceCount={}", username, id,
                 request.getServiceIds() != null ? request.getServiceIds().size() : 0);
         Contract contract = contractRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
@@ -149,7 +149,7 @@ public class ContractServiceImpl implements ContractService {
         contract.setUpdatedAt(LocalDateTime.now());
 
         Contract updatedContract = contractRepository.save(contract);
-        log.debug("updateContract completed by {}: id={}", username, updatedContract.getId());
+        log.info("updateContract completed by {}: id={}", username, updatedContract.getId());
         return mapToResponse(updatedContract);
     }
 
@@ -157,16 +157,16 @@ public class ContractServiceImpl implements ContractService {
     public void deleteContract(Long id) {
         String username = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();
-        log.debug("deleteContract requested by {}: id={}", username, id);
+        log.info("deleteContract requested by {}: id={}", username, id);
         Contract contract = contractRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
         contractRepository.delete(contract);
-        log.debug("deleteContract completed: id={}", id);
+        log.info("deleteContract completed: id={}", id);
     }
 
     @Override
     public List<ContractResponse> getContractsByCustomer(Long customerId) {
-        log.debug("getContractsByCustomer requested: customerId={}", customerId);
+        log.info("getContractsByCustomer requested: customerId={}", customerId);
         customerRepository.findById(customerId)
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
         
@@ -181,7 +181,7 @@ public class ContractServiceImpl implements ContractService {
     public ContractResponse addServiceToContract(Long contractId, Long serviceId) {
         String username = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();
-        log.debug("addServiceToContract by {}: contractId={}, serviceId={}", username, contractId, serviceId);
+        log.info("addServiceToContract by {}: contractId={}, serviceId={}", username, contractId, serviceId);
         Contract contract = contractRepository.findById(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
         
@@ -196,7 +196,7 @@ public class ContractServiceImpl implements ContractService {
         contract.setUpdatedAt(LocalDateTime.now());
         
         Contract updatedContract = contractRepository.save(contract);
-        log.debug("addServiceToContract completed: contractId={}, newFinalPrice={}", updatedContract.getId(), updatedContract.getFinalPrice());
+        log.info("addServiceToContract completed: contractId={}, newFinalPrice={}", updatedContract.getId(), updatedContract.getFinalPrice());
         return mapToResponse(updatedContract);
     }
 
@@ -204,7 +204,7 @@ public class ContractServiceImpl implements ContractService {
     public ContractResponse removeServiceFromContract(Long contractId, Long serviceId) {
         String username = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();
-        log.debug("removeServiceFromContract by {}: contractId={}, serviceId={}", username, contractId, serviceId);
+        log.info("removeServiceFromContract by {}: contractId={}, serviceId={}", username, contractId, serviceId);
         Contract contract = contractRepository.findById(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
         
@@ -219,7 +219,7 @@ public class ContractServiceImpl implements ContractService {
         contract.setUpdatedAt(LocalDateTime.now());
         
         Contract updatedContract = contractRepository.save(contract);
-        log.debug("removeServiceFromContract completed: contractId={}, newFinalPrice={}", updatedContract.getId(), updatedContract.getFinalPrice());
+        log.info("removeServiceFromContract completed: contractId={}, newFinalPrice={}", updatedContract.getId(), updatedContract.getFinalPrice());
         return mapToResponse(updatedContract);
     }
 
@@ -231,6 +231,8 @@ public class ContractServiceImpl implements ContractService {
                         .description(service.getDescription())
                         .price(service.getPrice())
                         .vat(service.getVat())
+                        .effectiveFrom(service.getEffectiveFrom())
+                        .serviceType(service.getServiceType())
                         .createdAt(service.getCreatedAt())
                         .updatedAt(service.getUpdatedAt())
                         .build())
@@ -267,7 +269,7 @@ public class ContractServiceImpl implements ContractService {
 
     @Override
     public ContractResponse getContractByAssignmentId(Long assignmentId) {
-        log.debug("getContractByAssignmentId requested: assignmentId={}", assignmentId);
+        log.info("getContractByAssignmentId requested: assignmentId={}", assignmentId);
         Assignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
         

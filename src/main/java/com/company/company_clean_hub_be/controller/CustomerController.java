@@ -80,7 +80,7 @@ public class CustomerController {
 
     @GetMapping("/export/excel")
     public ResponseEntity<ByteArrayResource> exportCustomersWithContracts() {
-        log.debug("Export customers with contracts requested");
+        log.info("Export customers with contracts requested");
         try {
             List<CustomerContractGroupDto> customerGroups = customerService.getCustomersWithContractsForExport();
             ByteArrayResource resource = excelExportService.exportCustomersWithContractsToExcel(customerGroups);

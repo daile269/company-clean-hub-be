@@ -1,10 +1,13 @@
 package com.company.company_clean_hub_be.dto.request;
 
+import com.company.company_clean_hub_be.entity.EmploymentType;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
 
 @Data
 @NoArgsConstructor
@@ -35,7 +38,6 @@ public class EmployeeRequest {
     @Size(max = 50, message = "CCCD không được vượt quá 50 ký tự")
     private String cccd;
 
-    @Size(max = 255, message = "Địa chỉ không được vượt quá 255 ký tự")
     private String address;
 
     @NotBlank(message = "Tên nhân viên bắt buộc")
@@ -47,4 +49,16 @@ public class EmployeeRequest {
     private String bankName;
 
     private String description;
+
+    @NotNull(message = "Loại nhân viên bắt buộc")
+    @Builder.Default
+    private EmploymentType employmentType = EmploymentType.CONTRACT_STAFF;
+
+    // COMPANY_STAFF fields
+    private BigDecimal monthlySalary;
+
+    private BigDecimal allowance;
+
+    private BigDecimal insuranceSalary;
+
 }

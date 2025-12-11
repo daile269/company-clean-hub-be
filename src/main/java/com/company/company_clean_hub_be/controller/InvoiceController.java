@@ -10,9 +10,15 @@ import com.company.company_clean_hub_be.service.InvoiceService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.ByteArrayOutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -115,5 +121,29 @@ public class InvoiceController {
                 null,
                 HttpStatus.OK.value()
         );
+    }
+
+    @GetMapping("/{id}/export/excel")
+    public ResponseEntity<byte[]> exportInvoiceToExcel(@PathVariable Long id) {
+        ByteArrayOutputStream outputStream = invoiceService.exportInvoiceToExcel(id);
+
+        InvoiceResponse invoiceResponse = invoiceService.getInvoice(id);
+        String filename = URLEncoder.encode(
+                "Hóa đơn " + invoiceResponse.getCustomerName()
+                        + "_HĐ_"
+                        + invoiceResponse.getContractId()
+                        + "_"
+                        + invoiceResponse.getInvoiceMonth()
+                        + "-"
+                        + invoiceResponse.getInvoiceYear()
+                        + ".xlsx",
+                StandardCharsets.UTF_8
+        ).replaceAll("\\+", "%20");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentDispositionFormData("attachment", filename);
+        headers.setContentLength(outputStream.size());
+        
+        return new ResponseEntity<>(outputStream.toByteArray(), headers, HttpStatus.OK);
     }
 }

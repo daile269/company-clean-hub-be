@@ -46,8 +46,8 @@ public class PayrollServiceImpl implements PayrollService {
     private  final EmployeeRepository employeeRepository;
     @Override
     public PayrollResponse calculatePayroll(PayrollRequest request) {
-        log.debug("=== START calculatePayroll ===");
-        log.debug("Request: employeeId={}, month={}, year={}",
+        log.info("=== START calculatePayroll ===");
+        log.info("Request: employeeId={}, month={}, year={}",
                 request.getEmployeeId(), request.getMonth(), request.getYear());
 
         Employee employee = employeeRepository.findById(request.getEmployeeId())
@@ -180,15 +180,15 @@ public class PayrollServiceImpl implements PayrollService {
     @Override
     public List<PayRollAssignmentExportExcel> getAllPayRollByAssignment(Integer month, Integer year) {
 
-        log.debug("[PAYROLL-EXPORT] ===== START getAllPayRollByAssignment(month={}, year={}) =====", month, year);
+        log.info("[PAYROLL-EXPORT] ===== START getAllPayRollByAssignment(month={}, year={}) =====", month, year);
 
         List<Employee> employees = employeeRepository.findDistinctEmployeesByAssignmentMonthYear(month, year);
-        log.debug("[PAYROLL-EXPORT] Found {} employees with assignments in month/year",
+        log.info("[PAYROLL-EXPORT] Found {} employees with assignments in month/year",
                 employees != null ? employees.size() : null);
 
         List<PayRollAssignmentExportExcel> result = new ArrayList<>();
         if (employees == null || employees.isEmpty()) {
-            log.debug("[PAYROLL-EXPORT] No employees found. RETURN empty list.");
+            log.info("[PAYROLL-EXPORT] No employees found. RETURN empty list.");
             return result;
         }
 
@@ -197,22 +197,22 @@ public class PayrollServiceImpl implements PayrollService {
 
         for (Employee employee : employees) {
             Long employeeId = employee.getId();
-            log.debug("[PAYROLL-EXPORT] --- PROCESS EMPLOYEE id={}, name={} ---",
+            log.info("[PAYROLL-EXPORT] --- PROCESS EMPLOYEE id={}, name={} ---",
                     employeeId, employee.getName());
 
             List<Assignment> assignments = assignmentRepository
                     .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId,null);
-            log.debug("[PAYROLL-EXPORT] Employee {} has {} assignments",
+            log.info("[PAYROLL-EXPORT] Employee {} has {} assignments",
                     employeeId, assignments != null ? assignments.size() : null);
 
             if (assignments == null || assignments.isEmpty()) {
-                log.debug("[PAYROLL-EXPORT] Employee {} has NO assignments. Skip.", employeeId);
+                log.info("[PAYROLL-EXPORT] Employee {} has NO assignments. Skip.", employeeId);
                 continue;
             }
 
             Payroll persistedPayroll = upsertPayrollFromAssignments(employee, assignments, month, year, accountant);
             if (persistedPayroll == null) {
-                log.debug("[PAYROLL-EXPORT] Employee {} skipped because no attendance was found.", employeeId);
+                log.info("[PAYROLL-EXPORT] Employee {} skipped because no attendance was found.", employeeId);
                 continue;
             }
 
@@ -276,7 +276,7 @@ public class PayrollServiceImpl implements PayrollService {
                 totalPenalty = totalPenalty.add(assignmentPenalty);
                 totalAllowance = totalAllowance.add(assignmentAllowance);
                 
-                log.debug("[PAYROLL-EXPORT] Added assignment row for employee {} assignment {}", employeeId, assignment.getId());
+                log.info("[PAYROLL-EXPORT] Added assignment row for employee {} assignment {}", employeeId, assignment.getId());
             }
 
             // Add total row for this employee
@@ -306,10 +306,10 @@ public class PayrollServiceImpl implements PayrollService {
                     .build();
 
             result.add(totalRow);
-            log.debug("[PAYROLL-EXPORT] Added total row for employee {}", employeeId);
+            log.info("[PAYROLL-EXPORT] Added total row for employee {}", employeeId);
         }
 
-        log.debug("[PAYROLL-EXPORT] ===== FINISHED getAllPayRollByAssignment. Total rows={} =====",
+        log.info("[PAYROLL-EXPORT] ===== FINISHED getAllPayRollByAssignment. Total rows={} =====",
                 result.size());
 
         return result;
@@ -345,7 +345,7 @@ public class PayrollServiceImpl implements PayrollService {
                 .findAttendancesByMonthYearAndEmployee(month, year, employee.getId());
 
         if (attendances == null || attendances.isEmpty()) {
-            log.debug("[PAYROLL-EXPORT] Employee {} has NO attendance. Skip payroll.", employee.getId());
+            log.info("[PAYROLL-EXPORT] Employee {} has NO attendance. Skip payroll.", employee.getId());
             return null;
         }
 
@@ -440,32 +440,32 @@ public class PayrollServiceImpl implements PayrollService {
 
     @Override
     public PayrollResponse getPayrollById(Long id) {
-        log.debug("getPayrollById requested: id={}", id);
+        log.info("getPayrollById requested: id={}", id);
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
         
         LocalDateTime createdAt = payroll.getCreatedAt();
                 PayrollResponse resp = mapToResponse(payroll, createdAt.getMonthValue(), createdAt.getYear(), null);
-                log.debug("getPayrollById completed: id={}, employeeId={}", id, resp.getEmployeeId());
+                log.info("getPayrollById completed: id={}, employeeId={}", id, resp.getEmployeeId());
                 return resp;
     }
 
     @Override
     public List<PayrollResponse> getAllPayrolls() {
-                log.debug("getAllPayrolls requested");
+                log.info("getAllPayrolls requested");
                 List<PayrollResponse> result = payrollRepository.findAll().stream()
                                 .map(p -> {
                                         LocalDateTime createdAt = p.getCreatedAt();
                                         return mapToResponse(p, createdAt.getMonthValue(), createdAt.getYear(), null);
                                 })
                                 .collect(Collectors.toList());
-                log.debug("getAllPayrolls completed: count={}", result.size());
+                log.info("getAllPayrolls completed: count={}", result.size());
                 return result;
     }
 
     @Override
     public PageResponse<PayrollResponse> getPayrollsWithFilter(String keyword, Integer month, Integer year, Boolean isPaid, int page, int pageSize) {
-                log.debug("getPayrollsWithFilter requested: keyword='{}', month={}, year={}, isPaid={}, page={}, pageSize={}", keyword, month, year, isPaid, page, pageSize);
+                log.info("getPayrollsWithFilter requested: keyword='{}', month={}, year={}, isPaid={}, page={}, pageSize={}", keyword, month, year, isPaid, page, pageSize);
                 Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         Page<Payroll> payrollPage = payrollRepository.findByFilters(keyword, month, year, isPaid, pageable);
 
@@ -476,7 +476,7 @@ public class PayrollServiceImpl implements PayrollService {
                 })
                 .collect(Collectors.toList());
 
-                log.debug("getPayrollsWithFilter completed: returned={}, totalElements={}", payrolls.size(), payrollPage.getTotalElements());
+                log.info("getPayrollsWithFilter completed: returned={}, totalElements={}", payrolls.size(), payrollPage.getTotalElements());
 
         return PageResponse.<PayrollResponse>builder()
                 .content(payrolls)
@@ -491,7 +491,7 @@ public class PayrollServiceImpl implements PayrollService {
 
     @Override
     public PayrollResponse updatePaymentStatus(Long id, Boolean isPaid) {
-                log.debug("updatePaymentStatus requested: id={}, isPaid={}", id, isPaid);
+                log.info("updatePaymentStatus requested: id={}, isPaid={}", id, isPaid);
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
         
@@ -502,7 +502,7 @@ public class PayrollServiceImpl implements PayrollService {
         payroll.setUpdatedAt(LocalDateTime.now());
         
         Payroll updatedPayroll = payrollRepository.save(payroll);
-                log.debug("updatePaymentStatus completed: id={}, isPaid={}", id, isPaid);
+                log.info("updatePaymentStatus completed: id={}, isPaid={}", id, isPaid);
         LocalDateTime createdAt = updatedPayroll.getCreatedAt();
         return mapToResponse(updatedPayroll, createdAt.getMonthValue(), createdAt.getYear(), null);
     }
@@ -510,7 +510,7 @@ public class PayrollServiceImpl implements PayrollService {
     @Override
     public PayrollResponse updatePayroll(Long id, PayrollUpdateRequest request) {
 
-        log.debug("[PAYROLL-DEBUG] ===== START updatePayroll(id={}) =====", id);
+        log.info("[PAYROLL-DEBUG] ===== START updatePayroll(id={}) =====", id);
 
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
@@ -585,7 +585,7 @@ public class PayrollServiceImpl implements PayrollService {
 
         Payroll updated = payrollRepository.save(payroll);
 
-        log.debug("[PAYROLL-DEBUG] ===== END updatePayroll(id={}) =====", id);
+        log.info("[PAYROLL-DEBUG] ===== END updatePayroll(id={}) =====", id);
 
         return mapToResponse(updated, month, year, employeeId);
     }
@@ -593,22 +593,22 @@ public class PayrollServiceImpl implements PayrollService {
 
     @Override
     public void deletePayroll(Long id) {
-                log.debug("deletePayroll requested: id={}", id);
+                log.info("deletePayroll requested: id={}", id);
         if (!payrollRepository.existsById(id)) {
             throw new AppException(ErrorCode.PAYROLL_NOT_FOUND);
         }
         payrollRepository.deleteById(id);
-                log.debug("deletePayroll completed: id={}", id);
+                log.info("deletePayroll completed: id={}", id);
     }
 
     private PayrollResponse mapToResponse(Payroll payroll, Integer month, Integer year, Long fallbackEmployeeId) {
 
-        log.debug("=== mapToResponse START ===");
-        log.debug("Input payrollId: {}, month: {}, year: {}, fallbackEmployeeId: {}",
+        log.info("=== mapToResponse START ===");
+        log.info("Input payrollId: {}, month: {}, year: {}, fallbackEmployeeId: {}",
                 payroll != null ? payroll.getId() : null, month, year, fallbackEmployeeId);
 
         User accountant = payroll.getAccountant();
-        log.debug("Accountant: {}", accountant != null ? accountant.getUsername() : "null");
+        log.info("Accountant: {}", accountant != null ? accountant.getUsername() : "null");
 
         Long employeeId = null;
         String employeeName = null;
@@ -616,13 +616,13 @@ public class PayrollServiceImpl implements PayrollService {
         BigDecimal salaryBase = BigDecimal.ZERO;
 
         // Get employee directly from payroll (new architecture)
-        log.debug("Step 1: Check payroll.getEmployee() ...");
+        log.info("Step 1: Check payroll.getEmployee() ...");
         if (payroll.getEmployee() != null) {
             Employee emp = payroll.getEmployee();
             employeeId = emp.getId();
             employeeName = emp.getName();
             employeeCode = emp.getEmployeeCode();
-            log.debug("Employee found from payroll.employee: id={}, name={}, code={}",
+            log.info("Employee found from payroll.employee: id={}, name={}, code={}",
                     employeeId, employeeName, employeeCode);
 
             // Get salary base from first assignment if available
@@ -630,13 +630,13 @@ public class PayrollServiceImpl implements PayrollService {
                     .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId, null);
             if (!assignments.isEmpty()) {
                 salaryBase = assignments.get(0).getSalaryAtTime();
-                log.debug("Salary base from assignment: {}", salaryBase);
+                log.info("Salary base from assignment: {}", salaryBase);
             }
         } else {
-            log.debug("WARNING: payroll.getEmployee() is null!");
+            log.info("WARNING: payroll.getEmployee() is null!");
         }
 
-        log.debug("Building PayrollResponse ...");
+        log.info("Building PayrollResponse ...");
 
         PayrollResponse response = PayrollResponse.builder()
                 .id(payroll.getId())
@@ -661,7 +661,7 @@ public class PayrollServiceImpl implements PayrollService {
                 .updatedAt(payroll.getUpdatedAt())
                 .build();
 
-        log.debug("=== mapToResponse END === PayRes: {}", response);
+        log.info("=== mapToResponse END === PayRes: {}", response);
 
         return response;
     }

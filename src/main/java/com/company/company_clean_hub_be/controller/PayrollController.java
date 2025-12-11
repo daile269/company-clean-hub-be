@@ -99,9 +99,9 @@ public class PayrollController {
             @PathVariable Integer month,
             @PathVariable Integer year) {
 
-        log.debug("🔵 [EXPORT PAYROLL] Request nhận được: month={}, year={}", month, year);
+        log.info("🔵 [EXPORT PAYROLL] Request nhận được: month={}, year={}", month, year);
         List<PayRollAssignmentExportExcel> assignmentData = payrollService.getAllPayRollByAssignment(month, year);
-        log.debug("🟢 [EXPORT PAYROLL] Số lượng dòng payroll lấy được: {}",
+        log.info("🟢 [EXPORT PAYROLL] Số lượng dòng payroll lấy được: {}",
                 assignmentData != null ? assignmentData.size() : 0);
 
         // Use new export method
@@ -111,7 +111,7 @@ public class PayrollController {
         if (excelFile == null) {
             log.warn("⚠️ [EXPORT PAYROLL] excelFile = null → Không tạo được file Excel!");
         } else {
-            log.debug("🟩 [EXPORT PAYROLL] File Excel đã tạo. Kích thước: {} bytes",
+            log.info("🟩 [EXPORT PAYROLL] File Excel đã tạo. Kích thước: {} bytes",
                     excelFile.contentLength());
         }
 

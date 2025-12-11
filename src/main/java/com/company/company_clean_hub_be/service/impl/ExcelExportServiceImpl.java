@@ -201,7 +201,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
     }
 
     public ByteArrayResource exportPayrollAssignmentsToExcel(List<PayRollAssignmentExportExcel> assignmentData, Integer month, Integer year) {
-        log.debug("exportPayrollAssignmentsToExcel started: total rows={}", assignmentData.size());
+        log.info("exportPayrollAssignmentsToExcel started: total rows={}", assignmentData.size());
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Bảng lương");
 
@@ -344,7 +344,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);
             ByteArrayResource resource = new ByteArrayResource(outputStream.toByteArray());
-            log.debug("exportPayrollAssignmentsToExcel completed successfully");
+            log.info("exportPayrollAssignmentsToExcel completed successfully");
             return resource;
         } catch (IOException e) {
             log.error("Error exporting payroll to Excel", e);
@@ -550,7 +550,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
     @Override
     public ByteArrayResource exportCustomersWithContractsToExcel(List<CustomerContractGroupDto> customerGroups) {
-        log.debug("exportCustomersWithContractsToExcel started: total customers={}", customerGroups.size());
+        log.info("exportCustomersWithContractsToExcel started: total customers={}", customerGroups.size());
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Danh sách khách hàng");
 
@@ -722,7 +722,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);
             ByteArrayResource resource = new ByteArrayResource(outputStream.toByteArray());
-            log.debug("exportCustomersWithContractsToExcel completed successfully");
+            log.info("exportCustomersWithContractsToExcel completed successfully");
             return resource;
         } catch (IOException e) {
             log.error("Error exporting customers to Excel", e);
@@ -786,7 +786,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
     @Override
     public ByteArrayResource exportEmployeesToExcel(List<EmployeeExportDto> employees) {
-        log.debug("exportEmployeesToExcel requested with {} employees", employees.size());
+        log.info("exportEmployeesToExcel requested with {} employees", employees.size());
         try (Workbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
 

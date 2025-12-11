@@ -33,7 +33,7 @@ public class FileStorageServiceImpl implements FileStorageService {
 
     public String storeFileToFolder(MultipartFile file, String folder) throws IOException {
         String originalFileName = file.getOriginalFilename();
-        log.debug("Uploading file to Cloudinary: originalName={}, folder={}", originalFileName, folder);
+        log.info("Uploading file to Cloudinary: originalName={}, folder={}", originalFileName, folder);
 
         File tempFile = null;
         try (InputStream inputStream = file.getInputStream()) {
@@ -54,7 +54,7 @@ public class FileStorageServiceImpl implements FileStorageService {
             String publicId = (String) uploadResult.get("public_id");
             String secureUrl = (String) uploadResult.get("secure_url");
 
-            log.debug("File uploaded successfully to Cloudinary: publicId={}, url={}", publicId, secureUrl);
+            log.info("File uploaded successfully to Cloudinary: publicId={}, url={}", publicId, secureUrl);
 
             return publicId;
         } catch (IOException ex) {
@@ -75,7 +75,7 @@ public class FileStorageServiceImpl implements FileStorageService {
     public void deleteFile(String relativePath) throws IOException {
         if (relativePath == null || relativePath.isEmpty()) return;
         
-        log.debug("Deleting file from Cloudinary: publicId={}", relativePath);
+        log.info("Deleting file from Cloudinary: publicId={}", relativePath);
         
         try {
             @SuppressWarnings("unchecked")
@@ -85,7 +85,7 @@ public class FileStorageServiceImpl implements FileStorageService {
             );
             
             String result = (String) deleteResult.get("result");
-            log.debug("File deletion result: {}", result);
+            log.info("File deletion result: {}", result);
             
             if (!"ok".equals(result)) {
                 log.warn("Cloudinary delete returned: {}", result);

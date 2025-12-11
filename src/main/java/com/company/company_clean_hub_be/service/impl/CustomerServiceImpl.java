@@ -49,7 +49,7 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     public List<CustomerContractGroupDto> getCustomersWithContractsForExport() {
-        log.debug("getCustomersWithContractsForExport requested");
+        log.info("getCustomersWithContractsForExport requested");
         
         List<CustomerContractServiceFlatDto> flatData = contractRepository.findAllCustomerContractServicesFlat();
         
@@ -123,7 +123,7 @@ public class CustomerServiceImpl implements CustomerService {
                     .collect(Collectors.toList()));
         }
         
-        log.debug("getCustomersWithContractsForExport completed: total customers={}", customerMap.size());
+        log.info("getCustomersWithContractsForExport completed: total customers={}", customerMap.size());
         return new ArrayList<>(customerMap.values());
     }
     
@@ -172,7 +172,7 @@ public class CustomerServiceImpl implements CustomerService {
     public CustomerResponse getCustomerById(Long id) {
         Customer customer = customerRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
-        log.debug("getCustomerById requested: id={}", id);
+        log.info("getCustomerById requested: id={}", id);
         return mapToResponse(customer);
     }
 
@@ -180,7 +180,7 @@ public class CustomerServiceImpl implements CustomerService {
     public CustomerResponse createCustomer(CustomerRequest request) {
         String username = org.springframework.security.core.context.SecurityContextHolder
             .getContext().getAuthentication().getName();
-        log.debug("createCustomer by {}: username={}, customerCode={}", username, request.getUsername(), request.getCustomerCode());
+        log.info("createCustomer by {}: username={}, customerCode={}", username, request.getUsername(), request.getCustomerCode());
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
@@ -203,7 +203,7 @@ public class CustomerServiceImpl implements CustomerService {
                 .build();
 
         Customer savedCustomer = customerRepository.save(customer);
-        log.debug("createCustomer completed by {}: customerId={}", username, savedCustomer.getId());
+        log.info("createCustomer completed by {}: customerId={}", username, savedCustomer.getId());
         return mapToResponse(savedCustomer);
     }
 
@@ -211,7 +211,7 @@ public class CustomerServiceImpl implements CustomerService {
     public CustomerResponse updateCustomer(Long id, CustomerRequest request) {
         String username = org.springframework.security.core.context.SecurityContextHolder
             .getContext().getAuthentication().getName();
-        log.debug("updateCustomer by {}: id={}, username={}", username, id, request.getUsername());
+        log.info("updateCustomer by {}: id={}, username={}", username, id, request.getUsername());
         Customer customer = customerRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
@@ -236,7 +236,7 @@ public class CustomerServiceImpl implements CustomerService {
         customer.setUpdatedAt(LocalDateTime.now());
 
         Customer updatedCustomer = customerRepository.save(customer);
-        log.debug("updateCustomer completed by {}: id={}", username, updatedCustomer.getId());
+        log.info("updateCustomer completed by {}: id={}", username, updatedCustomer.getId());
         return mapToResponse(updatedCustomer);
     }
 
@@ -244,12 +244,12 @@ public class CustomerServiceImpl implements CustomerService {
     public void deleteCustomer(Long id) {
         String username = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();
-        log.debug("deleteCustomer requested by {}: id={}", username, id);
+        log.info("deleteCustomer requested by {}: id={}", username, id);
         if (!customerRepository.existsById(id)) {
             throw new AppException(ErrorCode.CUSTOMER_NOT_FOUND);
         }
         customerRepository.deleteById(id);
-        log.debug("deleteCustomer completed: id={}", id);
+        log.info("deleteCustomer completed: id={}", id);
     }
 
     private CustomerResponse mapToResponse(Customer customer) {

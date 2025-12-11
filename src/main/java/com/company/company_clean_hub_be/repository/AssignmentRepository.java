@@ -84,6 +84,20 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
             @Param("employeeId") Long employeeId,
             @Param("contractId") Long contractId
     );
+
+    @Query("SELECT a FROM Assignment a " +
+           "WHERE a.employee.id = :employeeId " +
+           "AND (:customerId IS NULL OR a.contract.customer.id = :customerId) " +
+           "AND (:month IS NULL OR MONTH(a.startDate) = :month) " +
+           "AND (:year IS NULL OR YEAR(a.startDate) = :year) " +
+           "ORDER BY a.startDate DESC")
+    Page<Assignment> findAssignmentsByEmployeeWithFilters(
+            @Param("employeeId") Long employeeId,
+            @Param("customerId") Long customerId,
+            @Param("month") Integer month,
+            @Param("year") Integer year,
+            Pageable pageable
+    );
     
     @Query("SELECT a FROM Assignment a " +
            "WHERE a.employee.id = :employeeId " +
@@ -135,4 +149,6 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
               "AND a.status = 'IN_PROGRESS' " +
               "AND a.startDate <= :endOfLastMonth")
        List<Assignment> findExpiredFixedAssignments(@Param("endOfLastMonth") LocalDate endOfLastMonth);
+
+        List<Assignment> findByEmployeeId(Long employeeId);
 }

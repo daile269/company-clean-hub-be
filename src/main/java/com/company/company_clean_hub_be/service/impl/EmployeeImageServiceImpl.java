@@ -53,18 +53,18 @@ public class EmployeeImageServiceImpl implements EmployeeImageService {
 
     @Override
     public EmployeeImage uploadImage(Long employeeId, MultipartFile file) throws IOException {
-        log.debug("EmployeeImageService.uploadImage - start: employeeId={}, originalFilename={}, size={}, contentType={}",
+        log.info("EmployeeImageService.uploadImage - start: employeeId={}, originalFilename={}, size={}, contentType={}",
             employeeId, file.getOriginalFilename(), file.getSize(), file.getContentType());
 
         Employee employee = employeeRepository.findById(employeeId)
             .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
-        log.debug("Employee found: id={}, username={}", employee.getId(), employee.getUsername());
+        log.info("Employee found: id={}, username={}", employee.getId(), employee.getUsername());
 
         // Upload to Cloudinary
         String publicId = fileStorageService.storeFile(file);
         
-        log.debug("File stored to Cloudinary: publicId={}", publicId);
+        log.info("File stored to Cloudinary: publicId={}", publicId);
 
         EmployeeImage image = EmployeeImage.builder()
             .employee(employee)
@@ -73,14 +73,14 @@ public class EmployeeImageServiceImpl implements EmployeeImageService {
             .build();
 
         EmployeeImage saved = repository.save(image);
-        log.debug("EmployeeImage saved: imageId={}, employeeId={}, publicId={}", 
+        log.info("EmployeeImage saved: imageId={}, employeeId={}, publicId={}", 
             saved.getId(), employeeId, publicId);
         return saved;
     }
 
     @Override
     public EmployeeImage replaceImage(Long employeeId, Long imageId, MultipartFile file) throws IOException {
-        log.debug("EmployeeImageService.replaceImage - start: employeeId={}, imageId={}, originalFilename={}, size={}",
+        log.info("EmployeeImageService.replaceImage - start: employeeId={}, imageId={}, originalFilename={}, size={}",
                 employeeId, imageId, file.getOriginalFilename(), file.getSize());
 
         EmployeeImage existing = repository.findById(imageId)
@@ -92,7 +92,7 @@ public class EmployeeImageServiceImpl implements EmployeeImageService {
 
         // Delete old image from Cloudinary
         if (existing.getCloudinaryPublicId() != null && !existing.getCloudinaryPublicId().isEmpty()) {
-            log.debug("Deleting existing image from Cloudinary: publicId={}", existing.getCloudinaryPublicId());
+            log.info("Deleting existing image from Cloudinary: publicId={}", existing.getCloudinaryPublicId());
             fileStorageService.deleteFile(existing.getCloudinaryPublicId());
         }
 
@@ -103,14 +103,14 @@ public class EmployeeImageServiceImpl implements EmployeeImageService {
         existing.setUploadedAt(LocalDateTime.now());
         
         EmployeeImage saved = repository.save(existing);
-        log.debug("Replaced image saved: imageId={}, newPublicId={}", 
+        log.info("Replaced image saved: imageId={}, newPublicId={}", 
             saved.getId(), publicId);
         return saved;
     }
 
     @Override
     public void deleteImage(Long employeeId, Long imageId) throws IOException {
-        log.debug("EmployeeImageService.deleteImage - start: employeeId={}, imageId={}", employeeId, imageId);
+        log.info("EmployeeImageService.deleteImage - start: employeeId={}, imageId={}", employeeId, imageId);
 
         EmployeeImage existing = repository.findById(imageId)
                 .orElseThrow(() -> new AppException(ErrorCode.IMAGE_NOT_FOUND));
@@ -121,23 +121,23 @@ public class EmployeeImageServiceImpl implements EmployeeImageService {
 
         // Delete from Cloudinary
         if (existing.getCloudinaryPublicId() != null && !existing.getCloudinaryPublicId().isEmpty()) {
-            log.debug("Deleting image from Cloudinary: publicId={}", existing.getCloudinaryPublicId());
+            log.info("Deleting image from Cloudinary: publicId={}", existing.getCloudinaryPublicId());
             fileStorageService.deleteFile(existing.getCloudinaryPublicId());
         }
         
         repository.deleteById(imageId);
-        log.debug("EmployeeImage deleted: imageId={}", imageId);
+        log.info("EmployeeImage deleted: imageId={}", imageId);
     }
 
     @Override
     public Resource loadAsResource(String relativePath) throws IOException {
-        log.debug("EmployeeImageService.loadAsResource - relativePath={}", relativePath);
+        log.info("EmployeeImageService.loadAsResource - relativePath={}", relativePath);
         return fileStorageService.loadFileAsResource(relativePath);
     }
 
     @Override
     public java.util.List<EmployeeImage> findByEmployeeId(Long employeeId) {
-        log.debug("EmployeeImageService.findByEmployeeId - employeeId={}", employeeId);
+        log.info("EmployeeImageService.findByEmployeeId - employeeId={}", employeeId);
         return repository.findByEmployeeId(employeeId);
     }
 }

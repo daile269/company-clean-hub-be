@@ -6,6 +6,7 @@ import com.company.company_clean_hub_be.dto.response.BulkInvoiceResponse;
 import com.company.company_clean_hub_be.dto.response.InvoiceResponse;
 import com.company.company_clean_hub_be.entity.InvoiceStatus;
 
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 
 public interface InvoiceService {
@@ -18,4 +19,5 @@ public interface InvoiceService {
     List<InvoiceResponse> getInvoicesByMonthAndYear(Integer month, Integer year);
     InvoiceResponse updateInvoice(Long id, InvoiceUpdateRequest request);
     void deleteInvoice(Long id);
+    ByteArrayOutputStream exportInvoiceToExcel(Long invoiceId);
 }
