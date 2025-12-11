@@ -41,18 +41,19 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     boolean existsByPhoneAndIdNot(String phone, Long id);
 
     @Query("SELECT e FROM Employee e " +
-            "WHERE e.employmentType = 'CONTRACT_STAFF' " +
+            "WHERE (:employmentType IS NULL OR e.employmentType = :employmentType) " +
             "AND e.id NOT IN (" +
             "SELECT a.employee.id FROM Assignment a " +
             "WHERE a.contract.customer.id = :customerId " +
             "AND a.status = 'IN_PROGRESS')")
     Page<Employee> findEmployeesNotAssignedToCustomer(
             @Param("customerId") Long customerId,
+            @Param("employmentType") com.company.company_clean_hub_be.entity.EmploymentType employmentType,
             Pageable pageable
     );
     
     @Query("SELECT e FROM Employee e " +
-            "WHERE e.employmentType = 'CONTRACT_STAFF' " +
+            "WHERE (:employmentType IS NULL OR e.employmentType = :employmentType) " +
             "AND e.id NOT IN (" +
             "SELECT a.employee.id FROM Assignment a " +
             "WHERE a.contract.customer.id = :customerId " +
@@ -60,6 +61,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
             "AND (:year IS NULL OR YEAR(a.startDate) = :year))")
     Page<Employee> findEmployeesNotAssignedToCustomerByMonth(
             @Param("customerId") Long customerId,
+            @Param("employmentType") com.company.company_clean_hub_be.entity.EmploymentType employmentType,
             @Param("month") Integer month,
             @Param("year") Integer year,
             Pageable pageable

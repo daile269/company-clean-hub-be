@@ -39,11 +39,10 @@ public class Assignment {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "contract_id")
-    @NotNull
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     @JsonIgnore
-    private Contract contract;
+    private Contract contract;  // Nullable for COMPANY scope
 
     @Column(name = "start_date")
     @NotNull
@@ -82,6 +81,11 @@ public class Assignment {
 
     @Enumerated(EnumType.STRING)
     private AssignmentType assignmentType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "scope", nullable = false, length = 20)
+    @Builder.Default
+    private AssignmentScope scope = AssignmentScope.CONTRACT;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

@@ -151,11 +151,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (employeeRepository.existsByCccdAndIdNot(request.getCccd(), id)) {
             throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
         }
-        
-        // Kiểm tra trùng bankAccount (ngoại trừ chính nó)
-        if (request.getBankAccount() != null && employeeRepository.existsByBankAccountAndIdNot(request.getBankAccount(), id)) {
-            throw new AppException(ErrorCode.BANK_ACCOUNT_ALREADY_EXISTS);
-        }
+
         
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));

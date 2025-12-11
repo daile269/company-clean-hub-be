@@ -70,52 +70,78 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         return mapToResponse(assignment);
     }
-
-
     @Override
     @Transactional
     public AssignmentResponse createAssignment(AssignmentRequest request) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        log.info("createAssignment by {}: employeeId={}, contractId={}, startDate={}",
-                username, request.getEmployeeId(), request.getContractId(), request.getStartDate());
+        log.info("createAssignment by {}: employeeId={}, contractId={}, scope={}, startDate={}",
+                username, request.getEmployeeId(), request.getContractId(), request.getScope(), request.getStartDate());
 
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
-        // Kiểm tra loại nhân viên - chỉ CONTRACT_STAFF mới được phân công
-        if (employee.getEmploymentType() == EmploymentType.COMPANY_STAFF) {
-            throw new AppException(ErrorCode.COMPANY_STAFF_CANNOT_BE_ASSIGNED);
-        }
+        AssignmentScope scope = request.getScope() != null ? request.getScope() : AssignmentScope.CONTRACT;
+        Contract contract = null;
+        List<java.time.DayOfWeek> workingDays = null;
 
-        Contract contract = contractRepository.findById(request.getContractId())
-                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
-
-        // Kiểm tra ngày bắt đầu assignment không được trước ngày bắt đầu contract
-        if (request.getStartDate().isBefore(contract.getStartDate())) {
-            throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
-        }
-
-        // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (status IN_PROGRESS)
-        if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
-            List<Assignment> existingAssignments = assignmentRepository
-                    .findActiveAssignmentByEmployeeAndContract(request.getEmployeeId(), request.getContractId());
-            if (!existingAssignments.isEmpty()) {
-                throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
+        // Xử lý theo scope
+        if (scope == AssignmentScope.CONTRACT) {
+            // CONTRACT scope: require contract, get workingDaysPerWeek from contract
+            if (request.getContractId() == null) {
+                throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
             }
+            contract = contractRepository.findById(request.getContractId())
+                    .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+
+            // Kiểm tra ngày bắt đầu assignment không được trước ngày bắt đầu contract
+            if (request.getStartDate().isBefore(contract.getStartDate())) {
+                throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
+            }
+
+            // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (status IN_PROGRESS)
+            if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
+                List<Assignment> existingAssignments = assignmentRepository
+                        .findActiveAssignmentByEmployeeAndContract(request.getEmployeeId(), request.getContractId());
+                if (!existingAssignments.isEmpty()) {
+                    throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
+                }
+            }
+
+            workingDays = contract.getWorkingDaysPerWeek() != null 
+                ? new ArrayList<>(contract.getWorkingDaysPerWeek()) 
+                : null;
+        } else {
+            // COMPANY scope: contract is null, workingDaysPerWeek from request
+            workingDays = request.getWorkingDaysPerWeek() != null 
+                ? new ArrayList<>(request.getWorkingDaysPerWeek()) 
+                : null;
         }
+
+                // Parse assignmentType safely (default to FIXED_BY_CONTRACT)
+                AssignmentType assignmentTypeParsed;
+                String at = request.getAssignmentType();
+                if (at == null || at.isBlank()) {
+                        assignmentTypeParsed = AssignmentType.FIXED_BY_CONTRACT;
+                } else {
+                        try {
+                                assignmentTypeParsed = AssignmentType.valueOf(at);
+                        } catch (IllegalArgumentException ex) {
+                                log.warn("Invalid assignmentType '{}', defaulting to FIXED_BY_CONTRACT", at);
+                                assignmentTypeParsed = AssignmentType.FIXED_BY_CONTRACT;
+                        }
+                }
 
         Assignment assignment = Assignment.builder()
                 .employee(employee)
                 .contract(contract)
+                .scope(scope)
                 .startDate(request.getStartDate())
                 .status(request.getStatus())
                 .salaryAtTime(request.getSalaryAtTime())
-                .workingDaysPerWeek(contract.getWorkingDaysPerWeek() != null 
-                    ? new ArrayList<>(contract.getWorkingDaysPerWeek()) 
-                    : null)
+                .workingDaysPerWeek(workingDays)
                 .additionalAllowance(request.getAdditionalAllowance())
                 .description(request.getDescription())
-                .assignmentType(AssignmentType.valueOf(request.getAssignmentType()))
+                                .assignmentType(assignmentTypeParsed)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -124,8 +150,8 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         // Tự động tạo chấm công nếu có workingDaysPerWeek và status là IN_PROGRESS
         if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus()) && 
-            contract.getWorkingDaysPerWeek() != null &&
-            !contract.getWorkingDaysPerWeek().isEmpty()) {
+            workingDays != null &&
+            !workingDays.isEmpty()) {
             
             // Nếu startDate trong quá khứ, tạo assignment và attendance cho các tháng từ startDate đến hiện tại
             LocalDate today = LocalDate.now();
@@ -158,15 +184,16 @@ public class AssignmentServiceImpl implements AssignmentService {
                         Assignment monthlyAssignment = Assignment.builder()
                                 .employee(employee)
                                 .contract(contract)
+                                .scope(scope)
                                 .startDate(monthStartDate)
                                 .status(request.getStatus())
                                 .salaryAtTime(request.getSalaryAtTime())
-                                .workingDaysPerWeek(contract.getWorkingDaysPerWeek() != null 
-                                    ? new ArrayList<>(contract.getWorkingDaysPerWeek()) 
-                                    : null)
+                                                                .workingDaysPerWeek(workingDays != null 
+                                                                        ? new ArrayList<>(workingDays) 
+                                                                        : null)
                                 .additionalAllowance(request.getAdditionalAllowance())
                                 .description(request.getDescription())
-                                .assignmentType(AssignmentType.valueOf(request.getAssignmentType()))
+                                                                .assignmentType(assignmentTypeParsed)
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
                                 .build();
@@ -192,7 +219,10 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
 
         log.info("createAssignment completed by {}: assignmentId={} (employee={}, contract={})",
-                username, savedAssignment.getId(), savedAssignment.getEmployee().getId(), savedAssignment.getContract().getId());
+                username,
+                savedAssignment.getId(),
+                savedAssignment.getEmployee().getId(),
+                savedAssignment.getContract() != null ? savedAssignment.getContract().getId() : null);
 
         return mapToResponse(savedAssignment);
     }
@@ -281,19 +311,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         System.out.println("Người thay: " + replacementEmployee.getName() + " (ID: " + replacementEmployee.getId() + ")");
 
-        // Kiểm tra loại nhân viên - chỉ CONTRACT_STAFF mới được điều động
-        if (replacementEmployee.getEmploymentType() == EmploymentType.COMPANY_STAFF) {
-            throw new AppException(ErrorCode.COMPANY_STAFF_CANNOT_BE_REASSIGNED);
-        }
-
         Employee replacedEmployee = employeeRepository.findById(request.getReplacedEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         System.out.println("Người bị thay: " + replacedEmployee.getName() + " (ID: " + replacedEmployee.getId() + ")");
-
-        // Kiểm tra người bị thay cũng phải là CONTRACT_STAFF
-        if (replacedEmployee.getEmploymentType() == EmploymentType.COMPANY_STAFF) {
-            throw new AppException(ErrorCode.COMPANY_STAFF_CANNOT_BE_REASSIGNED);
-        }
 
         // Lấy thông tin user đang thực hiện
         User currentUser = userRepository.findByUsername(username).orElse(null);
@@ -427,8 +447,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                     .replacedEmployeeName(replacedEmployee.getName())
                     .replacementEmployeeId(replacementEmployee.getId())
                     .replacementEmployeeName(replacementEmployee.getName())
-                    .contractId(contract.getId())
-                    .customerName(contract.getCustomer().getName())
+                    .contractId(contract != null ? contract.getId() : null)
+                    .customerName(contract != null && contract.getCustomer() != null ? contract.getCustomer().getName() : null)
                     .reassignmentDates(new ArrayList<>(request.getDates()))
                     .reassignmentType(ReassignmentType.TEMPORARY)
                     .notes(request.getDescription())
@@ -622,7 +642,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     public PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> getEmployeesNotAssignedToCustomer(
-            Long customerId, Integer month, Integer year, int page, int pageSize) {
+            Long customerId, com.company.company_clean_hub_be.entity.EmploymentType employmentType, Integer month, Integer year, int page, int pageSize) {
         customerRepository.findById(customerId)
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
@@ -632,10 +652,10 @@ public class AssignmentServiceImpl implements AssignmentService {
         if (month != null && year != null) {
             // Lọc theo tháng năm
             employeePage = employeeRepository.findEmployeesNotAssignedToCustomerByMonth(
-                    customerId, month, year, pageable);
+                    customerId, employmentType, month, year, pageable);
         } else {
             // Không lọc tháng năm (chỉ lấy chưa có assignment IN_PROGRESS)
-            employeePage = employeeRepository.findEmployeesNotAssignedToCustomer(customerId, pageable);
+            employeePage = employeeRepository.findEmployeesNotAssignedToCustomer(customerId, employmentType, pageable);
         }
 
         List<com.company.company_clean_hub_be.dto.response.EmployeeResponse> items = employeePage.getContent().stream()
@@ -653,6 +673,29 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .build();
     }
 
+    @Override
+    public PageResponse<AttendanceResponse> getAttendancesByAssignment(Long assignmentId, Integer month, Integer year, int page, int pageSize) {
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("date").descending());
+        Page<Attendance> attendancePage = attendanceRepository.findByAssignmentAndFilters(assignmentId, month, year, pageable);
+
+        List<AttendanceResponse> items = attendancePage.getContent().stream()
+                .map(this::mapAttendanceToResponse)
+                .collect(Collectors.toList());
+
+        return PageResponse.<AttendanceResponse>builder()
+                .content(items)
+                .page(attendancePage.getNumber())
+                .pageSize(attendancePage.getSize())
+                .totalElements(attendancePage.getTotalElements())
+                .totalPages(attendancePage.getTotalPages())
+                .first(attendancePage.isFirst())
+                .last(attendancePage.isLast())
+                .build();
+    }
+
     private com.company.company_clean_hub_be.dto.response.EmployeeResponse mapEmployeeToResponse(Employee employee) {
         return com.company.company_clean_hub_be.dto.response.EmployeeResponse.builder()
                 .id(employee.getId())
@@ -663,6 +706,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .bankAccount(employee.getBankAccount())
                 .bankName(employee.getBankName())
                 .description(employee.getDescription())
+                .employmentType(employee.getEmploymentType())
                 .createdAt(employee.getCreatedAt())
                 .updatedAt(employee.getUpdatedAt())
                 .build();
@@ -678,8 +722,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .employeeCode(employee != null ? employee.getEmployeeCode() : null)
                 .assignmentId(assignment != null ? assignment.getId() : null)
                 .assignmentType(assignment != null && assignment.getAssignmentType() != null ? assignment.getAssignmentType().name() : null)
-                .customerId(assignment != null && assignment.getContract().getCustomer() != null ? assignment.getContract().getCustomer().getId() : null)
-                .customerName(assignment != null && assignment.getContract() != null ? assignment.getContract().getCustomer().getName() : null)
+                .customerId(assignment != null && assignment.getContract() != null && assignment.getContract().getCustomer() != null ? assignment.getContract().getCustomer().getId() : null)
+                .customerName(assignment != null && assignment.getContract() != null && assignment.getContract().getCustomer() != null ? assignment.getContract().getCustomer().getName() : null)
                 .date(attendance.getDate())
                 .workHours(attendance.getWorkHours())
                 .bonus(attendance.getBonus())
@@ -694,17 +738,19 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     private AssignmentResponse mapToResponse(Assignment assignment) {
+        Contract contract = assignment.getContract();
         return AssignmentResponse.builder()
                 .id(assignment.getId())
                 .employeeId(assignment.getEmployee().getId())
                 .employeeName(assignment.getEmployee().getName())
                 .employeeCode(assignment.getEmployee().getEmployeeCode())
                 .assignmentType(assignment.getAssignmentType().name())
-                .customerId(assignment.getContract().getCustomer().getId())
-                .customerName(assignment.getContract().getCustomer().getName())
-                .customerCode(assignment.getContract().getCustomer().getCustomerCode())
-                .contractId(assignment.getContract().getId())
-                .contractDescription(assignment.getContract().getDescription())
+                .scope(assignment.getScope() != null ? assignment.getScope().name() : AssignmentScope.CONTRACT.name())
+                .customerId(contract != null && contract.getCustomer() != null ? contract.getCustomer().getId() : null)
+                .customerName(contract != null && contract.getCustomer() != null ? contract.getCustomer().getName() : null)
+                .customerCode(contract != null && contract.getCustomer() != null ? contract.getCustomer().getCustomerCode() : null)
+                .contractId(contract != null ? contract.getId() : null)
+                .contractDescription(contract != null ? contract.getDescription() : null)
                 .startDate(assignment.getStartDate())
                 .status(assignment.getStatus())
                 .salaryAtTime(assignment.getSalaryAtTime())
@@ -732,7 +778,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         List<Attendance> attendances = new ArrayList<>();
 
         // Nếu là hợp đồng ONE_TIME, chỉ tạo 1 attendance ngày đầu tiên
-        if (contract.getContractType() == ContractType.ONE_TIME) {
+        if (contract != null && contract.getContractType() == ContractType.ONE_TIME) {
             // Kiểm tra đã có chấm công ngày này chưa
             boolean alreadyExists = attendanceRepository.findByEmployeeAndDate(
                     assignment.getEmployee().getId(),
@@ -758,14 +804,16 @@ public class AssignmentServiceImpl implements AssignmentService {
                 attendances.add(attendance);
             }
         } else {
-            // Hợp đồng MONTHLY_FIXED hoặc MONTHLY_ACTUAL: tạo theo workingDaysPerWeek
+            // Hợp đồng MONTHLY_FIXED hoặc MONTHLY_ACTUAL hoặc COMPANY scope: tạo theo workingDaysPerWeek
             YearMonth yearMonth = YearMonth.from(startDate);
             
             // Tính ngày kết thúc: lấy min của (cuối tháng, ngày kết thúc hợp đồng nếu có)
             LocalDate endDate = yearMonth.atEndOfMonth();
-            System.out.println("EndDate " + contract.getEndDate());
-            if (contract.getEndDate() != null && contract.getEndDate().isBefore(endDate)) {
-                endDate = contract.getEndDate();
+            if (contract != null && contract.getEndDate() != null) {
+                System.out.println("EndDate " + contract.getEndDate());
+                if (contract.getEndDate().isBefore(endDate)) {
+                    endDate = contract.getEndDate();
+                }
             }
 
             // Chuyển đổi DayOfWeek từ entity sang java.time.DayOfWeek

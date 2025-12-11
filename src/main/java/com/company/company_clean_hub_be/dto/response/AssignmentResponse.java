@@ -39,4 +39,5 @@ public class AssignmentResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String assignmentType;
+    private String scope;  // CONTRACT or COMPANY
 }
