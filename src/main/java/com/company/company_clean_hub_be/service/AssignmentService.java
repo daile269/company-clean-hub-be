@@ -35,7 +35,7 @@ public interface AssignmentService {
     PageResponse<AssignmentResponse> getAssignmentsByEmployeeWithFilters(Long employeeId, Long customerId, Integer month, Integer year, int page, int pageSize);
 
     PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> getEmployeesNotAssignedToCustomer(
-            Long customerId, Integer month, Integer year, int page, int pageSize);
+            Long customerId, com.company.company_clean_hub_be.entity.EmploymentType employmentType, Integer month, Integer year, int page, int pageSize);
     List<AssignmentResponse> getAssignmentsByEmployee(Long employeeId);
     
     // Lịch sử điều động

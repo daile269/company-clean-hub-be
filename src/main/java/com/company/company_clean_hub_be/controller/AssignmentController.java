@@ -149,12 +149,13 @@ public class AssignmentController {
     @GetMapping("/customer/{customerId}/not-assigned")
     public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse>> getEmployeesNotAssignedToCustomer(
             @PathVariable Long customerId,
+            @RequestParam(required = false) com.company.company_clean_hub_be.entity.EmploymentType employmentType,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> employees = 
-                assignmentService.getEmployeesNotAssignedToCustomer(customerId, month, year, page, pageSize);
+                assignmentService.getEmployeesNotAssignedToCustomer(customerId, employmentType, month, year, page, pageSize);
         return ApiResponse.success(
                 "Lấy danh sách nhân viên chưa phân công thành công", 
                 employees, 

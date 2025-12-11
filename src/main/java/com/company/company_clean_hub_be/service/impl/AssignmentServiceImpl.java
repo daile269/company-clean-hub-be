@@ -82,11 +82,6 @@ public class AssignmentServiceImpl implements AssignmentService {
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
-        // Kiểm tra loại nhân viên - chỉ CONTRACT_STAFF mới được phân công
-        if (employee.getEmploymentType() == EmploymentType.COMPANY_STAFF) {
-            throw new AppException(ErrorCode.COMPANY_STAFF_CANNOT_BE_ASSIGNED);
-        }
-
         Contract contract = contractRepository.findById(request.getContractId())
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
@@ -280,19 +275,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         System.out.println("Người thay: " + replacementEmployee.getName() + " (ID: " + replacementEmployee.getId() + ")");
 
-        // Kiểm tra loại nhân viên - chỉ CONTRACT_STAFF mới được điều động
-        if (replacementEmployee.getEmploymentType() == EmploymentType.COMPANY_STAFF) {
-            throw new AppException(ErrorCode.COMPANY_STAFF_CANNOT_BE_REASSIGNED);
-        }
-
         Employee replacedEmployee = employeeRepository.findById(request.getReplacedEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         System.out.println("Người bị thay: " + replacedEmployee.getName() + " (ID: " + replacedEmployee.getId() + ")");
-
-        // Kiểm tra người bị thay cũng phải là CONTRACT_STAFF
-        if (replacedEmployee.getEmploymentType() == EmploymentType.COMPANY_STAFF) {
-            throw new AppException(ErrorCode.COMPANY_STAFF_CANNOT_BE_REASSIGNED);
-        }
 
         // Lấy thông tin user đang thực hiện
         User currentUser = userRepository.findByUsername(username).orElse(null);
@@ -622,7 +607,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     public PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> getEmployeesNotAssignedToCustomer(
-            Long customerId, Integer month, Integer year, int page, int pageSize) {
+            Long customerId, com.company.company_clean_hub_be.entity.EmploymentType employmentType, Integer month, Integer year, int page, int pageSize) {
         customerRepository.findById(customerId)
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
@@ -632,10 +617,10 @@ public class AssignmentServiceImpl implements AssignmentService {
         if (month != null && year != null) {
             // Lọc theo tháng năm
             employeePage = employeeRepository.findEmployeesNotAssignedToCustomerByMonth(
-                    customerId, month, year, pageable);
+                    customerId, employmentType, month, year, pageable);
         } else {
             // Không lọc tháng năm (chỉ lấy chưa có assignment IN_PROGRESS)
-            employeePage = employeeRepository.findEmployeesNotAssignedToCustomer(customerId, pageable);
+            employeePage = employeeRepository.findEmployeesNotAssignedToCustomer(customerId, employmentType, pageable);
         }
 
         List<com.company.company_clean_hub_be.dto.response.EmployeeResponse> items = employeePage.getContent().stream()
@@ -663,6 +648,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .bankAccount(employee.getBankAccount())
                 .bankName(employee.getBankName())
                 .description(employee.getDescription())
+                .employmentType(employee.getEmploymentType())
                 .createdAt(employee.getCreatedAt())
                 .updatedAt(employee.getUpdatedAt())
                 .build();
