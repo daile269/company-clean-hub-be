@@ -59,7 +59,7 @@ public class AssignmentController {
             @PathVariable Long id,
             @Valid @RequestBody AssignmentRequest request) {
         AssignmentResponse assignment = assignmentService.updateAssignment(id, request);
-        log.info("cập nhập assign:{}",request);
+        log.debug("cập nhập assign:{}",request);
         return ApiResponse.success("Cập nhật phân công thành công", assignment, HttpStatus.OK.value());
     }
 

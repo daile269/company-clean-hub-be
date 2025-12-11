@@ -81,7 +81,7 @@ public class LoggingFilter extends OncePerRequestFilter {
         } else if (status >= 400) {
             log.warn(single.toString());
         } else {
-            log.info(single.toString());
+            log.debug(single.toString());
         }
     }
 

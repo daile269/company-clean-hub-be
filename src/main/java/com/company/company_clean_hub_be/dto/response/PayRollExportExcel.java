@@ -14,7 +14,7 @@ public class PayRollExportExcel {
     private String phone;
 
     private List<String> projectCompanies;
-
+    private String employeeType;
     private Integer totalDays;
     private BigDecimal totalBonus;
     private BigDecimal totalPenalty;

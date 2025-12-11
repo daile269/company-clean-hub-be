@@ -30,7 +30,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
 
     @Override
     public List<ServiceResponse> getAllServices() {
-        log.info("getAllServices requested");
+        log.debug("getAllServices requested");
         return serviceEntityRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -38,7 +38,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
 
     @Override
     public PageResponse<ServiceResponse> getServicesWithFilter(String keyword, int page, int pageSize) {
-        log.info("getServicesWithFilter requested: keyword='{}', page={}, pageSize={}", keyword, page, pageSize);
+        log.debug("getServicesWithFilter requested: keyword='{}', page={}, pageSize={}", keyword, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         Page<ServiceEntity> servicePage = serviceEntityRepository.findByFilters(keyword, pageable);
 
@@ -59,7 +59,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
 
     @Override
     public ServiceResponse getServiceById(Long id) {
-        log.info("getServiceById requested: id={}", id);
+        log.debug("getServiceById requested: id={}", id);
         ServiceEntity service = serviceEntityRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.SERVICE_NOT_FOUND));
         return mapToResponse(service);
@@ -74,7 +74,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
             if (auth != null && auth.getName() != null) username = auth.getName();
         } catch (Exception ignored) {
         }
-        log.info("createService requested by {}: title='{}', price={}", username, request.getTitle(), request.getPrice());
+        log.debug("createService requested by {}: title='{}', price={}", username, request.getTitle(), request.getPrice());
         ServiceEntity service = ServiceEntity.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
@@ -85,7 +85,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
                 .build();
 
         ServiceEntity savedService = serviceEntityRepository.save(service);
-        log.info("createService completed by {}: id={}", username, savedService.getId());
+        log.debug("createService completed by {}: id={}", username, savedService.getId());
         return mapToResponse(savedService);
     }
 
@@ -98,7 +98,7 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
             if (auth != null && auth.getName() != null) username = auth.getName();
         } catch (Exception ignored) {
         }
-        log.info("updateService requested by {}: id={}, title='{}'", username, id, request.getTitle());
+        log.debug("updateService requested by {}: id={}, title='{}'", username, id, request.getTitle());
         ServiceEntity service = serviceEntityRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.SERVICE_NOT_FOUND));
 
@@ -112,13 +112,13 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
         
         // Cập nhật lại finalPrice cho tất cả hợp đồng có sử dụng dịch vụ này
         updateContractPricesForService(updatedService);
-        log.info("updateService completed by {}: id={}", username, updatedService.getId());
+        log.debug("updateService completed by {}: id={}", username, updatedService.getId());
         
         return mapToResponse(updatedService);
     }
     
     private void updateContractPricesForService(ServiceEntity service) {
-        log.info("updateContractPricesForService: serviceId={}", service.getId());
+        log.debug("updateContractPricesForService: serviceId={}", service.getId());
         // Lấy tất cả hợp đồng có sử dụng dịch vụ này
         service.getContracts().forEach(contract -> {
             // Tính lại tổng giá trị hợp đồng
@@ -146,11 +146,11 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
             if (auth != null && auth.getName() != null) username = auth.getName();
         } catch (Exception ignored) {
         }
-        log.info("deleteService requested by {}: id={}", username, id);
+        log.debug("deleteService requested by {}: id={}", username, id);
         ServiceEntity service = serviceEntityRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.SERVICE_NOT_FOUND));
         serviceEntityRepository.delete(service);
-        log.info("deleteService completed: id={}", id);
+        log.debug("deleteService completed: id={}", id);
     }
 
     private ServiceResponse mapToResponse(ServiceEntity service) {

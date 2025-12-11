@@ -1,10 +1,11 @@
 package com.company.company_clean_hub_be.service;
 
+import java.util.List;
+
 import com.company.company_clean_hub_be.dto.request.CustomerRequest;
+import com.company.company_clean_hub_be.dto.response.CustomerContractGroupDto;
 import com.company.company_clean_hub_be.dto.response.CustomerResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
-
-import java.util.List;
 
 public interface CustomerService {
     List<CustomerResponse> getAllCustomers();
@@ -13,4 +14,5 @@ public interface CustomerService {
     CustomerResponse createCustomer(CustomerRequest request);
     CustomerResponse updateCustomer(Long id, CustomerRequest request);
     void deleteCustomer(Long id);
+    List<CustomerContractGroupDto> getCustomersWithContractsForExport();
 }

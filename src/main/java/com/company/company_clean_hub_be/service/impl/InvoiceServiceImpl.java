@@ -44,7 +44,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public InvoiceResponse createInvoice(InvoiceCreationRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.info("createInvoice requested by {}: contractId={}, month={}, year={}", actor, request.getContractId(), request.getInvoiceMonth(), request.getInvoiceYear());
+        log.debug("createInvoice requested by {}: contractId={}, month={}, year={}", actor, request.getContractId(), request.getInvoiceMonth(), request.getInvoiceYear());
 
         // Kiểm tra hóa đơn đã tồn tại chưa
         if (invoiceRepository.existsByContractIdAndMonthAndYear(
@@ -94,7 +94,7 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .build();
 
         invoice = invoiceRepository.save(invoice);
-        log.info("Created invoice {} for contract {} - Month {}/{} by {}", 
+        log.debug("Created invoice {} for contract {} - Month {}/{} by {}", 
             invoice.getId(), contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), actor);
 
         return toInvoiceResponse(invoice);
@@ -104,7 +104,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public BulkInvoiceResponse createInvoicesForCustomer(InvoiceCreationRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.info("createInvoicesForCustomer requested by {}: customerId={}, month={}, year={}", actor, request.getCustomerId(), request.getInvoiceMonth(), request.getInvoiceYear());
+        log.debug("createInvoicesForCustomer requested by {}: customerId={}, month={}, year={}", actor, request.getCustomerId(), request.getInvoiceMonth(), request.getInvoiceYear());
 
         // Validate input
         if (request.getCustomerId() == null) {
@@ -182,9 +182,9 @@ public class InvoiceServiceImpl implements InvoiceService {
             }
         }
 
-        log.info("Bulk invoice creation for customer {} - Total: {}, Success: {}, Failed: {}", 
+        log.debug("Bulk invoice creation for customer {} - Total: {}, Success: {}, Failed: {}", 
             customer.getId(), contracts.size(), successCount, failCount);
-        log.info("createInvoicesForCustomer completed by {}: success={}, failed={}", actor, successCount, failCount);
+        log.debug("createInvoicesForCustomer completed by {}: success={}, failed={}", actor, successCount, failCount);
 
         return BulkInvoiceResponse.builder()
                 .totalContracts(contracts.size())
@@ -203,12 +203,12 @@ public class InvoiceServiceImpl implements InvoiceService {
         return switch (contract.getContractType()) {
             case ONE_TIME -> {
                 // Hợp đồng 1 lần: tính tổng giá dịch vụ
-                log.info("ONE_TIME contract - Total service price: {}", totalServicePrice);
+                log.debug("ONE_TIME contract - Total service price: {}", totalServicePrice);
                 yield totalServicePrice;
             }
             case MONTHLY_FIXED -> {
                 // Hợp đồng cố định hàng tháng: tính theo giá cố định
-                log.info("MONTHLY_FIXED contract - Fixed monthly price: {}", totalServicePrice);
+                log.debug("MONTHLY_FIXED contract - Fixed monthly price: {}", totalServicePrice);
                 yield totalServicePrice;
             }
             case MONTHLY_ACTUAL -> {
@@ -225,7 +225,7 @@ public class InvoiceServiceImpl implements InvoiceService {
                 BigDecimal contractDays = BigDecimal.valueOf(contractWorkingDays);
                 BigDecimal result = totalServicePrice.multiply(actualDays).divide(contractDays, 2, RoundingMode.HALF_UP);
                 
-                log.info("MONTHLY_ACTUAL contract - Service price: {}, Actual days: {}, Contract days: {}, Result: {}",
+                log.debug("MONTHLY_ACTUAL contract - Service price: {}, Actual days: {}, Contract days: {}, Result: {}",
                         totalServicePrice, actualDays, contractDays, result);
                 yield result;
             }
@@ -257,57 +257,57 @@ public class InvoiceServiceImpl implements InvoiceService {
             totalVat = totalVat.add(vatAmount);
         }
         
-        log.info("Total VAT calculated: {} for subtotal: {}", totalVat, subtotal);
+        log.debug("Total VAT calculated: {} for subtotal: {}", totalVat, subtotal);
         return totalVat;
     }
 
     @Override
     public InvoiceResponse getInvoice(Long id) {
-        log.info("getInvoice requested: id={}", id);
+        log.debug("getInvoice requested: id={}", id);
         Invoice invoice = invoiceRepository.findById(id)
             .orElseThrow(() -> new AppException(ErrorCode.INVOICE_NOT_FOUND));
         InvoiceResponse resp = toInvoiceResponse(invoice);
-        log.info("getInvoice completed: id={}, contractId={}", id, invoice.getContract() != null ? invoice.getContract().getId() : null);
+        log.debug("getInvoice completed: id={}, contractId={}", id, invoice.getContract() != null ? invoice.getContract().getId() : null);
         return resp;
     }
 
     @Override
     public List<InvoiceResponse> getInvoicesByContract(Long contractId) {
-        log.info("getInvoicesByContract requested: contractId={}", contractId);
+        log.debug("getInvoicesByContract requested: contractId={}", contractId);
         List<InvoiceResponse> resp = invoiceRepository.findByContractId(contractId).stream()
             .map(this::toInvoiceResponse)
             .collect(Collectors.toList());
-        log.info("getInvoicesByContract completed: contractId={}, count={}", contractId, resp.size());
+        log.debug("getInvoicesByContract completed: contractId={}, count={}", contractId, resp.size());
         return resp;
     }
 
     @Override
     public List<InvoiceResponse> getInvoicesByCustomer(Long customerId) {
-        log.info("getInvoicesByCustomer requested: customerId={}", customerId);
+        log.debug("getInvoicesByCustomer requested: customerId={}", customerId);
         List<InvoiceResponse> resp = invoiceRepository.findByCustomerId(customerId).stream()
             .map(this::toInvoiceResponse)
             .collect(Collectors.toList());
-        log.info("getInvoicesByCustomer completed: customerId={}, count={}", customerId, resp.size());
+        log.debug("getInvoicesByCustomer completed: customerId={}, count={}", customerId, resp.size());
         return resp;
     }
 
     @Override
     public List<InvoiceResponse> getInvoicesByStatus(InvoiceStatus status) {
-        log.info("getInvoicesByStatus requested: status={}", status);
+        log.debug("getInvoicesByStatus requested: status={}", status);
         List<InvoiceResponse> resp = invoiceRepository.findByStatus(status).stream()
             .map(this::toInvoiceResponse)
             .collect(Collectors.toList());
-        log.info("getInvoicesByStatus completed: status={}, count={}", status, resp.size());
+        log.debug("getInvoicesByStatus completed: status={}, count={}", status, resp.size());
         return resp;
     }
 
     @Override
     public List<InvoiceResponse> getInvoicesByMonthAndYear(Integer month, Integer year) {
-        log.info("getInvoicesByMonthAndYear requested: month={}, year={}", month, year);
+        log.debug("getInvoicesByMonthAndYear requested: month={}, year={}", month, year);
         List<InvoiceResponse> resp = invoiceRepository.findByMonthAndYear(month, year).stream()
             .map(this::toInvoiceResponse)
             .collect(Collectors.toList());
-        log.info("getInvoicesByMonthAndYear completed: month={}, year={}, count={}", month, year, resp.size());
+        log.debug("getInvoicesByMonthAndYear completed: month={}, year={}, count={}", month, year, resp.size());
         return resp;
     }
 
@@ -315,7 +315,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public InvoiceResponse updateInvoice(Long id, InvoiceUpdateRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.info("updateInvoice requested by {}: id={}, status={}, notesPresent={}", actor, id, request.getStatus(), request.getNotes() != null);
+        log.debug("updateInvoice requested by {}: id={}, status={}, notesPresent={}", actor, id, request.getStatus(), request.getNotes() != null);
 
         Invoice invoice = invoiceRepository.findById(id)
             .orElseThrow(() -> new AppException(ErrorCode.INVOICE_NOT_FOUND));
@@ -332,7 +332,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
 
         invoice = invoiceRepository.save(invoice);
-        log.info("Updated invoice {} by {}", id, actor);
+        log.debug("Updated invoice {} by {}", id, actor);
 
         return toInvoiceResponse(invoice);
     }
@@ -341,13 +341,13 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public void deleteInvoice(Long id) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.info("deleteInvoice requested by {}: id={}", actor, id);
+        log.debug("deleteInvoice requested by {}: id={}", actor, id);
 
         if (!invoiceRepository.existsById(id)) {
             throw new AppException(ErrorCode.INVOICE_NOT_FOUND);
         }
         invoiceRepository.deleteById(id);
-        log.info("Deleted invoice {} by {}", id, actor);
+        log.debug("Deleted invoice {} by {}", id, actor);
     }
 
     private InvoiceResponse toInvoiceResponse(Invoice invoice) {
@@ -392,7 +392,7 @@ public class InvoiceServiceImpl implements InvoiceService {
             throw new AppException(ErrorCode.INVOICE_DATE_BEFORE_CONTRACT_START);
         }
         
-        log.info("Invoice date validation passed: {}-{} >= contract start {}", 
+        log.debug("Invoice date validation passed: {}-{} >= contract start {}", 
                 invoiceYear, invoiceMonth, contractStartDate);
     }
 

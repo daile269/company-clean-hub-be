@@ -54,7 +54,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 if (auth != null && auth.getName() != null) username = auth.getName();
         } catch (Exception ignored) {
         }
-        log.info("createAttendance requested by {}: employeeId={}, assignmentId={}, date={}", username, request.getEmployeeId(), request.getAssignmentId(), request.getDate());
+        log.debug("createAttendance requested by {}: employeeId={}, assignmentId={}, date={}", username, request.getEmployeeId(), request.getAssignmentId(), request.getDate());
         // Kiểm tra nhân viên đã chấm công ngày này chưa
         attendanceRepository.findByEmployeeAndDate(request.getEmployeeId(), request.getDate())
                 .ifPresent(a -> {
@@ -89,13 +89,13 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .build();
 
         Attendance savedAttendance = attendanceRepository.save(attendance);
-        log.info("createAttendance completed by {}: attendanceId={}", username, savedAttendance.getId());
+        log.debug("createAttendance completed by {}: attendanceId={}", username, savedAttendance.getId());
         return mapToResponse(savedAttendance);
     }
 
     @Override
     public List<AttendanceResponse> autoGenerateAttendances(AutoAttendanceRequest request) {
-        log.info("autoGenerateAttendances requested: employeeId={}, assignmentId={}, month={}, year={}", request.getEmployeeId(), request.getAssignmentId(), request.getMonth(), request.getYear());
+        log.debug("autoGenerateAttendances requested: employeeId={}, assignmentId={}, month={}, year={}", request.getEmployeeId(), request.getAssignmentId(), request.getMonth(), request.getYear());
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
@@ -149,7 +149,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         // Lưu tất cả chấm công
         List<Attendance> savedAttendances = attendanceRepository.saveAll(attendances);
-        log.info("autoGenerateAttendances completed: createdCount={}", savedAttendances.size());
+        log.debug("autoGenerateAttendances completed: createdCount={}", savedAttendances.size());
 
         return savedAttendances.stream()
                 .map(this::mapToResponse)
@@ -158,7 +158,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     public AttendanceResponse getAttendanceById(Long id) {
-        log.info("getAttendanceById requested: id={}", id);
+        log.debug("getAttendanceById requested: id={}", id);
         Attendance attendance = attendanceRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
         return mapToResponse(attendance);
@@ -166,7 +166,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     public List<AttendanceResponse> getAllAttendances() {
-        log.info("getAllAttendances requested");
+        log.debug("getAllAttendances requested");
         return attendanceRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -174,7 +174,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     public PageResponse<AttendanceResponse> getAttendancesWithFilter(String keyword, Integer month, Integer year, int page, int pageSize) {
-        log.info("getAttendancesWithFilter requested: keyword='{}', month={}, year={}, page={}, pageSize={}", keyword, month, year, page, pageSize);
+        log.debug("getAttendancesWithFilter requested: keyword='{}', month={}, year={}, page={}, pageSize={}", keyword, month, year, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("date").descending());
         Page<Attendance> attendancePage = attendanceRepository.findByFilters(keyword, month, year, pageable);
 
@@ -198,7 +198,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // Validate employee exists
         employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
-                log.info("getAttendancesByEmployee requested: employeeId={}, month={}, year={}, page={}, pageSize={}", employeeId, month, year, page, pageSize);
+                log.debug("getAttendancesByEmployee requested: employeeId={}, month={}, year={}, page={}, pageSize={}", employeeId, month, year, page, pageSize);
 
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("date").descending());
         Page<Attendance> attendancePage = attendanceRepository.findByEmployeeAndFilters(employeeId, month, year, pageable);
@@ -227,7 +227,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                         if (auth != null && auth.getName() != null) username = auth.getName();
                 } catch (Exception ignored) {
                 }
-        log.info("updateAttendance requested by {}: id={}, employeeId={}, date={}", username, id, request.getEmployeeId(), request.getDate());
+        log.debug("updateAttendance requested by {}: id={}, employeeId={}, date={}", username, id, request.getEmployeeId(), request.getDate());
         Attendance attendance = attendanceRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
 
@@ -266,7 +266,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setUpdatedAt(LocalDateTime.now());
 
         Attendance updatedAttendance = attendanceRepository.save(attendance);
-        log.info("updateAttendance completed by {}: id={}", username, updatedAttendance.getId());
+        log.debug("updateAttendance completed by {}: id={}", username, updatedAttendance.getId());
         return mapToResponse(updatedAttendance);
     }
 
@@ -279,12 +279,12 @@ public class AttendanceServiceImpl implements AttendanceService {
                         if (auth != null && auth.getName() != null) username = auth.getName();
                 } catch (Exception ignored) {
                 }
-        log.info("deleteAttendance requested by {}: id={}", username, id);
+        log.debug("deleteAttendance requested by {}: id={}", username, id);
         if (!attendanceRepository.existsById(id)) {
             throw new AppException(ErrorCode.ATTENDANCE_NOT_FOUND);
         }
         attendanceRepository.deleteById(id);
-        log.info("deleteAttendance completed by {}: id={}", username, id);
+        log.debug("deleteAttendance completed by {}: id={}", username, id);
     }
 
         private AttendanceResponse mapToResponse(Attendance attendance) {
@@ -318,7 +318,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     public TotalDaysResponse getTotalDaysByEmployee(Long employeeId, Integer month, Integer year) {
-        log.info("getTotalDaysByEmployee requested: employeeId={}, month={}, year={}", employeeId, month, year);
+        log.debug("getTotalDaysByEmployee requested: employeeId={}, month={}, year={}", employeeId, month, year);
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 

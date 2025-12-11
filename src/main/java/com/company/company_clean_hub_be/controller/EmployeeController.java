@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,11 +22,13 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.company.company_clean_hub_be.dto.request.EmployeeRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
+import com.company.company_clean_hub_be.dto.response.EmployeeExportDto;
 import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.EmployeeImage;
 import com.company.company_clean_hub_be.service.EmployeeImageService;
 import com.company.company_clean_hub_be.service.EmployeeService;
+import com.company.company_clean_hub_be.service.ExcelExportService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +41,7 @@ import lombok.extern.slf4j.Slf4j;
 public class EmployeeController {
     private final EmployeeService employeeService;
     private final EmployeeImageService employeeImageService;
+    private final ExcelExportService excelExportService;
 
     @GetMapping
     public ApiResponse<List<EmployeeResponse>> getAllEmployees() {
@@ -83,17 +89,17 @@ public class EmployeeController {
             @PathVariable Long id,
             @RequestParam("file") MultipartFile[] files) throws IOException {
 
-        log.info("Start uploadEmployeeImages: employeeId={}, fileCount={}", id, files.length);
+        log.debug("Start uploadEmployeeImages: employeeId={}, fileCount={}", id, files.length);
         
         List<EmployeeImage> uploadedImages = new ArrayList<>();
         for (int i = 0; i < files.length; i++) {
             MultipartFile file = files[i];
-            log.info("Uploading file {}/{}: originalFilename={}, size={}, contentType={}",
+            log.debug("Uploading file {}/{}: originalFilename={}, size={}, contentType={}",
                     i + 1, files.length, file.getOriginalFilename(), file.getSize(), file.getContentType());
             try {
                 EmployeeImage saved = employeeImageService.uploadImage(id, file);
                 uploadedImages.add(saved);
-                log.info("Upload successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
+                log.debug("Upload successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
             } catch (IOException ex) {
                 log.error("Failed to upload image {}/{} for employeeId={}: {}", i + 1, files.length, id, ex.getMessage(), ex);
                 throw ex;
@@ -107,11 +113,11 @@ public class EmployeeController {
     public ApiResponse<EmployeeImage> uploadEmployeeImage(@PathVariable Long id,
                                                           @RequestParam("file") MultipartFile file) throws IOException {
 
-        log.info("Start uploadEmployeeImage: employeeId={}, originalFilename={}, size={}, contentType={}",
+        log.debug("Start uploadEmployeeImage: employeeId={}, originalFilename={}, size={}, contentType={}",
                 id, file.getOriginalFilename(), file.getSize(), file.getContentType());
         try {
             EmployeeImage saved = employeeImageService.uploadImage(id, file);
-            log.info("Upload successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
+            log.debug("Upload successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
             return ApiResponse.success("Upload ảnh nhân viên thành công", saved, HttpStatus.CREATED.value());
         } catch (IOException ex) {
             log.error("Failed to upload image for employeeId={}: {}", id, ex.getMessage(), ex);
@@ -123,7 +129,7 @@ public class EmployeeController {
     public ApiResponse<EmployeeImage> replaceEmployeeImage(@PathVariable Long id,
                                                            @PathVariable Long imageId,
                                                            @RequestParam("file") MultipartFile file) throws IOException {
-        log.info("Start replaceEmployeeImage: employeeId={}, imageId={}, originalFilename={}, size={}",
+        log.debug("Start replaceEmployeeImage: employeeId={}, imageId={}, originalFilename={}, size={}",
                 id, imageId, file.getOriginalFilename(), file.getSize());
         
         try {
@@ -133,7 +139,7 @@ public class EmployeeController {
 
 
             EmployeeImage saved = employeeImageService.replaceImage(id, imageId, file);
-            log.info("Replace successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
+            log.debug("Replace successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
             return ApiResponse.success("Cập nhật ảnh nhân viên thành công", saved, HttpStatus.OK.value());
         } catch (IOException ex) {
             log.error("Failed to replace image for employeeId={}: {}", id, ex.getMessage(), ex);
@@ -144,11 +150,11 @@ public class EmployeeController {
     @DeleteMapping("/{id}/images/{imageId}")
     public ApiResponse<Void> deleteEmployeeImage(@PathVariable Long id,
                                                  @PathVariable Long imageId) throws IOException {
-        log.info("Start deleteEmployeeImage: employeeId={}, imageId={}", id, imageId);
+        log.debug("Start deleteEmployeeImage: employeeId={}, imageId={}", id, imageId);
         
         try {
             employeeImageService.deleteImage(id, imageId);
-            log.info("Delete successful: employeeId={}, imageId={}", id, imageId);
+            log.debug("Delete successful: employeeId={}, imageId={}", id, imageId);
             return ApiResponse.success("Xóa ảnh nhân viên thành công", null, HttpStatus.OK.value());
         } catch (IOException ex) {
             log.error("Failed to delete image for employeeId={}: {}", id, ex.getMessage(), ex);
@@ -158,14 +164,14 @@ public class EmployeeController {
 
     @DeleteMapping("/{id}/images")
     public ApiResponse<Void> deleteAllEmployeeImages(@PathVariable Long id) throws IOException {
-        log.info("Start deleteAllEmployeeImages: employeeId={}", id);
+        log.debug("Start deleteAllEmployeeImages: employeeId={}", id);
         
         try {
             List<EmployeeImage> images = employeeImageService.findByEmployeeId(id);
             for (EmployeeImage image : images) {
                 employeeImageService.deleteImage(id, image.getId());
             }
-            log.info("Delete all successful: employeeId={}, deletedCount={}", id, images.size());
+            log.debug("Delete all successful: employeeId={}, deletedCount={}", id, images.size());
             return ApiResponse.success("Xóa tất cả ảnh nhân viên thành công", null, HttpStatus.OK.value());
         } catch (IOException ex) {
             log.error("Failed to delete all images for employeeId={}: {}", id, ex.getMessage(), ex);
@@ -175,15 +181,33 @@ public class EmployeeController {
 
     @GetMapping("/{id}/images")
     public ApiResponse<List<EmployeeImage>> getImagesByEmployeeId(@PathVariable Long id) {
-        log.info("GET /api/employees/{}/images - fetch images for employee", id);
+        log.debug("GET /api/employees/{}/images - fetch images for employee", id);
         
         try {
             List<EmployeeImage> images = employeeImageService.findByEmployeeId(id);
-            log.info("Fetched {} images for employee {}", images.size(), id);
+            log.debug("Fetched {} images for employee {}", images.size(), id);
             return ApiResponse.success("Lấy danh sách ảnh nhân viên thành công", images, HttpStatus.OK.value());
         } catch (Exception ex) {
             log.error("Failed to fetch images for employeeId={}: {}", id, ex.getMessage(), ex);
             return ApiResponse.success("Lấy danh sách ảnh nhân viên thành công", new ArrayList<>(), HttpStatus.OK.value());
+        }
+    }
+
+    @GetMapping("/export/excel")
+    public ResponseEntity<ByteArrayResource> exportEmployeesToExcel() {
+        log.debug("Export employees requested");
+        try {
+            List<EmployeeExportDto> employees = employeeService.getAllEmployeesForExport();
+            ByteArrayResource resource = excelExportService.exportEmployeesToExcel(employees);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=Danh_sach_nhan_vien.xlsx")
+                    .contentType(MediaType.parseMediaType(
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(resource);
+        } catch (Exception e) {
+            log.error("Error exporting employees", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }

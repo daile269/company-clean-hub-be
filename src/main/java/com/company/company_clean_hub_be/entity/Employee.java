@@ -54,9 +54,4 @@ public class Employee extends User {
 
     private String description;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
 }

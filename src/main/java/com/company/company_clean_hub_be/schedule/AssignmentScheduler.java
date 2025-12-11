@@ -55,8 +55,8 @@ public class AssignmentScheduler {
      */
     @Transactional
     public void executeUpdateExpiredTemporaryAssignments() {
-        log.info("=== BẮT ĐẦU QUÉT CẬP NHẬT PHÂN CÔNG TẠM THỜI ===");
-        log.info("Thời gian chạy: {}", LocalDateTime.now());
+        log.debug("=== BẮT ĐẦU QUÉT CẬP NHẬT PHÂN CÔNG TẠM THỜI ===");
+        log.debug("Thời gian chạy: {}", LocalDateTime.now());
 
         LocalDate yesterday = LocalDate.now().minusDays(1);
         
@@ -64,13 +64,13 @@ public class AssignmentScheduler {
             // Tìm tất cả các phân công TEMPORARY có startDate < hôm nay và status IN_PROGRESS
             List<Assignment> expiredAssignments = assignmentRepository.findExpiredTemporaryAssignments(yesterday);
             
-            log.info("Tìm thấy {} phân công tạm thời đã hết hạn", expiredAssignments.size());
+            log.debug("Tìm thấy {} phân công tạm thời đã hết hạn", expiredAssignments.size());
 
             if (!expiredAssignments.isEmpty()) {
                 int updatedCount = 0;
                 
                 for (Assignment assignment : expiredAssignments) {
-                    log.info("Cập nhật assignment ID: {} - Employee: {} - StartDate: {} - Status: {} → COMPLETED",
+                    log.debug("Cập nhật assignment ID: {} - Employee: {} - StartDate: {} - Status: {} → COMPLETED",
                             assignment.getId(),
                             assignment.getEmployee().getName(),
                             assignment.getStartDate(),
@@ -82,16 +82,16 @@ public class AssignmentScheduler {
                     updatedCount++;
                 }
                 
-                log.info("✓ Đã cập nhật {} phân công tạm thời sang trạng thái COMPLETED", updatedCount);
+                log.debug("✓ Đã cập nhật {} phân công tạm thời sang trạng thái COMPLETED", updatedCount);
             } else {
-                log.info("Không có phân công tạm thời nào cần cập nhật");
+                log.debug("Không có phân công tạm thời nào cần cập nhật");
             }
             
         } catch (Exception e) {
             log.error("❌ LỖI khi cập nhật phân công tạm thời: {}", e.getMessage(), e);
         }
         
-        log.info("=== KẾT THÚC QUÉT CẬP NHẬT PHÂN CÔNG TẠM THỜI ===\n");
+        log.debug("=== KẾT THÚC QUÉT CẬP NHẬT PHÂN CÔNG TẠM THỜI ===\n");
     }
 
     /**
@@ -99,8 +99,8 @@ public class AssignmentScheduler {
      */
     @Transactional
     public void executeUpdateExpiredFixedAssignments() {
-        log.info("=== BẮT ĐẦU QUÉT CẬP NHẬT PHÂN CÔNG CỐ ĐỊNH ===");
-        log.info("Thời gian chạy: {}", LocalDateTime.now());
+        log.debug("=== BẮT ĐẦU QUÉT CẬP NHẬT PHÂN CÔNG CỐ ĐỊNH ===");
+        log.debug("Thời gian chạy: {}", LocalDateTime.now());
 
         LocalDate endOfLastMonth = LocalDate.now().withDayOfMonth(1).minusDays(1);
         
@@ -108,13 +108,13 @@ public class AssignmentScheduler {
             // Tìm tất cả các phân công FIXED có startDate <= cuối tháng trước và status IN_PROGRESS
             List<Assignment> expiredAssignments = assignmentRepository.findExpiredFixedAssignments(endOfLastMonth);
             
-            log.info("Tìm thấy {} phân công cố định đã hết hạn", expiredAssignments.size());
+            log.debug("Tìm thấy {} phân công cố định đã hết hạn", expiredAssignments.size());
 
             if (!expiredAssignments.isEmpty()) {
                 int updatedCount = 0;
                 
                 for (Assignment assignment : expiredAssignments) {
-                    log.info("Cập nhật assignment ID: {} - Employee: {} - Type: {} - StartDate: {} - Status: {} → COMPLETED",
+                    log.debug("Cập nhật assignment ID: {} - Employee: {} - Type: {} - StartDate: {} - Status: {} → COMPLETED",
                             assignment.getId(),
                             assignment.getEmployee().getName(),
                             assignment.getAssignmentType(),
@@ -127,16 +127,16 @@ public class AssignmentScheduler {
                     updatedCount++;
                 }
                 
-                log.info("✓ Đã cập nhật {} phân công cố định sang trạng thái COMPLETED", updatedCount);
+                log.debug("✓ Đã cập nhật {} phân công cố định sang trạng thái COMPLETED", updatedCount);
             } else {
-                log.info("Không có phân công cố định nào cần cập nhật");
+                log.debug("Không có phân công cố định nào cần cập nhật");
             }
             
         } catch (Exception e) {
             log.error("❌ LỖI khi cập nhật phân công cố định: {}", e.getMessage(), e);
         }
         
-        log.info("=== KẾT THÚC QUÉT CẬP NHẬT PHÂN CÔNG CỐ ĐỊNH ===\n");
+        log.debug("=== KẾT THÚC QUÉT CẬP NHẬT PHÂN CÔNG CỐ ĐỊNH ===\n");
     }
 
     /**
@@ -154,8 +154,8 @@ public class AssignmentScheduler {
      */
     @Transactional
     public void executeGenerateMonthlyAttendances() {
-        log.info("=== BẮT ĐẦU SINH ASSIGNMENT VÀ CHẤM CÔNG THÁNG MỚI ===");
-        log.info("Thời gian chạy: {}", LocalDateTime.now());
+        log.debug("=== BẮT ĐẦU SINH ASSIGNMENT VÀ CHẤM CÔNG THÁNG MỚI ===");
+        log.debug("Thời gian chạy: {}", LocalDateTime.now());
 
         LocalDate today = LocalDate.now();
         YearMonth currentMonth = YearMonth.from(today);
@@ -173,7 +173,7 @@ public class AssignmentScheduler {
                     })
                     .toList();
             
-            log.info("Tìm thấy {} phân công của tháng {} cần tạo cho tháng mới", 
+            log.debug("Tìm thấy {} phân công của tháng {} cần tạo cho tháng mới", 
                     lastMonthAssignments.size(), lastMonth);
 
             int totalCreatedAssignments = 0;
@@ -191,7 +191,7 @@ public class AssignmentScheduler {
 
                 // Kiểm tra hợp đồng còn hiệu lực không
                 if (contract.getEndDate() != null && contract.getEndDate().isBefore(today)) {
-                    log.info("Hợp đồng ID {} đã hết hạn, bỏ qua", contract.getId());
+                    log.debug("Hợp đồng ID {} đã hết hạn, bỏ qua", contract.getId());
                     continue;
                 }
 
@@ -205,7 +205,7 @@ public class AssignmentScheduler {
                         );
                 
                 if (existingAssignment.isPresent()) {
-                    log.info("Tháng {}/{} đã có Assignment ID {} cho Employee {} - Contract {}, bỏ qua", 
+                    log.debug("Tháng {}/{} đã có Assignment ID {} cho Employee {} - Contract {}, bỏ qua", 
                             month, year, existingAssignment.get().getId(),
                             oldAssignment.getEmployee().getName(), contract.getId());
                     skippedCount++;
@@ -233,7 +233,7 @@ public class AssignmentScheduler {
                 Assignment savedAssignment = assignmentRepository.save(newAssignment);
                 totalCreatedAssignments++;
                 
-                log.info("✓ Đã tạo Assignment mới ID {} cho tháng {}/{} (Employee: {}, Type: {})",
+                log.debug("✓ Đã tạo Assignment mới ID {} cho tháng {}/{} (Employee: {}, Type: {})",
                         savedAssignment.getId(), month, year, 
                         savedAssignment.getEmployee().getName(),
                         savedAssignment.getAssignmentType());
@@ -247,7 +247,7 @@ public class AssignmentScheduler {
                     if (contractEndMonth.equals(currentMonth)) {
                         // Hợp đồng hết hạn trong tháng này
                         endDate = contract.getEndDate();
-                        log.info("Hợp đồng ID {} sẽ hết hạn ngày {}, chỉ sinh chấm công tới ngày đó", 
+                        log.debug("Hợp đồng ID {} sẽ hết hạn ngày {}, chỉ sinh chấm công tới ngày đó", 
                                 contract.getId(), endDate);
                     }
                 }
@@ -301,19 +301,19 @@ public class AssignmentScheduler {
                 }
 
                 if (generatedDays > 0) {
-                    log.info("  → Sinh {} ngày chấm công cho Assignment mới ID {}", 
+                    log.debug("  → Sinh {} ngày chấm công cho Assignment mới ID {}", 
                             generatedDays, savedAssignment.getId());
                     totalGeneratedAttendances += generatedDays;
                 }
             }
             
-            log.info("✓ Tổng kết: Đã tạo {} Assignment mới, sinh {} ngày chấm công, bỏ qua {} assignment", 
+            log.debug("✓ Tổng kết: Đã tạo {} Assignment mới, sinh {} ngày chấm công, bỏ qua {} assignment", 
                     totalCreatedAssignments, totalGeneratedAttendances, skippedCount);
             
         } catch (Exception e) {
             log.error("❌ LỖI khi sinh assignment và chấm công tháng mới: {}", e.getMessage(), e);
         }
         
-        log.info("=== KẾT THÚC SINH ASSIGNMENT VÀ CHẤM CÔNG THÁNG MỚI ===\n");
+        log.debug("=== KẾT THÚC SINH ASSIGNMENT VÀ CHẤM CÔNG THÁNG MỚI ===\n");
     }
 }

@@ -110,7 +110,7 @@ public class ContractController {
             @PathVariable Long id,
             @RequestParam("file") MultipartFile[] files) throws IOException {
 
-        log.info("Start uploadContractDocuments: contractId={}, fileCount={}", id, files.length);
+        log.debug("Start uploadContractDocuments: contractId={}, fileCount={}", id, files.length);
         
         List<ContractDocument> uploadedDocuments = contractDocumentService.uploadDocuments(id, files);
         
@@ -122,7 +122,7 @@ public class ContractController {
             @PathVariable Long id,
             @PathVariable Long documentId) throws IOException {
 
-        log.info("Start deleteContractDocument: contractId={}, documentId={}", id, documentId);
+        log.debug("Start deleteContractDocument: contractId={}, documentId={}", id, documentId);
         
         contractDocumentService.deleteDocument(id, documentId);
         
@@ -131,7 +131,7 @@ public class ContractController {
 
     @GetMapping("/{id}/documents")
     public ApiResponse<List<ContractDocument>> getContractDocuments(@PathVariable Long id) {
-        log.info("Fetching contract documents: contractId={}", id);
+        log.debug("Fetching contract documents: contractId={}", id);
         
         List<ContractDocument> documents = contractDocumentService.getContractDocuments(id);
         

@@ -76,7 +76,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     @Transactional
     public AssignmentResponse createAssignment(AssignmentRequest request) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        log.info("createAssignment by {}: employeeId={}, contractId={}, startDate={}",
+        log.debug("createAssignment by {}: employeeId={}, contractId={}, startDate={}",
                 username, request.getEmployeeId(), request.getContractId(), request.getStartDate());
 
         Employee employee = employeeRepository.findById(request.getEmployeeId())
@@ -124,7 +124,7 @@ public class AssignmentServiceImpl implements AssignmentService {
             
             autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
         }
-                log.info("createAssignment completed by {}: assignmentId={} (employee={}, contract={})",
+                log.debug("createAssignment completed by {}: assignmentId={} (employee={}, contract={})",
                                 username, savedAssignment.getId(), savedAssignment.getEmployee().getId(), savedAssignment.getContract().getId());
 
         return mapToResponse(savedAssignment);
@@ -196,9 +196,9 @@ public class AssignmentServiceImpl implements AssignmentService {
         Assignment assignment = assignmentRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
-                log.info("deleteAssignment by {}: assignmentId={}", username, id);
+                log.debug("deleteAssignment by {}: assignmentId={}", username, id);
                 assignmentRepository.delete(assignment);
-                log.info("deleteAssignment completed: assignmentId={}", id);
+                log.debug("deleteAssignment completed: assignmentId={}", id);
     }
 
     @Override
@@ -206,7 +206,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     public TemporaryAssignmentResponse temporaryReassignment(TemporaryReassignmentRequest request) {
 
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        log.info("temporaryReassignment requested by {}: replacedId={}, replacementId={}, datesCount={}",
+        log.debug("temporaryReassignment requested by {}: replacedId={}, replacementId={}, datesCount={}",
                 username, request.getReplacedEmployeeId(), request.getReplacementEmployeeId(),
                 request.getDates() != null ? request.getDates().size() : 0);
         
@@ -300,7 +300,7 @@ public class AssignmentServiceImpl implements AssignmentService {
             AttendanceResponse deletedAttendanceResponse = mapAttendanceToResponse(deletedAttendance);
             deletedAttendances.add(deletedAttendanceResponse);
             attendanceRepository.delete(deletedAttendance);
-            log.info("Deleted old attendance id={} for replacedEmployeeId={} on date={}", deletedAttendance.getId(), request.getReplacedEmployeeId(), date);
+            log.debug("Deleted old attendance id={} for replacedEmployeeId={} on date={}", deletedAttendance.getId(), request.getReplacedEmployeeId(), date);
 
             // Tạo attendance mới cho người thay
             Attendance newAttendance = Attendance.builder()
@@ -321,7 +321,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                     .build();
 
             Attendance savedAttendance = attendanceRepository.save(newAttendance);
-            log.info("Created new attendance id={} for replacementEmployeeId={} on date={}", savedAttendance.getId(), request.getReplacementEmployeeId(), date);
+            log.debug("Created new attendance id={} for replacementEmployeeId={} on date={}", savedAttendance.getId(), request.getReplacementEmployeeId(), date);
 
             AttendanceResponse createdAttendanceResponse = mapAttendanceToResponse(savedAttendance);
             createdAttendances.add(createdAttendanceResponse);
@@ -337,7 +337,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             replacedAssignmentEntity.setWorkDays(replacedWorkDays);
             assignmentRepository.save(replacedAssignmentEntity);
-                        log.info("Updated workDays for assignmentId={} -> {}", replacedAssignmentEntity.getId(), replacedWorkDays);
+                        log.debug("Updated workDays for assignmentId={} -> {}", replacedAssignmentEntity.getId(), replacedWorkDays);
         }
 
         // Lưu lịch sử điều động
@@ -360,7 +360,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                     .build();
             
                         assignmentHistoryRepository.save(history);
-                        log.info("Saved assignment history id={} by user={}", history.getId(), username);
+                        log.debug("Saved assignment history id={} by user={}", history.getId(), username);
         }
 
         // Tính công trong tháng (lấy tháng của ngày đầu tiên)
@@ -370,7 +370,7 @@ public class AssignmentServiceImpl implements AssignmentService {
             LocalDate start = ym.atDay(1);
             LocalDate end = ym.atEndOfMonth();
 
-            log.info("Calculating monthly totals for month={} ({} -> {})", ym, start, end);
+            log.debug("Calculating monthly totals for month={} ({} -> {})", ym, start, end);
 
             int replacementTotal = attendanceRepository
                     .findByEmployeeAndDateBetween(request.getReplacementEmployeeId(), start, end).size();
@@ -380,7 +380,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                     .findByEmployeeAndDateBetween(request.getReplacedEmployeeId(), start, end).size();
             System.out.println("Tổng công người bị thay (ID " + request.getReplacedEmployeeId() + "): " + replacedTotal);
 
-            log.info("temporaryReassignment result: created={}, deleted={} (replacementTotal={}, replacedTotal={})",
+            log.debug("temporaryReassignment result: created={}, deleted={} (replacementTotal={}, replacedTotal={})",
                     createdAttendances.size(), deletedAttendances.size(), replacementTotal, replacedTotal);
 
             return TemporaryAssignmentResponse.builder()
@@ -777,7 +777,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         // Lấy thông tin user đang rollback
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User currentUser = userRepository.findByUsername(username).orElse(null);
-        log.info("rollbackReassignment requested by {}: historyId={}", username, historyId);
+        log.debug("rollbackReassignment requested by {}: historyId={}", username, historyId);
 
         int restoredCount = 0;
         int removedCount = 0;
@@ -831,7 +831,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         history.setRollbackAt(LocalDateTime.now());
         assignmentHistoryRepository.save(history);
 
-        log.info("rollbackReassignment completed by {}: historyId={}, restored={}, removed={}", username, historyId, restoredCount, removedCount);
+        log.debug("rollbackReassignment completed by {}: historyId={}, restored={}, removed={}", username, historyId, restoredCount, removedCount);
 
         return RollbackResponse.builder()
                 .success(true)
