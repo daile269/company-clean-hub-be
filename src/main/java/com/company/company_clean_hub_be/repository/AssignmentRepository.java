@@ -86,11 +86,13 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     );
 
     @Query("SELECT a FROM Assignment a " +
-           "WHERE a.employee.id = :employeeId " +
-           "AND (:customerId IS NULL OR a.contract.customer.id = :customerId) " +
-           "AND (:month IS NULL OR MONTH(a.startDate) = :month) " +
-           "AND (:year IS NULL OR YEAR(a.startDate) = :year) " +
-           "ORDER BY a.startDate DESC")
+            "LEFT JOIN a.contract c " +
+            "LEFT JOIN c.customer cus " +
+            "WHERE a.employee.id = :employeeId " +
+            "AND (:customerId IS NULL OR cus.id = :customerId) " +
+            "AND (:month IS NULL OR MONTH(a.startDate) = :month) " +
+            "AND (:year IS NULL OR YEAR(a.startDate) = :year) " +
+            "ORDER BY a.startDate DESC")
     Page<Assignment> findAssignmentsByEmployeeWithFilters(
             @Param("employeeId") Long employeeId,
             @Param("customerId") Long customerId,
