@@ -2,8 +2,10 @@ package com.company.company_clean_hub_be.controller;
 
 import java.util.List;
 
-import com.company.company_clean_hub_be.dto.response.PayRollExportExcel;
+import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
 import com.company.company_clean_hub_be.service.ExcelExportService;
+import com.company.company_clean_hub_be.service.impl.ExcelExportServiceImpl;
+import com.company.company_clean_hub_be.service.impl.PayrollServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
@@ -98,12 +100,13 @@ public class PayrollController {
             @PathVariable Integer year) {
 
         log.info("🔵 [EXPORT PAYROLL] Request nhận được: month={}, year={}", month, year);
-
-        List<PayRollExportExcel> payRollExportExcels = payrollService.getAllPayRoll(month, year);
+        List<PayRollAssignmentExportExcel> assignmentData = payrollService.getAllPayRollByAssignment(month, year);
         log.info("🟢 [EXPORT PAYROLL] Số lượng dòng payroll lấy được: {}",
-                payRollExportExcels != null ? payRollExportExcels.size() : 0);
+                assignmentData != null ? assignmentData.size() : 0);
 
-        ByteArrayResource excelFile = excelExportService.exportUsersToExcel(payRollExportExcels, month, year);
+        // Use new export method
+        ExcelExportServiceImpl excelExportServiceImpl = (ExcelExportServiceImpl) excelExportService;
+        ByteArrayResource excelFile = excelExportServiceImpl.exportPayrollAssignmentsToExcel(assignmentData, month, year);
 
         if (excelFile == null) {
             log.warn("⚠️ [EXPORT PAYROLL] excelFile = null → Không tạo được file Excel!");

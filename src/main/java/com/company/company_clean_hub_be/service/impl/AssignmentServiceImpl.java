@@ -217,6 +217,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
             }
         }
+
         log.info("createAssignment completed by {}: assignmentId={} (employee={}, contract={})",
                 username,
                 savedAssignment.getId(),
@@ -454,7 +455,6 @@ public class AssignmentServiceImpl implements AssignmentService {
                     .status(HistoryStatus.ACTIVE)
                     .createdBy(currentUser)
                     .build();
-            
             assignmentHistoryRepository.save(history);
             log.info("Saved assignment history id={} by user={}", history.getId(), username);
         }
@@ -612,11 +612,10 @@ public class AssignmentServiceImpl implements AssignmentService {
         Page<Assignment> assignmentPage = assignmentRepository.findAssignmentsByEmployeeWithFilters(
                 employeeId, customerId, month, year, pageable
         );
-
+        log.info("2257: {}",assignmentPage);
         List<AssignmentResponse> items = assignmentPage.getContent().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
-
         return PageResponse.<AssignmentResponse>builder()
                 .content(items)
                 .page(assignmentPage.getNumber())

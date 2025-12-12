@@ -4,15 +4,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.PrimaryKeyJoinColumn;
-import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -72,10 +67,8 @@ public class Employee extends User {
     // Chỉ cho COMPANY_STAFF: Mức lương đóng BHXH/BHYT
     @Column(name = "insurance_salary", precision = 18, scale = 2)
     private BigDecimal insuranceSalary;
-
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+//    @Column(name = "created_at")
+//    private LocalDateTime createdAt;
+//    @Column(name = "updated_at")
+//    private LocalDateTime updatedAt;
 }

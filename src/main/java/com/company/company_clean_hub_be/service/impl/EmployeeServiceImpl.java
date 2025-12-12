@@ -1,6 +1,20 @@
 package com.company.company_clean_hub_be.service.impl;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.company.company_clean_hub_be.dto.request.EmployeeRequest;
+import com.company.company_clean_hub_be.dto.response.EmployeeExportDto;
 import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.Employee;
@@ -10,19 +24,9 @@ import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.service.EmployeeService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -214,5 +218,50 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .build();
     }
 
+    @Override
+    public List<EmployeeExportDto> getAllEmployeesForExport() {
+        log.info("getAllEmployeesForExport requested");
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+        return employeeRepository.findAll().stream()
+                .map(employee -> EmployeeExportDto.builder()
+                        .id(employee.getId())
+                        .employeeCode(employee.getEmployeeCode())
+                        .name(employee.getName())
+                        .username(employee.getUsername())
+                        .email(employee.getEmail())
+                        .phone(employee.getPhone())
+                        .address(employee.getAddress())
+                        .cccd(employee.getCccd())
+                        .bankAccount(employee.getBankAccount())
+                        .bankName(employee.getBankName())
+                        .description(employee.getDescription())
+                        .createdAt(employee.getCreatedAt() != null ? employee.getCreatedAt().format(formatter) : "")
+                        .updatedAt(employee.getUpdatedAt() != null ? employee.getUpdatedAt().format(formatter) : "")
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<EmployeeExportDto> getEmployeesForExportByType(com.company.company_clean_hub_be.entity.EmploymentType employmentType) {
+        log.info("getEmployeesForExportByType requested: employmentType={}", employmentType);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+        return employeeRepository.findByEmploymentType(employmentType).stream()
+                .map(employee -> EmployeeExportDto.builder()
+                        .id(employee.getId())
+                        .employeeCode(employee.getEmployeeCode())
+                        .name(employee.getName())
+                        .username(employee.getUsername())
+                        .email(employee.getEmail())
+                        .phone(employee.getPhone())
+                        .address(employee.getAddress())
+                        .cccd(employee.getCccd())
+                        .bankAccount(employee.getBankAccount())
+                        .bankName(employee.getBankName())
+                        .description(employee.getDescription())
+                        .createdAt(employee.getCreatedAt() != null ? employee.getCreatedAt().format(formatter) : "")
+                        .updatedAt(employee.getUpdatedAt() != null ? employee.getUpdatedAt().format(formatter) : "")
+                        .build())
+                .collect(Collectors.toList());
+    }
 
 }

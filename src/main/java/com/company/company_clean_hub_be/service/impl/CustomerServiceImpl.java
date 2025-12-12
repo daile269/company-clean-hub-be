@@ -1,17 +1,16 @@
 package com.company.company_clean_hub_be.service.impl;
 
-import com.company.company_clean_hub_be.dto.request.CustomerRequest;
-import com.company.company_clean_hub_be.dto.response.CustomerResponse;
-import com.company.company_clean_hub_be.dto.response.PageResponse;
-import com.company.company_clean_hub_be.entity.Customer;
-import com.company.company_clean_hub_be.entity.Role;
-import com.company.company_clean_hub_be.exception.AppException;
-import com.company.company_clean_hub_be.exception.ErrorCode;
-import com.company.company_clean_hub_be.repository.CustomerRepository;
-import com.company.company_clean_hub_be.repository.RoleRepository;
-import com.company.company_clean_hub_be.service.CustomerService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -20,9 +19,23 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
+import com.company.company_clean_hub_be.dto.request.CustomerRequest;
+import com.company.company_clean_hub_be.dto.response.ContractDetailDto;
+import com.company.company_clean_hub_be.dto.response.CustomerContractGroupDto;
+import com.company.company_clean_hub_be.dto.response.CustomerContractServiceFlatDto;
+import com.company.company_clean_hub_be.dto.response.CustomerResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.entity.Customer;
+import com.company.company_clean_hub_be.entity.Role;
+import com.company.company_clean_hub_be.exception.AppException;
+import com.company.company_clean_hub_be.exception.ErrorCode;
+import com.company.company_clean_hub_be.repository.ContractRepository;
+import com.company.company_clean_hub_be.repository.CustomerRepository;
+import com.company.company_clean_hub_be.repository.RoleRepository;
+import com.company.company_clean_hub_be.service.CustomerService;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
@@ -30,8 +43,103 @@ import java.util.stream.Collectors;
 @Slf4j
 public class CustomerServiceImpl implements CustomerService {
     private final CustomerRepository customerRepository;
+    private final ContractRepository contractRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+
+    @Override
+    public List<CustomerContractGroupDto> getCustomersWithContractsForExport() {
+        log.info("getCustomersWithContractsForExport requested");
+        
+        List<CustomerContractServiceFlatDto> flatData = contractRepository.findAllCustomerContractServicesFlat();
+        
+        Map<Long, CustomerContractGroupDto> customerMap = new LinkedHashMap<>();
+        Map<Long, ContractDetailDto> contractMap = new HashMap<>();
+        Map<Long, List<BigDecimal>> contractVatMap = new HashMap<>();
+        
+        for (CustomerContractServiceFlatDto row : flatData) {
+            Long customerId = row.getCustomerId();
+            Long contractId = row.getContractId();
+            
+            customerMap.putIfAbsent(customerId, CustomerContractGroupDto.builder()
+                    .customerId(customerId)
+                    .customerName(row.getCustomerName())
+                    .address(row.getAddress())
+                    .taxCode(row.getTaxCode())
+                    .email(row.getEmail())
+                    .contracts(new ArrayList<>())
+                    .build());
+            
+            if (!contractMap.containsKey(contractId)) {
+                Integer workDaysValue = row.getWorkDays();
+                String workingDaysStr = workDaysValue != null && workDaysValue.compareTo(0) > 0
+                    ? formatWorkingDays(workDaysValue)
+                    : "";
+                int workDaysInt = workDaysValue != null ? workDaysValue : 0;
+                
+                ContractDetailDto contract = ContractDetailDto.builder()
+                        .contractId(contractId)
+                        .contractCode(String.valueOf(contractId))
+                        .startDate(row.getStartDate() != null ? formatDate(row.getStartDate()) : "")
+                        .endDate(row.getEndDate() != null ? formatDate(row.getEndDate()) : "")
+                        .workingDays(workingDaysStr)
+                        .workDays(workDaysInt)
+                        .contractValue(row.getFinalPrice() != null ? row.getFinalPrice().doubleValue() : 0.0)
+                        .contractType(row.getContractType() != null ? row.getContractType() : "")
+                        .paymentStatus(row.getPaymentStatus() != null ? row.getPaymentStatus() : "")
+                        .description(row.getContractDescription() != null ? row.getContractDescription() : "")
+                        .vatAmount(0.0)
+                        .totalValue(row.getFinalPrice() != null ? row.getFinalPrice().doubleValue() : 0.0)
+                        .build();
+                
+                contractMap.put(contractId, contract);
+                contractVatMap.put(contractId, new ArrayList<>());
+            }
+            
+            if (row.getServiceId() != null && row.getServicePrice() != null && row.getVatPercent() != null) {
+                BigDecimal vatAmount = row.getServicePrice()
+                        .multiply(row.getVatPercent())
+                        .divide(new BigDecimal("100"));
+                contractVatMap.get(contractId).add(vatAmount);
+            }
+        }
+        
+        for (Map.Entry<Long, ContractDetailDto> entry : contractMap.entrySet()) {
+            Long contractId = entry.getKey();
+            ContractDetailDto contract = entry.getValue();
+            
+            BigDecimal totalVat = contractVatMap.get(contractId).stream()
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            contract.setVatAmount(totalVat.doubleValue());
+            contract.setTotalValue(contract.getContractValue() + totalVat.doubleValue());
+        }
+        
+        for (CustomerContractGroupDto customer : customerMap.values()) {
+            customer.setContracts(contractMap.values().stream()
+                    .filter(c -> flatData.stream()
+                            .anyMatch(f -> f.getCustomerId().equals(customer.getCustomerId()) && 
+                                          f.getContractId().equals(c.getContractId())))
+                    .collect(Collectors.toList()));
+        }
+        
+        log.info("getCustomersWithContractsForExport completed: total customers={}", customerMap.size());
+        return new ArrayList<>(customerMap.values());
+    }
+    
+    private String formatDate(String dateStr) {
+        try {
+            DateTimeFormatter inputFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            DateTimeFormatter outputFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+            return LocalDate.parse(dateStr, inputFormatter).format(outputFormatter);
+        } catch (Exception e) {
+            return dateStr;
+        }
+    }
+    
+    private String formatWorkingDays(Integer workDays) {
+        return workDays != null && workDays > 0 ? workDays + " ngày" : "";
+    }
 
     @Override
     public List<CustomerResponse> getAllCustomers() {

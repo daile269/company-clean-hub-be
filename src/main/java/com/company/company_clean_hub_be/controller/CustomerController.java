@@ -1,22 +1,41 @@
 package com.company.company_clean_hub_be.controller;
 
+import java.util.List;
+
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.company.company_clean_hub_be.dto.request.CustomerRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
+import com.company.company_clean_hub_be.dto.response.CustomerContractGroupDto;
 import com.company.company_clean_hub_be.dto.response.CustomerResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.service.CustomerService;
+import com.company.company_clean_hub_be.service.ExcelExportService;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequiredArgsConstructor
 @RequestMapping(value = "/api/customers")
+@Slf4j
 public class CustomerController {
     private final CustomerService customerService;
+    private final ExcelExportService excelExportService;
 
     @GetMapping
     public ApiResponse<List<CustomerResponse>> getAllCustomers() {
@@ -57,5 +76,23 @@ public class CustomerController {
     public ApiResponse<Void> deleteCustomer(@PathVariable Long id) {
         customerService.deleteCustomer(id);
         return ApiResponse.success("Xóa khách hàng thành công", null, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/export/excel")
+    public ResponseEntity<ByteArrayResource> exportCustomersWithContracts() {
+        log.info("Export customers with contracts requested");
+        try {
+            List<CustomerContractGroupDto> customerGroups = customerService.getCustomersWithContractsForExport();
+            ByteArrayResource resource = excelExportService.exportCustomersWithContractsToExcel(customerGroups);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=Danh_sach_khach_hang.xlsx")
+                    .contentType(MediaType.parseMediaType(
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(resource);
+        } catch (Exception e) {
+            log.error("Error exporting customers", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 }

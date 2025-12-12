@@ -98,9 +98,6 @@ public class FileStorageServiceImpl implements FileStorageService {
 
     @Override
     public Resource loadFileAsResource(String relativePath) throws IOException {
-        // For Cloudinary, we don't need to load as Resource
-        // Instead, we return the URL directly from the entity
-        // This method is not used for Cloudinary
         log.warn("loadFileAsResource is not supported for Cloudinary storage");
         throw new IOException("loadFileAsResource is not supported for Cloudinary storage");
     }

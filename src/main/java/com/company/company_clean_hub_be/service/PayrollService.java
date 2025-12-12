@@ -4,13 +4,16 @@ import java.util.List;
 
 import com.company.company_clean_hub_be.dto.request.PayrollRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
 import com.company.company_clean_hub_be.dto.response.PayRollExportExcel;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
 
 import jakarta.validation.Valid;
 
 public interface PayrollService {
-    List<PayRollExportExcel> getAllPayRoll(Integer month, Integer year);
+//    List<PayRollExportExcel> getAllPayRoll(Integer month, Integer year);
+
+    List<PayRollAssignmentExportExcel> getAllPayRollByAssignment(Integer month, Integer year);
 
     //    PayrollResponse calculatePayroll(PayrollRequest request);
     PayrollResponse getPayrollById(Long id);

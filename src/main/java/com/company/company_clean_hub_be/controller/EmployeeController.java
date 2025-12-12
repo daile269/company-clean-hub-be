@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,11 +22,13 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.company.company_clean_hub_be.dto.request.EmployeeRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
+import com.company.company_clean_hub_be.dto.response.EmployeeExportDto;
 import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.EmployeeImage;
 import com.company.company_clean_hub_be.service.EmployeeImageService;
 import com.company.company_clean_hub_be.service.EmployeeService;
+import com.company.company_clean_hub_be.service.ExcelExportService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +41,7 @@ import lombok.extern.slf4j.Slf4j;
 public class EmployeeController {
     private final EmployeeService employeeService;
     private final EmployeeImageService employeeImageService;
+    private final ExcelExportService excelExportService;
 
     @GetMapping
     public ApiResponse<List<EmployeeResponse>> getAllEmployees() {
@@ -128,11 +134,6 @@ public class EmployeeController {
                 id, imageId, file.getOriginalFilename(), file.getSize());
         
         try {
-
-
-
-
-
             EmployeeImage saved = employeeImageService.replaceImage(id, imageId, file);
             log.info("Replace successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
             return ApiResponse.success("Cập nhật ảnh nhân viên thành công", saved, HttpStatus.OK.value());
@@ -185,6 +186,30 @@ public class EmployeeController {
         } catch (Exception ex) {
             log.error("Failed to fetch images for employeeId={}: {}", id, ex.getMessage(), ex);
             return ApiResponse.success("Lấy danh sách ảnh nhân viên thành công", new ArrayList<>(), HttpStatus.OK.value());
+        }
+    }
+
+    @GetMapping("/export/excel")
+    public ResponseEntity<ByteArrayResource> exportEmployeesToExcel(
+            @RequestParam(required = false) com.company.company_clean_hub_be.entity.EmploymentType employmentType) {
+        log.info("Export employees requested: employmentType={}", employmentType);
+        try {
+            List<EmployeeExportDto> employees;
+            if (employmentType != null) {
+                employees = employeeService.getEmployeesForExportByType(employmentType);
+            } else {
+                employees = employeeService.getAllEmployeesForExport();
+            }
+            ByteArrayResource resource = excelExportService.exportEmployeesToExcel(employees);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=Danh_sach_nhan_vien.xlsx")
+                    .contentType(MediaType.parseMediaType(
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(resource);
+        } catch (Exception e) {
+            log.error("Error exporting employees", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }
