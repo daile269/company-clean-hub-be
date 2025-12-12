@@ -612,11 +612,10 @@ public class AssignmentServiceImpl implements AssignmentService {
         Page<Assignment> assignmentPage = assignmentRepository.findAssignmentsByEmployeeWithFilters(
                 employeeId, customerId, month, year, pageable
         );
-
+        log.info("2257: {}",assignmentPage);
         List<AssignmentResponse> items = assignmentPage.getContent().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
-
         return PageResponse.<AssignmentResponse>builder()
                 .content(items)
                 .page(assignmentPage.getNumber())

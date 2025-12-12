@@ -215,7 +215,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // ===== COMPANY HEADER SECTION =====
             int currentRowIndex = 0;
-            int totalColumns = 15;
+            int totalColumns = 16;
 
             // Row 0: Company name
             Row companyRow = sheet.createRow(currentRowIndex++);
@@ -260,7 +260,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             Row headerRow = sheet.createRow(currentRowIndex++);
             String[] headers = {
                     "Mã nhân viên", "Họ tên", "Ngân hàng", "Số tài khoản", "Số điện thoại",
-                    "Loại phân công","Mức lương", "Công trình", "Tổng ngày", "Thưởng", "Phạt",
+                    "Loại phân công","Mức lương", "Công trình", "Ngày thực tế","Ngày dự kiến", "Thưởng", "Phạt",
                     "Phụ cấp", "Bảo hiểm", "Lương ứng", "Tổng lương"
             };
 
@@ -401,30 +401,39 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         cell8.setCellValue(data.getAssignmentDays() != null ? data.getAssignmentDays() : 0);
         cell8.setCellStyle(numberStyle);
 
+        // Ngày KH
+        Cell cell8b = row.createCell(9);
+        cell8b.setCellValue(data.getAssignmentPlanedDays() != null ? data.getAssignmentPlanedDays() : 0);
+        cell8b.setCellStyle(numberStyle);
+
         // Thưởng
-        Cell cell9 = row.createCell(9);
+        Cell cell9 = row.createCell(10);
         cell9.setCellValue(data.getAssignmentBonus() != null ? data.getAssignmentBonus().doubleValue() : 0);
         cell9.setCellStyle(numberStyle);
 
         // Phạt
-        Cell cell10 = row.createCell(10);
+        Cell cell10 = row.createCell(11);
         cell10.setCellValue(data.getAssignmentPenalty() != null ? data.getAssignmentPenalty().doubleValue() : 0);
         cell10.setCellStyle(numberStyle);
 
         // Phụ cấp
-        Cell cell11 = row.createCell(11);
+        Cell cell11 = row.createCell(12);
         cell11.setCellValue(data.getAssignmentAllowance() != null ? data.getAssignmentAllowance().doubleValue() : 0);
         cell11.setCellStyle(numberStyle);
 
         // Bảo hiểm
-        Cell cell12 = row.createCell(12);
+        Cell cell12 = row.createCell(13);
         cell12.setCellValue(data.getAssignmentInsurance() != null ? data.getAssignmentInsurance().doubleValue() : 0);
         cell12.setCellStyle(numberStyle);
 
         // Lương ứng
-        Cell cell13 = row.createCell(13);
+        Cell cell13 = row.createCell(14);
         cell13.setCellValue(data.getAssignmentAdvance() != null ? data.getAssignmentAdvance().doubleValue() : 0);
         cell13.setCellStyle(numberStyle);
+
+        Cell cell14 = row.createCell(15);
+        cell14.setCellValue(data.getAssignmentSalary() != null ? data.getAssignmentSalary().doubleValue() : 0);
+        cell14.setCellStyle(numberStyle);
     }
 
     private void writeTotalRow(Row row, PayRollAssignmentExportExcel data,
@@ -475,33 +484,36 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         cell8.setCellValue(data.getTotalDays() != null ? data.getTotalDays() : 0);
         cell8.setCellStyle(totalRowStyle);
 
+        Cell cell15 = row.createCell(9);
+        cell15.setCellValue(data.getTotalPlanedDays() != null ? data.getTotalPlanedDays() : 0);
+        cell15.setCellStyle(totalRowStyle);
         // Thưởng
-        Cell cell9 = row.createCell(9);
+        Cell cell9 = row.createCell(10);
         cell9.setCellValue(data.getTotalBonus() != null ? data.getTotalBonus().doubleValue() : 0);
         cell9.setCellStyle(totalRowStyle);
 
         // Phạt
-        Cell cell10 = row.createCell(10);
+        Cell cell10 = row.createCell(11);
         cell10.setCellValue(data.getTotalPenalty() != null ? data.getTotalPenalty().doubleValue() : 0);
         cell10.setCellStyle(totalRowStyle);
 
         // Phụ cấp
-        Cell cell11 = row.createCell(11);
+        Cell cell11 = row.createCell(12);
         cell11.setCellValue(data.getTotalAllowance() != null ? data.getTotalAllowance().doubleValue() : 0);
         cell11.setCellStyle(totalRowStyle);
 
         // Bảo hiểm
-        Cell cell12 = row.createCell(12);
+        Cell cell12 = row.createCell(13);
         cell12.setCellValue(data.getTotalInsurance() != null ? data.getTotalInsurance().doubleValue() : 0);
         cell12.setCellStyle(totalRowStyle);
 
         // Lương ứng
-        Cell cell13 = row.createCell(13);
+        Cell cell13 = row.createCell(14);
         cell13.setCellValue(data.getTotalAdvance() != null ? data.getTotalAdvance().doubleValue() : 0);
         cell13.setCellStyle(totalRowStyle);
 
         // Tổng lương
-        Cell cell14 = row.createCell(14);
+        Cell cell14 = row.createCell(15);
         cell14.setCellValue(data.getFinalSalary() != null ? data.getFinalSalary().doubleValue() : 0);
         cell14.setCellStyle(totalRowStyle);
     }

@@ -19,14 +19,17 @@ public class PayRollAssignmentExportExcel {
     private BigDecimal baseSalary;
     // Assignment-level totals
     private Integer assignmentDays;
+    private Integer assignmentPlanedDays;
     private BigDecimal assignmentBonus;
     private BigDecimal assignmentPenalty;
     private BigDecimal assignmentAllowance;
     private BigDecimal assignmentInsurance;
     private BigDecimal assignmentAdvance;
+    private BigDecimal assignmentSalary;
     
     // Employee-level totals (for the total row)
     private Integer totalDays;
+    private Integer totalPlanedDays;
     private BigDecimal totalBonus;
     private BigDecimal totalPenalty;
     private BigDecimal totalAllowance;

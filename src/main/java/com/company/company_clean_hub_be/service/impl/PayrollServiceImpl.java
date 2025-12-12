@@ -85,6 +85,10 @@ public class PayrollServiceImpl implements PayrollService {
             throw new AppException(ErrorCode.NO_ATTENDANCE_DATA);
         }
 
+        // Check if any assignment has COMPANY scope
+        boolean hasCompanyScope = assignments.stream()
+                .anyMatch(a -> a.getScope() != null && a.getScope() == AssignmentScope.COMPANY);
+
         for (Assignment assignment : assignments) {
             int realDays = calculateActualWorkDays(assignment);
             totalDays += realDays;
@@ -110,6 +114,18 @@ public class PayrollServiceImpl implements PayrollService {
             // Tính amount theo assignment (đúng theo hàm chuẩn calculateAssignmentAmount)
             BigDecimal assignmentAmount = calculateAssignmentAmount(assignment, bonus, support);
             amountTotal = amountTotal.add(assignmentAmount);
+        }
+
+        // Add employee allowance if COMPANY scope exists
+        if (hasCompanyScope && employee.getAllowance() != null) {
+            totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
+        }
+        if (hasCompanyScope && employee.getInsuranceSalary() != null) {
+            // COMPANY scope: use employee's insurance salary
+            insuranceTotal = employee.getInsuranceSalary();
+        } else {
+            // CONTRACT scope or manual entry: use request value
+            insuranceTotal = request.getInsuranceAmount() != null ? request.getInsuranceAmount() : BigDecimal.ZERO;
         }
 
         // Tính finalSalary giống hàm gốc
@@ -217,6 +233,7 @@ public class PayrollServiceImpl implements PayrollService {
             }
 
             // Calculate totals for all assignments
+            int totalPlanedDay = 0;
             int totalDays = 0;
             BigDecimal totalBonus =  persistedPayroll.getBonusTotal() != null ? persistedPayroll.getBonusTotal() : BigDecimal.ZERO;
             BigDecimal totalPenalty = persistedPayroll.getPenaltyTotal() != null ? persistedPayroll.getPenaltyTotal() : BigDecimal.ZERO;
@@ -235,10 +252,30 @@ public class PayrollServiceImpl implements PayrollService {
                 BigDecimal assignmentSupport = attendanceRepository.sumSupportCostByAssignment(assignment.getId());
                 assignmentSupport = assignmentSupport != null ? assignmentSupport : BigDecimal.ZERO;
                 BigDecimal additionalAllowance = assignment.getAdditionalAllowance() != null  ? assignment.getAdditionalAllowance()  : BigDecimal.ZERO;
+                
+                // Check assignment scope
+                AssignmentScope scope = assignment.getScope() != null ? assignment.getScope() : AssignmentScope.CONTRACT;
+                
+                // Calculate allowance based on scope
                 BigDecimal assignmentAllowance = assignmentSupport.add(additionalAllowance);
-
-                // Get project company
-                String projectCompany = assignment.getContract().getCustomer() != null ? assignment.getContract().getCustomer().getCompany() : null;
+                if (scope == AssignmentScope.COMPANY && employee.getAllowance() != null) {
+                    assignmentAllowance = assignmentAllowance.add(employee.getAllowance());
+                }
+                
+                // Determine base salary based on scope
+                BigDecimal baseSalary;
+                if (scope == AssignmentScope.COMPANY && employee.getMonthlySalary() != null) {
+                    baseSalary = employee.getMonthlySalary();
+                } else {
+                    baseSalary = assignment.getSalaryAtTime();
+                }
+                
+                String projectCompany = "";
+                if (assignment.getContract() != null){
+                    projectCompany = assignment.getContract().getCustomer() != null ? assignment.getContract().getCustomer().getCompany() : null;
+                }else {
+                    projectCompany ="Văn phòng";
+                }
 
                 // Map assignment type to Vietnamese
                 String assignmentTypeVN = mapAssignmentTypeToVietnamese(assignment.getAssignmentType());
@@ -250,15 +287,18 @@ public class PayrollServiceImpl implements PayrollService {
                         .bankAccount(employee.getBankAccount())
                         .phone(employee.getPhone())
                         .assignmentType(assignmentTypeVN)
-                        .baseSalary(assignment.getSalaryAtTime())
+                        .baseSalary(baseSalary)
                         .projectCompany(projectCompany)
                         .assignmentDays(assignmentDays)
+                        .assignmentPlanedDays(assignment.getPlannedDays())
                         .assignmentBonus(assignmentBonus)
                         .assignmentPenalty(assignmentPenalty)
                         .assignmentAllowance(assignmentAllowance)
                         .assignmentInsurance(BigDecimal.ZERO) // Insurance is at employee level, not assignment level
                         .assignmentAdvance(BigDecimal.ZERO) // Advance is at employee level, not assignment level
+                        .assignmentSalary(calculateAssignmentAmount(assignment,assignmentBonus,assignmentSupport))
                         .totalDays(null) // Will be set in total row
+                        .totalPlanedDays(null)
                         .totalBonus(null)
                         .totalPenalty(null)
                         .totalAllowance(null)
@@ -272,6 +312,7 @@ public class PayrollServiceImpl implements PayrollService {
                 
                 // Accumulate totals
                 totalDays += assignmentDays;
+                totalPlanedDay += assignment.getPlannedDays();
                 totalBonus = totalBonus.add(assignmentBonus);
                 totalPenalty = totalPenalty.add(assignmentPenalty);
                 totalAllowance = totalAllowance.add(assignmentAllowance);
@@ -290,12 +331,15 @@ public class PayrollServiceImpl implements PayrollService {
                     .baseSalary(null)
                     .projectCompany(null) // Empty for total row
                     .assignmentDays(null) // Empty for total row
+                    .assignmentPlanedDays(null)
                     .assignmentBonus(null)
                     .assignmentPenalty(null)
                     .assignmentAllowance(null)
                     .assignmentInsurance(null)
                     .assignmentAdvance(null)
+                    .assignmentSalary(null)
                     .totalDays(totalDays)
+                    .totalPlanedDays(totalPlanedDay)
                     .totalBonus(totalBonus)
                     .totalPenalty(totalPenalty)
                     .totalAllowance(totalAllowance)
@@ -304,7 +348,6 @@ public class PayrollServiceImpl implements PayrollService {
                     .finalSalary(persistedPayroll.getFinalSalary())
                     .isTotalRow(true)
                     .build();
-
             result.add(totalRow);
             log.info("[PAYROLL-EXPORT] Added total row for employee {}", employeeId);
         }
@@ -326,6 +369,8 @@ public class PayrollServiceImpl implements PayrollService {
                 return "Cố định theo ngày";
             case TEMPORARY:
                 return "Điều động";
+            case FIXED_BY_COMPANY:
+                return "Nhân viên văn phòng";
             default:
                 return "";
         }
@@ -356,9 +401,15 @@ public class PayrollServiceImpl implements PayrollService {
         BigDecimal totalAdvance   = BigDecimal.ZERO;
         BigDecimal totalInsurance = BigDecimal.ZERO;
         int totalDays = 0;
+        
+        // Check if any assignment has COMPANY scope
+        boolean hasCompanyScope = assignments.stream()
+                .anyMatch(a -> a.getScope() != null && a.getScope() == AssignmentScope.COMPANY);
+        
         Payroll payroll = payrollRepository
                 .findByEmployeeAndMonthAndYear(employee.getId(), month, year)
                 .orElseGet(Payroll::new);
+        
         for (Assignment assignment : assignments) {
             totalDays += calculateActualWorkDays(assignment);
 
@@ -376,6 +427,11 @@ public class PayrollServiceImpl implements PayrollService {
                     .add(additionalAllowance);
             amountTotal = amountTotal.add(calculateAssignmentAmount(assignment,bonus,support));
         }
+        
+        // Add employee allowance if COMPANY scope exists
+        if (hasCompanyScope && employee.getAllowance() != null) {
+            totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
+        }
 
         payroll.setAccountant(accountant);
         payroll.setCreatedAt(LocalDateTime.of(year, month, 1, 0, 0));
@@ -384,7 +440,14 @@ public class PayrollServiceImpl implements PayrollService {
         payroll.setPaymentDate(null);
 
         BigDecimal advanceTotal = payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal() : BigDecimal.ZERO;
-        BigDecimal insuranceTotal = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal() : BigDecimal.ZERO;
+        
+        // Set insurance from employee if COMPANY scope exists
+        BigDecimal insuranceTotal;
+        if (hasCompanyScope && employee.getInsuranceSalary() != null) {
+            insuranceTotal = employee.getInsuranceSalary();
+        } else {
+            insuranceTotal = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal() : BigDecimal.ZERO;
+        }
 
         amountTotal = amountTotal.subtract(totalPenalties.add(insuranceTotal).add(advanceTotal));
 
@@ -419,18 +482,35 @@ public class PayrollServiceImpl implements PayrollService {
 
         BigDecimal amount = BigDecimal.ZERO;
         AssignmentType type = assignment.getAssignmentType();
+        AssignmentScope scope = assignment.getScope() != null ? assignment.getScope() : AssignmentScope.CONTRACT;
         int realWorksDay = calculateActualWorkDays(assignment);
-        if (type == AssignmentType.FIXED_BY_CONTRACT) {
+        
+        // Determine salary base based on scope
+        BigDecimal salaryBase;
+        if (scope == AssignmentScope.COMPANY) {
+            // COMPANY scope: use employee's monthly salary
+            salaryBase = assignment.getEmployee() != null && assignment.getEmployee().getMonthlySalary() != null
+                    ? assignment.getEmployee().getMonthlySalary()
+                    : BigDecimal.ZERO;
+        } else {
+            // CONTRACT scope: use assignment's salary at time
+            salaryBase = assignment.getSalaryAtTime() != null ? assignment.getSalaryAtTime() : BigDecimal.ZERO;
+        }
+        
+        // Calculate based on assignment type
+        // FIXED_BY_CONTRACT and FIXED_BY_COMPANY use the same formula
+        if (type == AssignmentType.FIXED_BY_CONTRACT || type == AssignmentType.FIXED_BY_COMPANY) {
             if (assignment.getPlannedDays() != null && assignment.getPlannedDays() > 0
-                    && assignment.getSalaryAtTime() != null && assignment.getWorkDays() != null) {
-                BigDecimal dailyRate = (assignment.getSalaryAtTime().add(bonus).add(supportCosts)).divide(BigDecimal.valueOf(assignment.getPlannedDays()), 2, RoundingMode.HALF_UP);
+                    && salaryBase.compareTo(BigDecimal.ZERO) > 0 && assignment.getWorkDays() != null) {
+                BigDecimal dailyRate = (salaryBase.add(bonus).add(supportCosts)).divide(BigDecimal.valueOf(assignment.getPlannedDays()), 2, RoundingMode.HALF_UP);
                 amount = dailyRate.multiply(BigDecimal.valueOf(realWorksDay));
             }
         } else {
+            // FIXED_BY_DAY or TEMPORARY
             if (assignment.getPlannedDays() != null && assignment.getPlannedDays() > 0
-                    && assignment.getSalaryAtTime() != null && assignment.getWorkDays() != null) {
+                    && salaryBase.compareTo(BigDecimal.ZERO) > 0 && assignment.getWorkDays() != null) {
 
-                BigDecimal salary = (assignment.getSalaryAtTime().multiply(BigDecimal.valueOf(realWorksDay)));
+                BigDecimal salary = (salaryBase.multiply(BigDecimal.valueOf(realWorksDay)));
                 amount = amount.add(salary.add(supportCosts).add(bonus));
             }
         }
@@ -559,6 +639,16 @@ public class PayrollServiceImpl implements PayrollService {
             totalBonus = totalBonus.add(bonus);
             totalPenalties = totalPenalties.add(penalty);
             totalSupportCosts = totalSupportCosts.add(support).add(additionalAllowance);
+        }
+
+        // Check if any assignment has COMPANY scope
+        Employee employee = payroll.getEmployee();
+        boolean hasCompanyScope = assignments.stream()
+                .anyMatch(a -> a.getScope() != null && a.getScope() == AssignmentScope.COMPANY);
+        
+        // Add employee allowance if COMPANY scope exists
+        if (hasCompanyScope && employee != null && employee.getAllowance() != null) {
+            totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
         }
 
         // ===== ÁP DỤNG GIÁ TRỊ REQUEST =====
