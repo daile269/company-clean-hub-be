@@ -15,4 +15,5 @@ public interface EmployeeService {
     EmployeeResponse updateEmployee(Long id, EmployeeRequest request);
     void deleteEmployee(Long id);
     List<EmployeeExportDto> getAllEmployeesForExport();
+    List<EmployeeExportDto> getEmployeesForExportByType(com.company.company_clean_hub_be.entity.EmploymentType employmentType);
 }

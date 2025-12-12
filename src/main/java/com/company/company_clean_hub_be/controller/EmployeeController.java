@@ -134,11 +134,6 @@ public class EmployeeController {
                 id, imageId, file.getOriginalFilename(), file.getSize());
         
         try {
-
-
-
-
-
             EmployeeImage saved = employeeImageService.replaceImage(id, imageId, file);
             log.info("Replace successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
             return ApiResponse.success("Cập nhật ảnh nhân viên thành công", saved, HttpStatus.OK.value());
@@ -195,10 +190,16 @@ public class EmployeeController {
     }
 
     @GetMapping("/export/excel")
-    public ResponseEntity<ByteArrayResource> exportEmployeesToExcel() {
-        log.info("Export employees requested");
+    public ResponseEntity<ByteArrayResource> exportEmployeesToExcel(
+            @RequestParam(required = false) com.company.company_clean_hub_be.entity.EmploymentType employmentType) {
+        log.info("Export employees requested: employmentType={}", employmentType);
         try {
-            List<EmployeeExportDto> employees = employeeService.getAllEmployeesForExport();
+            List<EmployeeExportDto> employees;
+            if (employmentType != null) {
+                employees = employeeService.getEmployeesForExportByType(employmentType);
+            } else {
+                employees = employeeService.getAllEmployeesForExport();
+            }
             ByteArrayResource resource = excelExportService.exportEmployeesToExcel(employees);
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION,

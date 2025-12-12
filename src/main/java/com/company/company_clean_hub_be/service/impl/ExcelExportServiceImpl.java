@@ -215,7 +215,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // ===== COMPANY HEADER SECTION =====
             int currentRowIndex = 0;
-            int totalColumns = 16;
+            int totalColumns = 17;
 
             // Row 0: Company name
             Row companyRow = sheet.createRow(currentRowIndex++);
@@ -261,7 +261,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             String[] headers = {
                     "Mã nhân viên", "Họ tên", "Ngân hàng", "Số tài khoản", "Số điện thoại",
                     "Loại phân công","Mức lương", "Công trình", "Ngày thực tế","Ngày dự kiến", "Thưởng", "Phạt",
-                    "Phụ cấp", "Bảo hiểm", "Lương ứng", "Tổng lương"
+                    "Phụ cấp phân công", "Phụ cấp chung","Bảo hiểm", "Lương ứng", "Tổng lương"
             };
 
             for (int i = 0; i < headers.length; i++) {
@@ -420,20 +420,24 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         Cell cell11 = row.createCell(12);
         cell11.setCellValue(data.getAssignmentAllowance() != null ? data.getAssignmentAllowance().doubleValue() : 0);
         cell11.setCellStyle(numberStyle);
-
-        // Bảo hiểm
+        // Phụ cấp
         Cell cell12 = row.createCell(13);
-        cell12.setCellValue(data.getAssignmentInsurance() != null ? data.getAssignmentInsurance().doubleValue() : 0);
+        cell12.setCellValue(data.getCompanyAllowance() != null ? data.getCompanyAllowance().doubleValue() : 0);
         cell12.setCellStyle(numberStyle);
 
-        // Lương ứng
+        // Bảo hiểm
         Cell cell13 = row.createCell(14);
-        cell13.setCellValue(data.getAssignmentAdvance() != null ? data.getAssignmentAdvance().doubleValue() : 0);
+        cell13.setCellValue(data.getAssignmentInsurance() != null ? data.getAssignmentInsurance().doubleValue() : 0);
         cell13.setCellStyle(numberStyle);
 
+        // Lương ứng
         Cell cell14 = row.createCell(15);
-        cell14.setCellValue(data.getAssignmentSalary() != null ? data.getAssignmentSalary().doubleValue() : 0);
+        cell14.setCellValue(data.getAssignmentAdvance() != null ? data.getAssignmentAdvance().doubleValue() : 0);
         cell14.setCellStyle(numberStyle);
+
+        Cell cell15 = row.createCell(16);
+        cell15.setCellValue(data.getAssignmentSalary() != null ? data.getAssignmentSalary().doubleValue() : 0);
+        cell15.setCellStyle(numberStyle);
     }
 
     private void writeTotalRow(Row row, PayRollAssignmentExportExcel data,
@@ -502,20 +506,25 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         cell11.setCellValue(data.getTotalAllowance() != null ? data.getTotalAllowance().doubleValue() : 0);
         cell11.setCellStyle(totalRowStyle);
 
-        // Bảo hiểm
+        // Phụ cấp
         Cell cell12 = row.createCell(13);
-        cell12.setCellValue(data.getTotalInsurance() != null ? data.getTotalInsurance().doubleValue() : 0);
+        cell12.setCellValue(data.getCompanyAllowance() != null ? data.getCompanyAllowance().doubleValue() : 0);
         cell12.setCellStyle(totalRowStyle);
 
-        // Lương ứng
+        // Bảo hiểm
         Cell cell13 = row.createCell(14);
-        cell13.setCellValue(data.getTotalAdvance() != null ? data.getTotalAdvance().doubleValue() : 0);
+        cell13.setCellValue(data.getTotalInsurance() != null ? data.getTotalInsurance().doubleValue() : 0);
         cell13.setCellStyle(totalRowStyle);
 
-        // Tổng lương
+        // Lương ứng
         Cell cell14 = row.createCell(15);
-        cell14.setCellValue(data.getFinalSalary() != null ? data.getFinalSalary().doubleValue() : 0);
+        cell14.setCellValue(data.getTotalAdvance() != null ? data.getTotalAdvance().doubleValue() : 0);
         cell14.setCellStyle(totalRowStyle);
+
+        // Tổng lương
+        Cell cell16 = row.createCell(16);
+        cell16.setCellValue(data.getFinalSalary() != null ? data.getFinalSalary().doubleValue() : 0);
+        cell16.setCellStyle(totalRowStyle);
     }
     private CellStyle createTotalRowStyle(Workbook workbook) {
         CellStyle style = createDataStyle(workbook);

@@ -23,6 +23,7 @@ public class PayRollAssignmentExportExcel {
     private BigDecimal assignmentBonus;
     private BigDecimal assignmentPenalty;
     private BigDecimal assignmentAllowance;
+    private BigDecimal companyAllowance;
     private BigDecimal assignmentInsurance;
     private BigDecimal assignmentAdvance;
     private BigDecimal assignmentSalary;

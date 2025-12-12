@@ -241,5 +241,27 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<EmployeeExportDto> getEmployeesForExportByType(com.company.company_clean_hub_be.entity.EmploymentType employmentType) {
+        log.info("getEmployeesForExportByType requested: employmentType={}", employmentType);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+        return employeeRepository.findByEmploymentType(employmentType).stream()
+                .map(employee -> EmployeeExportDto.builder()
+                        .id(employee.getId())
+                        .employeeCode(employee.getEmployeeCode())
+                        .name(employee.getName())
+                        .username(employee.getUsername())
+                        .email(employee.getEmail())
+                        .phone(employee.getPhone())
+                        .address(employee.getAddress())
+                        .cccd(employee.getCccd())
+                        .bankAccount(employee.getBankAccount())
+                        .bankName(employee.getBankName())
+                        .description(employee.getDescription())
+                        .createdAt(employee.getCreatedAt() != null ? employee.getCreatedAt().format(formatter) : "")
+                        .updatedAt(employee.getUpdatedAt() != null ? employee.getUpdatedAt().format(formatter) : "")
+                        .build())
+                .collect(Collectors.toList());
+    }
 
 }
