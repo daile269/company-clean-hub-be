@@ -2,6 +2,7 @@ package com.company.company_clean_hub_be.service;
 
 import com.company.company_clean_hub_be.dto.request.UserRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.UserPermissionsResponse;
 import com.company.company_clean_hub_be.dto.response.UserResponse;
 
 import java.util.List;
@@ -14,4 +15,5 @@ public interface UserService {
     UserResponse updateUser(Long id, UserRequest request);
     void deleteUser(Long id);
     String getCurrentUsername();
+    UserPermissionsResponse getCurrentUserPermissions();
 }

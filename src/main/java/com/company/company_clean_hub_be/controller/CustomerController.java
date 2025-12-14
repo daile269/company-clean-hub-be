@@ -38,12 +38,14 @@ public class CustomerController {
     private final ExcelExportService excelExportService;
 
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CUSTOMER_VIEW')")
     public ApiResponse<List<CustomerResponse>> getAllCustomers() {
         List<CustomerResponse> customers = customerService.getAllCustomers();
         return ApiResponse.success("Lấy danh sách khách hàng thành công", customers, HttpStatus.OK.value());
     }
 
     @GetMapping("/filter")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CUSTOMER_VIEW')")
     public ApiResponse<PageResponse<CustomerResponse>> getCustomersWithFilter(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
@@ -53,18 +55,21 @@ public class CustomerController {
     }
 
     @GetMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CUSTOMER_VIEW')")
     public ApiResponse<CustomerResponse> getCustomerById(@PathVariable Long id) {
         CustomerResponse customer = customerService.getCustomerById(id);
         return ApiResponse.success("Lấy thông tin khách hàng thành công", customer, HttpStatus.OK.value());
     }
 
     @PostMapping
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CUSTOMER_CREATE')")
     public ApiResponse<CustomerResponse> createCustomer(@Valid @RequestBody CustomerRequest request) {
         CustomerResponse customer = customerService.createCustomer(request);
         return ApiResponse.success("Tạo khách hàng thành công", customer, HttpStatus.CREATED.value());
     }
 
     @PutMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CUSTOMER_EDIT')")
     public ApiResponse<CustomerResponse> updateCustomer(
             @PathVariable Long id,
             @Valid @RequestBody CustomerRequest request) {
@@ -73,6 +78,7 @@ public class CustomerController {
     }
 
     @DeleteMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CUSTOMER_DELETE')")
     public ApiResponse<Void> deleteCustomer(@PathVariable Long id) {
         customerService.deleteCustomer(id);
         return ApiResponse.success("Xóa khách hàng thành công", null, HttpStatus.OK.value());

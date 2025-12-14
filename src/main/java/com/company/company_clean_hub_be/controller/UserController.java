@@ -3,6 +3,7 @@ package com.company.company_clean_hub_be.controller;
 import com.company.company_clean_hub_be.dto.request.UserRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.UserPermissionsResponse;
 import com.company.company_clean_hub_be.dto.response.UserResponse;
 import com.company.company_clean_hub_be.service.UserService;
 import jakarta.validation.Valid;
@@ -17,6 +18,12 @@ import java.util.List;
 @RequestMapping(value = "/api/users")
 public class UserController {
     private final UserService userService;
+
+    @GetMapping("/me/permissions")
+    public ApiResponse<UserPermissionsResponse> getCurrentUserPermissions() {
+        UserPermissionsResponse permissions = userService.getCurrentUserPermissions();
+        return ApiResponse.success("Lấy quyền người dùng thành công", permissions, HttpStatus.OK.value());
+    }
 
     @GetMapping
     public ApiResponse<List<UserResponse>> getAllUsers() {
