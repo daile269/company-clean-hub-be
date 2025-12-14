@@ -27,12 +27,14 @@ public class AssignmentController {
     private final AssignmentScheduler assignmentScheduler;
 
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<List<AssignmentResponse>> getAllAssignments() {
         List<AssignmentResponse> assignments = assignmentService.getAllAssignments();
         return ApiResponse.success("Lấy danh sách phân công thành công", assignments, HttpStatus.OK.value());
     }
 
     @GetMapping("/filter")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<PageResponse<AssignmentResponse>> getAssignmentsWithFilter(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
@@ -42,6 +44,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<AssignmentResponse> getAssignmentById(@PathVariable Long id) {
         AssignmentResponse assignment = assignmentService.getAssignmentById(id);
         System.out.println("id ass:"+id);
@@ -49,12 +52,14 @@ public class AssignmentController {
     }
 
     @PostMapping
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_CREATE')")
     public ApiResponse<AssignmentResponse> createAssignment(@Valid @RequestBody AssignmentRequest request) {
         AssignmentResponse assignment = assignmentService.createAssignment(request);
         return ApiResponse.success("Tạo phân công thành công", assignment, HttpStatus.CREATED.value());
     }
 
     @PutMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_UPDATE')")
     public ApiResponse<AssignmentResponse> updateAssignment(
             @PathVariable Long id,
             @Valid @RequestBody AssignmentRequest request) {
@@ -64,12 +69,14 @@ public class AssignmentController {
     }
 
     @DeleteMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_DELETE')")
     public ApiResponse<Void> deleteAssignment(@PathVariable Long id) {
         assignmentService.deleteAssignment(id);
         return ApiResponse.success("Xóa phân công thành công", null, HttpStatus.OK.value());
     }
 
     @PostMapping("/temporary-reassignment")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_REASSIGN')")
     public ApiResponse<TemporaryAssignmentResponse> temporaryReassignment(
             @Valid @RequestBody TemporaryReassignmentRequest request) {
         return ApiResponse.<TemporaryAssignmentResponse>builder()
@@ -79,6 +86,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/customer/{customerId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<List<AssignmentResponse>> getEmployeesByCustomer(@PathVariable Long customerId) {
         List<AssignmentResponse> assignments = assignmentService.getEmployeesByCustomer(customerId);
         return ApiResponse.success(
@@ -89,6 +97,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/customer/{customerId}/all")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<PageResponse<AssignmentResponse>> getAllEmployeesByCustomer(
             @PathVariable Long customerId,
             @RequestParam(required = false) com.company.company_clean_hub_be.entity.ContractType contractType,
@@ -107,6 +116,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/employee/{employeeId}/customers")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<List<com.company.company_clean_hub_be.dto.response.CustomerResponse>> getCustomersByEmployee(
             @PathVariable Long employeeId) {
         List<com.company.company_clean_hub_be.dto.response.CustomerResponse> customers = assignmentService.getCustomersByEmployee(employeeId);
@@ -118,6 +128,7 @@ public class AssignmentController {
     }
 
         @GetMapping("/employee/{employeeId}")
+        @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
         public ApiResponse<PageResponse<AssignmentResponse>> getAssignmentsByEmployee(
             @PathVariable Long employeeId,
             @RequestParam(required = false) Long customerId,
@@ -137,6 +148,7 @@ public class AssignmentController {
         }
     @GetMapping("/assignments/{employeeId}/{month}/" +
             "{year}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<List<AssignmentResponse>> getAssignmentsByEmployeeMonthYear(@PathVariable Long employeeId, @PathVariable Integer month, @PathVariable Integer year) {
         List<AssignmentResponse> assignments = assignmentService.getAssignmentsByEmployeeMonthYear(employeeId,month,year);
         return ApiResponse.success(
@@ -147,6 +159,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/customer/{customerId}/not-assigned")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse>> getEmployeesNotAssignedToCustomer(
             @PathVariable Long customerId,
             @RequestParam(required = false) com.company.company_clean_hub_be.entity.EmploymentType employmentType,
@@ -164,6 +177,7 @@ public class AssignmentController {
     }
 
         @GetMapping("/{assignmentId}/attendances")
+        @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ATTENDANCE_VIEW')")
         public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.AttendanceResponse>> getAttendancesByAssignment(
             @PathVariable Long assignmentId,
             @RequestParam(required = false) Integer month,
@@ -210,6 +224,7 @@ public class AssignmentController {
     // ==================== LỊCH SỬ ĐIỀU ĐỘNG ====================
 
     @GetMapping("/history/employee/{employeeId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<List<AssignmentHistoryResponse>> getReassignmentHistory(@PathVariable Long employeeId) {
         List<AssignmentHistoryResponse> history = assignmentService.getReassignmentHistory(employeeId);
         return ApiResponse.success(
@@ -220,6 +235,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/history/contract/{contractId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<List<AssignmentHistoryResponse>> getReassignmentHistoryByContract(@PathVariable Long contractId) {
         List<AssignmentHistoryResponse> history = assignmentService.getReassignmentHistoryByContract(contractId);
         return ApiResponse.success(
@@ -230,6 +246,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/history/{historyId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<AssignmentHistoryResponse> getHistoryDetail(@PathVariable Long historyId) {
         AssignmentHistoryResponse history = assignmentService.getHistoryDetail(historyId);
         return ApiResponse.success(
@@ -240,6 +257,7 @@ public class AssignmentController {
     }
 
     @PostMapping("/history/{historyId}/rollback")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_REASSIGN')")
     public ApiResponse<RollbackResponse> rollbackReassignment(@PathVariable Long historyId) {
         RollbackResponse response = assignmentService.rollbackReassignment(historyId);
         return ApiResponse.success(

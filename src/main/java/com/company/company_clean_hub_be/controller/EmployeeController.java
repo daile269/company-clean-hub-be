@@ -44,12 +44,14 @@ public class EmployeeController {
     private final ExcelExportService excelExportService;
 
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_VIEW')")
     public ApiResponse<List<EmployeeResponse>> getAllEmployees() {
         List<EmployeeResponse> employees = employeeService.getAllEmployees();
         return ApiResponse.success("Lấy danh sách nhân viên thành công", employees, HttpStatus.OK.value());
     }
 
     @GetMapping("/filter")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_VIEW')")
     public ApiResponse<PageResponse<EmployeeResponse>> getEmployeesWithFilter(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) com.company.company_clean_hub_be.entity.EmploymentType employmentType,
@@ -60,18 +62,21 @@ public class EmployeeController {
     }
 
     @GetMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority('EMPLOYEE_VIEW', 'EMPLOYEE_VIEW_OWN')")
     public ApiResponse<EmployeeResponse> getEmployeeById(@PathVariable Long id) {
         EmployeeResponse employee = employeeService.getEmployeeById(id);
         return ApiResponse.success("Lấy thông tin nhân viên thành công", employee, HttpStatus.OK.value());
     }
 
     @PostMapping
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_CREATE')")
     public ApiResponse<EmployeeResponse> createEmployee(@Valid @RequestBody EmployeeRequest request) {
         EmployeeResponse employee = employeeService.createEmployee(request);
         return ApiResponse.success("Tạo nhân viên thành công", employee, HttpStatus.CREATED.value());
     }
 
     @PutMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_EDIT')")
     public ApiResponse<EmployeeResponse> updateEmployee(
             @PathVariable Long id,
             @Valid @RequestBody EmployeeRequest request) {
@@ -80,6 +85,7 @@ public class EmployeeController {
     }
 
     @DeleteMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_DELETE')")
     public ApiResponse<Void> deleteEmployee(@PathVariable Long id) {
         employeeService.deleteEmployee(id);
         return ApiResponse.success("Xóa nhân viên thành công", null, HttpStatus.OK.value());
