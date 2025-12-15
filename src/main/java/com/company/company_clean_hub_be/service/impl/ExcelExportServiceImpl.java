@@ -26,8 +26,8 @@ import org.springframework.stereotype.Service;
 import com.company.company_clean_hub_be.dto.response.ContractDetailDto;
 import com.company.company_clean_hub_be.dto.response.CustomerContractGroupDto;
 import com.company.company_clean_hub_be.dto.response.EmployeeExportDto;
-import com.company.company_clean_hub_be.dto.response.PayRollExportExcel;
 import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
+import com.company.company_clean_hub_be.dto.response.PayRollExportExcel;
 import com.company.company_clean_hub_be.service.ExcelExportService;
 
 import lombok.RequiredArgsConstructor;
@@ -210,16 +210,14 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             CellStyle headerStyle = createHeaderStyle(workbook);
             CellStyle dataStyle = createDataStyle(workbook);
             CellStyle numberStyle = createNumberStyle(workbook);
-            CellStyle mergedCellStyle = createMergedCellStyle(workbook);
-            CellStyle totalRowStyle = createTotalRowStyle(workbook);
 
             // ===== COMPANY HEADER SECTION =====
             int currentRowIndex = 0;
-            int totalColumns = 17;
+            int totalColumns = 12; // Simplified columns
 
             // Row 0: Company name
             Row companyRow = sheet.createRow(currentRowIndex++);
-            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, totalColumns - 1));
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0,totalColumns - 1));
             Cell companyCell = companyRow.createCell(0);
             companyCell.setCellValue("CÔNG TY TNHH TMDV PANPACIFIC");
             companyCell.setCellStyle(companyHeaderStyle);
@@ -242,26 +240,26 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             Row phoneRow = sheet.createRow(currentRowIndex++);
 
             // Phone part (left)
-            sheet.addMergedRegion(new CellRangeAddress(3, 3, 0, 6));
+            sheet.addMergedRegion(new CellRangeAddress(3, 3, 0, 4));
             Cell phoneCell = phoneRow.createCell(0);
             phoneCell.setCellValue("Điện Thoại: 0901417674 - 0762833102");
             phoneCell.setCellStyle(companyHeaderStyle);
 
             // Document Title part (right)
-            sheet.addMergedRegion(new CellRangeAddress(3, 3, 7, totalColumns - 1));
-            Cell titleCell = phoneRow.createCell(7);
+            sheet.addMergedRegion(new CellRangeAddress(3, 3, 5, totalColumns - 1));
+            Cell titleCell = phoneRow.createCell(5);
             titleCell.setCellValue("CÔNG TY TNHH PANPANCIFIC BẢNG THANH TOÁN TIỀN LƯƠNG THÁNG " + month + "/" + year);
             titleCell.setCellStyle(companyHeaderStyle);
 
             // Empty row
             currentRowIndex++;
 
-            // Header row
+            // Header row - Simplified summary columns
             Row headerRow = sheet.createRow(currentRowIndex++);
             String[] headers = {
-                    "Mã nhân viên", "Họ tên", "Ngân hàng", "Số tài khoản", "Số điện thoại",
-                    "Loại phân công","Mức lương", "Công trình", "Ngày thực tế","Ngày dự kiến", "Thưởng", "Phạt",
-                    "Phụ cấp phân công", "Phụ cấp chung","Bảo hiểm", "Lương ứng", "Tổng lương"
+                    "Mã NV", "Họ tên", "Ngân hàng", "Số TK", "SĐT",
+                    "Công trình", "Ngày công", "Thưởng", "Phạt",
+                    "Phụ cấp", "Bảo hiểm", "Tổng lương"
             };
 
             for (int i = 0; i < headers.length; i++) {
@@ -270,76 +268,79 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                 cell.setCellStyle(headerStyle);
             }
 
-            // Group assignments by employee
-            Long currentEmployeeId = null;
-            int mergeStartRow = -1;
-            int assignmentCount = 0;
-
+            // Data rows - each employee is one summary row
             for (PayRollAssignmentExportExcel row : assignmentData) {
-                boolean isTotalRow = row.getIsTotalRow() != null && row.getIsTotalRow();
-
-                if (!isTotalRow) {
-                    // Assignment row
-                    if (currentEmployeeId == null || !currentEmployeeId.equals(row.getEmployeeId())) {
-                        // New employee - close previous merge if exists
-                        if (currentEmployeeId != null && assignmentCount >= 1) { // <- changed to >= 1
-                            int mergeEndRow = currentRowIndex - 1;
-                            sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 0, 0)); // Mã nhân viên
-                            sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 1, 1)); // Họ tên
-                            sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 2, 2)); // Ngân hàng
-                            sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 3, 3)); // Số tài khoản
-                            sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 4, 4)); // Số điện thoại
-                        }
-
-                        // Start new employee
-                        currentEmployeeId = row.getEmployeeId();
-                        mergeStartRow = currentRowIndex;
-                        assignmentCount = 0;
-                    }
-                    assignmentCount++;
-                }
-
                 Row dataRow = sheet.createRow(currentRowIndex++);
 
-                if (isTotalRow) {
-                    // Total row - merge employee columns and show totals
-                    if (assignmentCount >= 1) { // <- changed to >= 1
-                        int mergeEndRow = currentRowIndex - 1;
-                        sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 0, 0)); // Mã nhân viên
-                        sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 1, 1)); // Họ tên
-                        sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 2, 2)); // Ngân hàng
-                        sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 3, 3)); // Số tài khoản
-                        sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 4, 4)); // Số điện thoại
-                    }
+                // Mã nhân viên
+                Cell cell0 = dataRow.createCell(0);
+                cell0.setCellValue(row.getEmployeeId() != null ? row.getEmployeeId().toString() : "");
+                cell0.setCellStyle(dataStyle);
 
-                    // Write total row
-                    writeTotalRow(dataRow, row, dataStyle, numberStyle, totalRowStyle, mergedCellStyle, assignmentCount);
+                // Họ tên
+                Cell cell1 = dataRow.createCell(1);
+                cell1.setCellValue(row.getEmployeeName() != null ? row.getEmployeeName() : "");
+                cell1.setCellStyle(dataStyle);
 
-                    // Reset for next employee
-                    currentEmployeeId = null;
-                    mergeStartRow = -1;
-                    assignmentCount = 0;
-                } else {
-                    // Assignment row
-                    boolean isFirstAssignment = (currentRowIndex - 1) == mergeStartRow;
-                    writeAssignmentRow(dataRow, row, dataStyle, numberStyle, mergedCellStyle, isFirstAssignment);
-                }
-            }
+                // Ngân hàng
+                Cell cell2 = dataRow.createCell(2);
+                cell2.setCellValue(row.getBankName() != null ? row.getBankName() : "");
+                cell2.setCellStyle(dataStyle);
 
-            // Close last employee merge if needed
-            if (currentEmployeeId != null && assignmentCount >= 1) { // <- changed to >= 1
-                int mergeEndRow = currentRowIndex - 1;
-                sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 0, 0)); // Mã nhân viên
-                sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 1, 1)); // Họ tên
-                sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 2, 2)); // Ngân hàng
-                sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 3, 3)); // Số tài khoản
-                sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, mergeEndRow, 4, 4)); // Số điện thoại
+                // Số tài khoản
+                Cell cell3 = dataRow.createCell(3);
+                cell3.setCellValue(row.getBankAccount() != null ? row.getBankAccount() : "");
+                cell3.setCellStyle(dataStyle);
+
+                // Số điện thoại
+                Cell cell4 = dataRow.createCell(4);
+                cell4.setCellValue(row.getPhone() != null ? row.getPhone() : "");
+                cell4.setCellStyle(dataStyle);
+
+                // Công trình (joined projects list)
+                Cell cell5 = dataRow.createCell(5);
+                cell5.setCellValue(row.getProjectCompany() != null ? row.getProjectCompany() : "");
+                cell5.setCellStyle(dataStyle);
+
+                // Tổng ngày công
+                Cell cell6 = dataRow.createCell(6);
+                cell6.setCellValue(row.getTotalDays() != null ? row.getTotalDays() : 0);
+                cell6.setCellStyle(numberStyle);
+
+                // Tổng thưởng
+                Cell cell7 = dataRow.createCell(7);
+                cell7.setCellValue(row.getTotalBonus() != null ? row.getTotalBonus().doubleValue() : 0);
+                cell7.setCellStyle(numberStyle);
+
+                // Tổng phạt
+                Cell cell8 = dataRow.createCell(8);
+                cell8.setCellValue(row.getTotalPenalty() != null ? row.getTotalPenalty().doubleValue() : 0);
+                cell8.setCellStyle(numberStyle);
+
+                // Tổng phụ cấp
+                Cell cell9 = dataRow.createCell(9);
+                cell9.setCellValue(row.getTotalAllowance() != null ? row.getTotalAllowance().doubleValue() : 0);
+                cell9.setCellStyle(numberStyle);
+
+                // Bảo hiểm
+                Cell cell10 = dataRow.createCell(10);
+                cell10.setCellValue(row.getTotalInsurance() != null ? row.getTotalInsurance().doubleValue() : 0);
+                cell10.setCellStyle(numberStyle);
+
+                // Tổng lương
+                Cell cell11 = dataRow.createCell(11);
+                cell11.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
+                cell11.setCellStyle(numberStyle);
             }
 
             // Auto-size columns
             for (int i = 0; i < headers.length; i++) {
                 sheet.autoSizeColumn(i);
             }
+
+            // Set minimum widths for readability
+            sheet.setColumnWidth(1, 4000); // Name
+            sheet.setColumnWidth(5, 8000); // Projects (can be long list)
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);

@@ -2,11 +2,6 @@ package com.company.company_clean_hub_be.controller;
 
 import java.util.List;
 
-import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
-import com.company.company_clean_hub_be.service.ExcelExportService;
-import com.company.company_clean_hub_be.service.impl.ExcelExportServiceImpl;
-import com.company.company_clean_hub_be.service.impl.PayrollServiceImpl;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -26,11 +21,16 @@ import com.company.company_clean_hub_be.dto.request.PayrollRequest;
 import com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
+import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
+import com.company.company_clean_hub_be.service.ExcelExportService;
 import com.company.company_clean_hub_be.service.PayrollService;
+import com.company.company_clean_hub_be.service.impl.ExcelExportServiceImpl;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequiredArgsConstructor
@@ -39,13 +39,11 @@ import lombok.RequiredArgsConstructor;
 public class PayrollController {
     private final PayrollService payrollService;
     private final ExcelExportService excelExportService;
+    
     @PostMapping("/calculate")
-    public ApiResponse<PayrollResponse> calculatePayroll(@Valid @RequestBody PayrollRequest request) {
-        PayrollResponse payroll = payrollService.calculatePayroll(request);
-        if (payroll == null){
-            return ApiResponse.success("Nhân viên không có công làm trong thời gian này ", null, HttpStatus.CREATED.value());
-        }
-        return ApiResponse.success("Tính lương thành công", payroll, HttpStatus.CREATED.value());
+    public ApiResponse<List<PayrollAssignmentResponse>> calculatePayroll(@Valid @RequestBody PayrollRequest request) {
+        List<PayrollAssignmentResponse> payrolls = payrollService.calculatePayroll(request);
+        return ApiResponse.success("Tính lương thành công", payrolls, HttpStatus.CREATED.value());
     }
 
     @GetMapping
@@ -94,6 +92,19 @@ public class PayrollController {
         payrollService.deletePayroll(id);
         return ApiResponse.success("Xóa bảng lương thành công", null, HttpStatus.OK.value());
     }
+    
+    @GetMapping("/assignments/filter")
+    public ApiResponse<PageResponse<PayrollAssignmentResponse>> getPayrollAssignmentsWithFilter(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<PayrollAssignmentResponse> result = 
+            payrollService.getPayrollAssignmentsWithFilter(keyword, month, year, page, pageSize);
+        return ApiResponse.success("Lấy danh sách thành công", result, HttpStatus.OK.value());
+    }
+    
     @GetMapping("export/excel/{month}/{year}")
     public ResponseEntity<ByteArrayResource> exportPayroll(
             @PathVariable Integer month,
