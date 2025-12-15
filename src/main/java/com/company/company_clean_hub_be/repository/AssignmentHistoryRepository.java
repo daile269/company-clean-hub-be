@@ -29,6 +29,9 @@ public interface AssignmentHistoryRepository extends JpaRepository<AssignmentHis
     // Lấy lịch sử theo hợp đồng
     List<AssignmentHistory> findByContractIdOrderByCreatedAtDesc(Long contractId);
 
+    // Pageable version for paginated histories per contract
+    org.springframework.data.domain.Page<AssignmentHistory> findByContractIdOrderByCreatedAtDesc(Long contractId, org.springframework.data.domain.Pageable pageable);
+
     // Lấy lịch sử theo trạng thái
     List<AssignmentHistory> findByStatusOrderByCreatedAtDesc(HistoryStatus status);
 

@@ -115,6 +115,27 @@ public class AssignmentController {
         );
     }
 
+    @GetMapping("/customer/{customerId}/by-contract")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse>> getAssignmentsByCustomerGroupedByContract(
+            @PathVariable Long customerId,
+            @RequestParam(required = false) Long contractId,
+            @RequestParam(required = false) com.company.company_clean_hub_be.entity.ContractType contractType,
+            @RequestParam(required = false) com.company.company_clean_hub_be.entity.AssignmentStatus status,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse> assignments = 
+                assignmentService.getAssignmentsByCustomerGroupedByContract(
+                        customerId, contractId, contractType, status, month, year, page, pageSize);
+        return ApiResponse.success(
+                "Lấy danh sách phân công theo hợp đồng thành công", 
+                assignments, 
+                HttpStatus.OK.value()
+        );
+    }
+
     @GetMapping("/employee/{employeeId}/customers")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<List<com.company.company_clean_hub_be.dto.response.CustomerResponse>> getCustomersByEmployee(
@@ -244,6 +265,21 @@ public class AssignmentController {
                 HttpStatus.OK.value()
         );
     }
+
+        @GetMapping("/history/customer/{customerId}")
+        @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+            public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse>> getReassignmentHistoryByCustomerId(
+                @PathVariable Long customerId,
+                @RequestParam(required = false) Long contractId,
+                @RequestParam(defaultValue = "0") int page,
+                @RequestParam(defaultValue = "10") int pageSize) {
+            PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> history = assignmentService.getReassignmentHistoryByCustomerId(customerId, contractId, page, pageSize);
+            return ApiResponse.success(
+                "Lấy lịch sử điều động theo khách hàng thành công",
+                history,
+                HttpStatus.OK.value()
+            );
+            }
 
     @GetMapping("/history/{historyId}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")

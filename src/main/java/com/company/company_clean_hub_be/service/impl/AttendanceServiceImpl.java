@@ -55,11 +55,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         } catch (Exception ignored) {
         }
         log.info("createAttendance requested by {}: employeeId={}, assignmentId={}, date={}", username, request.getEmployeeId(), request.getAssignmentId(), request.getDate());
-        // Kiểm tra nhân viên đã chấm công ngày này chưa
-        attendanceRepository.findByEmployeeAndDate(request.getEmployeeId(), request.getDate())
-                .ifPresent(a -> {
-                    throw new AppException(ErrorCode.ATTENDANCE_ALREADY_EXISTS);
-                });
+                // Kiểm tra nhân viên đã chấm công cho cùng assignment vào ngày này chưa
+                attendanceRepository.findByAssignmentAndEmployeeAndDate(request.getAssignmentId(), request.getEmployeeId(), request.getDate())
+                                .ifPresent(a -> {
+                                        throw new AppException(ErrorCode.ATTENDANCE_ALREADY_EXISTS);
+                                });
 
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
@@ -120,8 +120,9 @@ public class AttendanceServiceImpl implements AttendanceService {
             // Bỏ qua ngày trong danh sách excludeDates
             boolean isExcluded = excludeDates.contains(currentDate);
             
-            // Kiểm tra đã có chấm công ngày này chưa
-            boolean alreadyExists = attendanceRepository.findByEmployeeAndDate(
+            // Kiểm tra đã có chấm công cho cùng assignment vào ngày này chưa
+            boolean alreadyExists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                    request.getAssignmentId(),
                     request.getEmployeeId(), 
                     currentDate
             ).isPresent();
@@ -233,9 +234,11 @@ public class AttendanceServiceImpl implements AttendanceService {
 
                 // Kiểm tra nếu đổi ngày, phải kiểm tra trùng (repository now checks assignment.employee)
                 if (!attendance.getDate().equals(request.getDate())) {
-                        attendanceRepository.findByEmployeeAndDate(request.getEmployeeId(), request.getDate())
+                        attendanceRepository.findByAssignmentAndEmployeeAndDate(request.getAssignmentId(), request.getEmployeeId(), request.getDate())
                                         .ifPresent(a -> {
-                                                throw new AppException(ErrorCode.ATTENDANCE_ALREADY_EXISTS);
+                                                if (!a.getId().equals(id)) {
+                                                    throw new AppException(ErrorCode.ATTENDANCE_ALREADY_EXISTS);
+                                                }
                                         });
                 }
 
