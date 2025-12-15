@@ -2,6 +2,7 @@ package com.company.company_clean_hub_be.service.impl;
 
 import com.company.company_clean_hub_be.dto.request.UserRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.UserPermissionsResponse;
 import com.company.company_clean_hub_be.dto.response.UserResponse;
 import com.company.company_clean_hub_be.entity.Role;
 import com.company.company_clean_hub_be.entity.User;
@@ -180,5 +181,28 @@ public class UserServiceImpl implements UserService {
         }
 
         return null;
+    }
+
+    @Override
+    public UserPermissionsResponse getCurrentUserPermissions() {
+        String username = getCurrentUsername();
+        log.info("getCurrentUserPermissions requested by: {}", username);
+        
+        if (username == null) {
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+
+        Role role = user.getRole();
+        
+        return UserPermissionsResponse.builder()
+                .userId(user.getId())
+                .username(user.getUsername())
+                .roleCode(role.getCode())
+                .roleName(role.getName())
+                .permissions(role.getPermissions())
+                .build();
     }
 }

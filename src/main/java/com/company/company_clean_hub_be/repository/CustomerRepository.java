@@ -21,4 +21,6 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
             @Param("keyword") String keyword,
             Pageable pageable
     );
+
+    java.util.Optional<Customer> findByCustomerCode(String customerCode);
 }

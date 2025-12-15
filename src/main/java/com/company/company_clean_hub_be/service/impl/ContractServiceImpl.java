@@ -6,6 +6,7 @@ import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.ServiceResponse;
 import com.company.company_clean_hub_be.entity.Assignment;
 import com.company.company_clean_hub_be.entity.Contract;
+import com.company.company_clean_hub_be.entity.ContractType;
 import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.ServiceEntity;
 import com.company.company_clean_hub_be.exception.AppException;
@@ -93,8 +94,13 @@ public class ContractServiceImpl implements ContractService {
             services.add(service);
         }
 
-        // Tự động tính tổng giá trị hợp đồng dựa trên các dịch vụ (bao gồm VAT)
-        java.math.BigDecimal calculatedTotal = calculateTotalFromServices(services);
+        // Tính giá trị hợp đồng dựa trên loại hợp đồng
+        java.math.BigDecimal calculatedTotal = calculatePriceByContractType(
+                services, 
+                request.getContractType(), 
+                request.getWorkingDaysPerWeek(), 
+                request.getStartDate(), 
+                request.getEndDate());
 
         Contract contract = Contract.builder()
                 .customer(customer)
@@ -134,8 +140,13 @@ public class ContractServiceImpl implements ContractService {
             services.add(service);
         }
 
-        // Tự động tính lại tổng giá trị hợp đồng dựa trên các dịch vụ (bao gồm VAT)
-        java.math.BigDecimal calculatedTotal = calculateTotalFromServices(services);
+        // Tính lại giá trị hợp đồng dựa trên loại hợp đồng
+        java.math.BigDecimal calculatedTotal = calculatePriceByContractType(
+                services, 
+                request.getContractType(), 
+                request.getWorkingDaysPerWeek(), 
+                request.getStartDate(), 
+                request.getEndDate());
 
         contract.setCustomer(customer);
         contract.setServices(services);
@@ -190,8 +201,13 @@ public class ContractServiceImpl implements ContractService {
         
         contract.getServices().add(service);
         
-        // Tự động tính lại tổng giá trị hợp đồng sau khi thêm dịch vụ
-        java.math.BigDecimal calculatedTotal = calculateTotalFromServices(contract.getServices());
+        // Tính lại giá trị hợp đồng sau khi thêm dịch vụ
+        java.math.BigDecimal calculatedTotal = calculatePriceByContractType(
+                contract.getServices(), 
+                contract.getContractType(), 
+                contract.getWorkingDaysPerWeek(), 
+                contract.getStartDate(), 
+                contract.getEndDate());
         contract.setFinalPrice(calculatedTotal);
         contract.setUpdatedAt(LocalDateTime.now());
         
@@ -213,8 +229,13 @@ public class ContractServiceImpl implements ContractService {
         
         contract.getServices().remove(service);
         
-        // Tự động tính lại tổng giá trị hợp đồng sau khi xóa dịch vụ
-        java.math.BigDecimal calculatedTotal = calculateTotalFromServices(contract.getServices());
+        // Tính lại giá trị hợp đồng sau khi xóa dịch vụ
+        java.math.BigDecimal calculatedTotal = calculatePriceByContractType(
+                contract.getServices(), 
+                contract.getContractType(), 
+                contract.getWorkingDaysPerWeek(), 
+                contract.getStartDate(), 
+                contract.getEndDate());
         contract.setFinalPrice(calculatedTotal);
         contract.setUpdatedAt(LocalDateTime.now());
         
@@ -255,6 +276,54 @@ public class ContractServiceImpl implements ContractService {
                 .build();
     }
 
+    /**
+     * Tính giá hợp đồng dựa trên loại hợp đồng:
+     * - MONTHLY_ACTUAL: giá ngày × số ngày làm việc trong tháng (dựa vào workingDaysPerWeek)
+     * - ONE_TIME, MONTHLY_FIXED: tổng giá cố định
+     */
+    private java.math.BigDecimal calculatePriceByContractType(
+            Set<ServiceEntity> services, 
+            ContractType contractType, 
+            List<java.time.DayOfWeek> workingDaysPerWeek,
+            java.time.LocalDate startDate,
+            java.time.LocalDate endDate) {
+        
+        java.math.BigDecimal dailyRate = calculateTotalFromServices(services);
+        
+        // Với MONTHLY_ACTUAL: giá ngày × số ngày làm việc trong tháng
+        if (contractType == ContractType.MONTHLY_ACTUAL) {
+            if (workingDaysPerWeek == null || workingDaysPerWeek.isEmpty() || startDate == null) {
+                // Nếu thiếu thông tin, trả về giá ngày (daily rate)
+                return dailyRate;
+            }
+            
+            // Tính số ngày làm việc trong tháng đầu tiên
+            java.time.YearMonth yearMonth = java.time.YearMonth.from(startDate);
+            java.time.LocalDate monthEnd = yearMonth.atEndOfMonth();
+            
+            // Nếu có endDate và endDate < monthEnd, dùng endDate
+            if (endDate != null && endDate.isBefore(monthEnd)) {
+                monthEnd = endDate;
+            }
+            
+            // Đếm số ngày làm việc trong tháng
+            int workDaysCount = 0;
+            java.time.LocalDate currentDate = startDate;
+            while (!currentDate.isAfter(monthEnd)) {
+                if (workingDaysPerWeek.contains(currentDate.getDayOfWeek())) {
+                    workDaysCount++;
+                }
+                currentDate = currentDate.plusDays(1);
+            }
+            
+            // Giá hợp đồng = giá ngày × số ngày làm việc
+            return dailyRate.multiply(java.math.BigDecimal.valueOf(workDaysCount));
+        }
+        
+        // Với ONE_TIME và MONTHLY_FIXED, giá là tổng giá cố định
+        return dailyRate;
+    }
+    
     private java.math.BigDecimal calculateTotalFromServices(Set<ServiceEntity> services) {
         return services.stream()
                 .map(service -> {

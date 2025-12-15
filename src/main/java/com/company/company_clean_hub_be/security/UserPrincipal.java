@@ -23,9 +23,18 @@ public class UserPrincipal implements UserDetails {
     private Collection<? extends GrantedAuthority> authorities;
 
     public static UserPrincipal create(User user) {
-        Collection<GrantedAuthority> authorities = Collections.singletonList(
-                new SimpleGrantedAuthority(user.getRole().getName())
-        );
+        // Load authorities from role name + permissions
+        Collection<GrantedAuthority> authorities = new java.util.ArrayList<>();
+        
+        // Add role as authority (ROLE_ prefix for Spring Security)
+        authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getRole().getCode()));
+        
+        // Add permissions as authorities
+        if (user.getRole().getPermissions() != null) {
+            user.getRole().getPermissions().forEach(permission -> 
+                authorities.add(new SimpleGrantedAuthority(permission.name()))
+            );
+        }
 
         String userType = "USER";
         if (user instanceof Employee) {

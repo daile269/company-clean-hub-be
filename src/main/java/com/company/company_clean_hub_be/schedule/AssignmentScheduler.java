@@ -271,10 +271,10 @@ public class AssignmentScheduler {
                     }
 
                     // Kiểm tra xem attendance đã tồn tại chưa
-                    Optional<Attendance> existing = attendanceRepository
-                            .findByEmployeeAndDate(savedAssignment.getEmployee().getId(), currentDate);
-                    
-                    if (existing.isEmpty()) {
+                        Optional<Attendance> existing = attendanceRepository
+                            .findByAssignmentAndEmployeeAndDate(savedAssignment.getId(), savedAssignment.getEmployee().getId(), currentDate);
+
+                        if (existing.isEmpty()) {
                         Attendance attendance = Attendance.builder()
                                 .employee(savedAssignment.getEmployee())
                                 .assignment(savedAssignment) // Dùng assignment mới

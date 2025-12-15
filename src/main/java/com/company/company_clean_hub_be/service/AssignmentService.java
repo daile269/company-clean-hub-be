@@ -30,6 +30,16 @@ public interface AssignmentService {
             int page, 
             int pageSize
     );
+    PageResponse<com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse> getAssignmentsByCustomerGroupedByContract(
+            Long customerId,
+            Long contractId,
+            com.company.company_clean_hub_be.entity.ContractType contractType,
+            com.company.company_clean_hub_be.entity.AssignmentStatus status,
+            Integer month,
+            Integer year,
+            int page,
+            int pageSize
+    );
     List<com.company.company_clean_hub_be.dto.response.CustomerResponse> getCustomersByEmployee(Long employeeId);
 
     List<AssignmentResponse> getAssignmentsByEmployeeMonthYear(Long employeeId, Integer month, Integer year);
@@ -44,6 +54,12 @@ public interface AssignmentService {
     // Lịch sử điều động
     List<AssignmentHistoryResponse> getReassignmentHistory(Long employeeId);
     List<AssignmentHistoryResponse> getReassignmentHistoryByContract(Long contractId);
+            PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> getReassignmentHistoryByCustomerId(
+                    Long customerId,
+                    Long contractId,
+                    int page,
+                    int pageSize
+            );
     AssignmentHistoryResponse getHistoryDetail(Long historyId);
     RollbackResponse rollbackReassignment(Long historyId);
 }
