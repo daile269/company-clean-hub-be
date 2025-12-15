@@ -1,10 +1,8 @@
 package com.company.company_clean_hub_be.service;
 
 import com.company.company_clean_hub_be.dto.request.AttendanceRequest;
-import com.company.company_clean_hub_be.dto.request.TemporaryAssignmentRequest;
 import com.company.company_clean_hub_be.dto.response.AttendanceResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
-import com.company.company_clean_hub_be.dto.response.TemporaryAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.TotalDaysResponse;
 
 import java.util.List;

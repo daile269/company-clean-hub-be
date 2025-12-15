@@ -2,6 +2,7 @@ package com.company.company_clean_hub_be.dto.response;
 
 
 import com.company.company_clean_hub_be.entity.AssignmentStatus;
+import com.company.company_clean_hub_be.entity.ContractType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -28,6 +29,9 @@ public class AssignmentResponse {
     private String customerCode;
     private Long contractId;
     private String contractDescription;
+    private java.time.LocalDate contractStartDate;
+    private java.time.LocalDate contractEndDate;
+    private ContractType contractType;
     private LocalDate startDate;
     private AssignmentStatus status;
     private BigDecimal salaryAtTime;

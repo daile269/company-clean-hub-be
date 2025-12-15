@@ -29,6 +29,19 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
             @Param("date") LocalDate date
     );
     
+    @Query("SELECT a FROM Attendance a WHERE a.assignment.employee.id = :employeeId AND a.date = :date")
+    List<Attendance> findAllByEmployeeAndDate(
+            @Param("employeeId") Long employeeId,
+            @Param("date") LocalDate date
+    );
+    
+    @Query("SELECT a FROM Attendance a WHERE a.assignment.id = :assignmentId AND a.assignment.employee.id = :employeeId AND a.date = :date")
+    Optional<Attendance> findByAssignmentAndEmployeeAndDate(
+            @Param("assignmentId") Long assignmentId,
+            @Param("employeeId") Long employeeId,
+            @Param("date") LocalDate date
+    );
+    
     @Query("SELECT a FROM Attendance a " +
             "LEFT JOIN a.assignment asn " +
             "LEFT JOIN asn.employee e " +
@@ -86,6 +99,13 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
             @Param("month") Integer month,
             @Param("year") Integer year,
             Pageable pageable
+    );
+    
+    @Query("SELECT a FROM Attendance a WHERE a.assignment.id = :assignmentId AND a.date BETWEEN :startDate AND :endDate")
+    List<Attendance> findByAssignmentAndDateBetween(
+            @Param("assignmentId") Long assignmentId,
+            @Param("startDate") java.time.LocalDate startDate,
+            @Param("endDate") java.time.LocalDate endDate
     );
 
 
