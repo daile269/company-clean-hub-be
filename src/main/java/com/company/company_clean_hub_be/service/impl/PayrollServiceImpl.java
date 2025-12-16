@@ -5,18 +5,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
-import com.company.company_clean_hub_be.dto.request.PayrollRequest;
-import com.company.company_clean_hub_be.dto.response.PayRollExportExcel;
-import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
-import com.company.company_clean_hub_be.entity.*;
-import com.company.company_clean_hub_be.repository.*;
-import com.company.company_clean_hub_be.service.UserService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -24,14 +15,31 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.request.PayrollRequest;
 import com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
+import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
+import com.company.company_clean_hub_be.entity.Assignment;
+import com.company.company_clean_hub_be.entity.AssignmentScope;
+import com.company.company_clean_hub_be.entity.AssignmentType;
+import com.company.company_clean_hub_be.entity.Attendance;
+import com.company.company_clean_hub_be.entity.Employee;
+import com.company.company_clean_hub_be.entity.Payroll;
+import com.company.company_clean_hub_be.entity.User;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
+import com.company.company_clean_hub_be.repository.AssignmentRepository;
+import com.company.company_clean_hub_be.repository.AttendanceRepository;
+import com.company.company_clean_hub_be.repository.EmployeeRepository;
+import com.company.company_clean_hub_be.repository.PayrollRepository;
+import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.service.PayrollService;
+import com.company.company_clean_hub_be.service.UserService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
@@ -45,11 +53,70 @@ public class PayrollServiceImpl implements PayrollService {
     private final UserRepository userRepository;
     private  final EmployeeRepository employeeRepository;
     @Override
-    public PayrollResponse calculatePayroll(PayrollRequest request) {
+    public List<PayrollAssignmentResponse> calculatePayroll(PayrollRequest request) {
         log.info("=== START calculatePayroll ===");
         log.info("Request: employeeId={}, month={}, year={}",
                 request.getEmployeeId(), request.getMonth(), request.getYear());
 
+        // If employeeId is null, calculate for all employees
+        if (request.getEmployeeId() == null) {
+            log.info("Bulk calculation for all employees");
+            return calculatePayrollForAllEmployees(request.getMonth(), request.getYear());
+        }
+
+        // Single employee calculation
+        return calculatePayrollForSingleEmployee(request);
+    }
+
+    private List<PayrollAssignmentResponse> calculatePayrollForAllEmployees(Integer month, Integer year) {
+        log.info("[BULK-CALC] Calculating payroll for all employees: month={}, year={}", month, year);
+        
+        List<Employee> employees = employeeRepository.findDistinctEmployeesByAssignmentMonthYear(month, year);
+        log.info("[BULK-CALC] Found {} employees with assignments", employees.size());
+        
+        List<PayrollAssignmentResponse> result = new ArrayList<>();
+        User accountant = userRepository.findByUsername(userService.getCurrentUsername())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+        
+        for (Employee employee : employees) {
+            Long employeeId = employee.getId();
+            log.info("[BULK-CALC] Processing employee id={}, name={}", employeeId, employee.getName());
+            
+            List<Assignment> assignments = assignmentRepository
+                    .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId, null);
+            
+            if (assignments == null || assignments.isEmpty()) {
+                log.info("[BULK-CALC] Employee {} has no assignments, skip", employeeId);
+                continue;
+            }
+            
+            // Check if payroll already exists
+            Optional<Payroll> existingPayroll = payrollRepository.findByEmployeeAndMonthAndYear(employeeId, month, year);
+            if (existingPayroll.isPresent()) {
+                log.info("[BULK-CALC] Payroll already exists for employee {}, skip creation", employeeId);
+                continue;
+            }
+            
+            Payroll payroll = upsertPayrollFromAssignments(employee, assignments, month, year, accountant,null);
+            
+            if (payroll == null) {
+                log.info("[BULK-CALC] Employee {} skipped (no attendance)", employeeId);
+                continue;
+            }
+            
+            // Convert to response objects
+            List<PayrollAssignmentResponse> employeeResponses = convertPayrollToAssignmentResponses(
+                    payroll, employee, assignments, month, year);
+            result.addAll(employeeResponses);
+        }
+        
+        log.info("[BULK-CALC] Completed. Total response rows: {}", result.size());
+        return result;
+    }
+
+    private List<PayrollAssignmentResponse> calculatePayrollForSingleEmployee(PayrollRequest request) {
+        log.info("[SINGLE-CALC] Calculating payroll for employee: {}", request.getEmployeeId());
+        
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
@@ -108,10 +175,10 @@ public class PayrollServiceImpl implements PayrollService {
             amountTotal = amountTotal.add(assignmentAmount);
         }
 
-        // If COMPANY: add employee allowance to final payroll (not per assignment)
-        if (hasCompanyScope && employee.getAllowance() != null) {
-            totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
-        }
+//        // If COMPANY: add employee allowance to final payroll (not per assignment)
+//        if (hasCompanyScope && employee.getAllowance() != null) {
+//            totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
+//        }
 
         // Insurance salary
         if (hasCompanyScope && employee.getInsuranceSalary() != null) {
@@ -124,9 +191,9 @@ public class PayrollServiceImpl implements PayrollService {
         BigDecimal finalSalary = amountTotal
                 .subtract(totalPenalties.add(insuranceTotal).add(advanceTotal));
 
-        if (hasCompanyScope && employee.getAllowance() != null) {
-            finalSalary = finalSalary.add(employee.getAllowance());
-        }
+//        if (hasCompanyScope && employee.getAllowance() != null) {
+//            finalSalary = finalSalary.add(employee.getAllowance());
+//        }
 
         User accountant = userRepository.findByUsername(userService.getCurrentUsername())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
@@ -154,7 +221,118 @@ public class PayrollServiceImpl implements PayrollService {
         }
         attendanceRepository.saveAll(attendances);
 
-        return mapToResponse(savedPayroll, request.getMonth(), request.getYear(), request.getEmployeeId());
+        // Convert to assignment responses
+        return convertPayrollToAssignmentResponses(savedPayroll, employee, assignments, 
+                request.getMonth(), request.getYear());
+    }
+
+    private List<PayrollAssignmentResponse> convertPayrollToAssignmentResponses(
+            Payroll payroll, Employee employee, List<Assignment> assignments, Integer month, Integer year) {
+        
+        List<PayrollAssignmentResponse> result = new ArrayList<>();
+        
+        int totalPlanedDay = 0;
+        int totalDays = 0;
+        BigDecimal totalBonus = payroll.getBonusTotal() != null ? payroll.getBonusTotal() : BigDecimal.ZERO;
+        BigDecimal totalPenalty = payroll.getPenaltyTotal() != null ? payroll.getPenaltyTotal() : BigDecimal.ZERO;
+        BigDecimal totalAllowance = payroll.getAllowanceTotal() != null ? payroll.getAllowanceTotal() : BigDecimal.ZERO;
+        BigDecimal totalInsurance = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal() : BigDecimal.ZERO;
+        BigDecimal totalAdvance = payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal() : BigDecimal.ZERO;
+        
+        // Create assignment rows
+        for (Assignment assignment : assignments) {
+            int assignmentDays = calculateActualWorkDays(assignment);
+            BigDecimal assignmentBonus = defaultZero(attendanceRepository.sumBonusByAssignment(assignment.getId()));
+            BigDecimal assignmentPenalty = defaultZero(attendanceRepository.sumPenaltyByAssignment(assignment.getId()));
+            BigDecimal assignmentSupport = defaultZero(attendanceRepository.sumSupportCostByAssignment(assignment.getId()));
+            BigDecimal additionalAllowance = defaultZero(assignment.getAdditionalAllowance());
+            
+            AssignmentScope scope = assignment.getScope() != null ? assignment.getScope() : AssignmentScope.CONTRACT;
+            BigDecimal assignmentAllowance = assignmentSupport.add(additionalAllowance);
+            
+            BigDecimal baseSalary = assignment.getSalaryAtTime();
+            
+            String projectCompany = "";
+            if (assignment.getContract() != null) {
+                projectCompany = assignment.getContract().getCustomer() != null
+                        ? assignment.getContract().getCustomer().getCompany()
+                        : null;
+            } else {
+                projectCompany = "Văn phòng";
+            }
+            
+            String assignmentTypeVN = mapAssignmentTypeToVietnamese(assignment.getAssignmentType());
+            BigDecimal assignmentSalary = calculateAssignmentAmount(assignment, assignmentBonus, assignmentSupport);
+            
+            PayrollAssignmentResponse dto = PayrollAssignmentResponse.builder()
+                    .payrollId(payroll.getId())
+                    .employeeId(employee.getId())
+                    .employeeName(employee.getName())
+                    .bankName(employee.getBankName())
+                    .bankAccount(employee.getBankAccount())
+                    .phone(employee.getPhone())
+                    .assignmentType(assignmentTypeVN)
+                    .baseSalary(baseSalary)
+                    .projectCompany(projectCompany)
+                    .assignmentDays(assignmentDays)
+                    .assignmentPlanedDays(assignment.getPlannedDays())
+                    .assignmentBonus(assignmentBonus)
+                    .assignmentPenalty(assignmentPenalty)
+                    .assignmentAllowance(assignmentAllowance)
+                    .assignmentInsurance(BigDecimal.ZERO)
+                    .assignmentAdvance(BigDecimal.ZERO)
+                    .assignmentSalary(assignmentSalary)
+                    .totalDays(null)
+                    .totalPlanedDays(null)
+                    .totalBonus(null)
+                    .totalPenalty(null)
+                    .totalAllowance(null)
+                    .totalInsurance(null)
+                    .totalAdvance(null)
+                    .finalSalary(null)
+                    .companyAllowance(null)
+                    .isTotalRow(false)
+                    .build();
+            
+            result.add(dto);
+            
+            totalDays += assignmentDays;
+            totalPlanedDay += assignment.getPlannedDays();
+        }
+        
+        // Create total row
+        PayrollAssignmentResponse totalRow = PayrollAssignmentResponse.builder()
+                .payrollId(payroll.getId())
+                .employeeId(employee.getId())
+                .employeeName(employee.getName())
+                .bankName(employee.getBankName())
+                .bankAccount(employee.getBankAccount())
+                .phone(employee.getPhone())
+                .assignmentType(null)
+                .baseSalary(null)
+                .projectCompany(null)
+                .assignmentDays(null)
+                .assignmentPlanedDays(null)
+                .assignmentBonus(null)
+                .assignmentPenalty(null)
+                .assignmentAllowance(null)
+                .assignmentInsurance(null)
+                .assignmentAdvance(null)
+                .assignmentSalary(null)
+                .totalDays(totalDays)
+                .totalPlanedDays(totalPlanedDay)
+                .totalBonus(totalBonus)
+                .totalPenalty(totalPenalty)
+                .totalAllowance(totalAllowance)
+                .totalInsurance(totalInsurance)
+                .companyAllowance(employee.getAllowance())
+                .totalAdvance(totalAdvance)
+                .finalSalary(payroll.getFinalSalary())
+                .isTotalRow(true)
+                .build();
+        
+        result.add(totalRow);
+        return result;
     }
 
 
@@ -199,164 +377,85 @@ public class PayrollServiceImpl implements PayrollService {
         List<Employee> employees = employeeRepository.findDistinctEmployeesByAssignmentMonthYear(month, year);
         log.info("[PAYROLL-EXPORT] Found {} employees with assignments in month/year",
                 employees != null ? employees.size() : null);
-        log.debug("[PAYROLL-EXPORT][DEBUG] Raw employee list: {}", employees);
+        log.info("[PAYROLL-EXPORT] Found {} employees with assignments", employees.size());
 
         List<PayRollAssignmentExportExcel> result = new ArrayList<>();
-        if (employees == null || employees.isEmpty()) {
-            log.info("[PAYROLL-EXPORT] No employees found. RETURN empty list.");
-            log.debug("[PAYROLL-EXPORT][DEBUG] employees is null or empty. employees={}", employees);
-            return result;
-        }
-
-        User accountant = userRepository.findByUsername(userService.getCurrentUsername())
-                .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
-        log.debug("[PAYROLL-EXPORT][DEBUG] Accountant executing payroll export: {}", accountant);
 
         for (Employee employee : employees) {
             Long employeeId = employee.getId();
-            log.info("[PAYROLL-EXPORT] --- PROCESS EMPLOYEE id={}, name={} ---",
-                    employeeId, employee.getName());
-            log.debug("[PAYROLL-EXPORT][DEBUG] Employee full object: {}", employee);
+            log.info("[PAYROLL-EXPORT] Processing employee id={}, name={}", employeeId, employee.getName());
 
             List<Assignment> assignments = assignmentRepository
                     .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId, null);
 
-            log.info("[PAYROLL-EXPORT] Employee {} has {} assignments",
-                    employeeId, assignments != null ? assignments.size() : null);
-            log.debug("[PAYROLL-EXPORT][DEBUG] Raw assignment list for employee {}: {}",
-                    employeeId, assignments);
-
             if (assignments == null || assignments.isEmpty()) {
                 log.info("[PAYROLL-EXPORT] Employee {} has NO assignments. Skip.", employeeId);
-                log.debug("[PAYROLL-EXPORT][DEBUG] Skipping employee {} because assignments is null or empty", employeeId);
                 continue;
             }
-
-            Payroll persistedPayroll = upsertPayrollFromAssignments(employee, assignments, month, year, accountant);
-            log.debug("[PAYROLL-EXPORT][DEBUG] Payroll persisted for employee {} -> {}",
-                    employeeId, persistedPayroll);
-
+            User accountant = userRepository.findByUsername(userService.getCurrentUsername())
+                    .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+            Map<String,String> note = new HashMap<>();
+            Payroll persistedPayroll = upsertPayrollFromAssignments(employee, assignments, month, year, accountant,note );
+//            List<Map.Entry<String, String>> entries =
+//                    new ArrayList<>(note.entrySet());
+//
+//            for (int i = entries.size() - 1; i >= 0; i--) {
+//                Map.Entry<String, String> entry = entries.get(i);
+//                log.info("note key={}, value={}", entry.getKey(), entry.getValue());
+//            }
             if (persistedPayroll == null) {
                 log.info("[PAYROLL-EXPORT] Employee {} skipped because no attendance was found.", employeeId);
-                log.debug("[PAYROLL-EXPORT][DEBUG] persistedPayroll is NULL -> skip employee {}", employeeId);
                 continue;
             }
 
-            int totalPlanedDay = 0;
+            // Collect project names
+            List<String> projectNames = assignments.stream()
+                    .map(assignment -> {
+                        if (assignment.getContract() != null && assignment.getContract().getCustomer() != null) {
+                            return assignment.getContract().getCustomer().getCompany();
+                        }
+                        return "Văn phòng";
+                    })
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            // Calculate total days
             int totalDays = 0;
-            BigDecimal totalBonus = persistedPayroll.getBonusTotal() != null ? persistedPayroll.getBonusTotal() : BigDecimal.ZERO;
-            BigDecimal totalPenalty = persistedPayroll.getPenaltyTotal() != null ? persistedPayroll.getPenaltyTotal() : BigDecimal.ZERO;
-            BigDecimal totalAllowance = persistedPayroll.getAllowanceTotal() != null ? persistedPayroll.getAllowanceTotal() : BigDecimal.ZERO;
-            BigDecimal totalInsurance = persistedPayroll.getInsuranceTotal() != null ? persistedPayroll.getInsuranceTotal() : BigDecimal.ZERO;
-            BigDecimal totalAdvance = persistedPayroll.getAdvanceTotal() != null ? persistedPayroll.getAdvanceTotal() : BigDecimal.ZERO;
-
-            log.debug("[PAYROLL-EXPORT][DEBUG] Initial totals for employee {} -> bonus={}, penalty={}, allowance={}, insurance={}, advance={}",
-                    employeeId, totalBonus, totalPenalty, totalAllowance, totalInsurance, totalAdvance);
-
+            int totalPlannedDays = 0;
             for (Assignment assignment : assignments) {
-
-                log.debug("[PAYROLL-EXPORT][DEBUG] --- PROCESS ASSIGNMENT {} of employee {} ---", assignment.getId(), employeeId);
-                log.debug("[PAYROLL-EXPORT][DEBUG] Assignment full object: {}", assignment);
-
-                int assignmentDays = calculateActualWorkDays(assignment);
-                log.debug("[PAYROLL-EXPORT][DEBUG] assignmentDays={}, plannedDays={}",
-                        assignmentDays, assignment.getPlannedDays());
-
-                BigDecimal assignmentBonus = defaultZero(attendanceRepository.sumBonusByAssignment(assignment.getId()));
-                BigDecimal assignmentPenalty = defaultZero(attendanceRepository.sumPenaltyByAssignment(assignment.getId()));
-                BigDecimal assignmentSupport = defaultZero(attendanceRepository.sumSupportCostByAssignment(assignment.getId()));
-                BigDecimal additionalAllowance = defaultZero(assignment.getAdditionalAllowance());
-
-                log.debug("[PAYROLL-EXPORT][DEBUG] assignmentBonus={}, assignmentPenalty={}, assignmentSupport={}, additionalAllowance={}",
-                        assignmentBonus, assignmentPenalty, assignmentSupport, additionalAllowance);
-
-                AssignmentScope scope = assignment.getScope() != null ? assignment.getScope() : AssignmentScope.CONTRACT;
-                log.debug("[PAYROLL-EXPORT][DEBUG] Assignment scope={}", scope);
-
-                BigDecimal assignmentAllowance = assignmentSupport.add(additionalAllowance);
-
-//                if (scope == AssignmentScope.COMPANY && employee.getAllowance() != null) {
-//                    assignmentAllowance = assignmentAllowance.add(employee.getAllowance());
-//                }
-
-                log.debug("[PAYROLL-EXPORT][DEBUG] final assignmentAllowance={}", assignmentAllowance);
-
-                BigDecimal baseSalary = (scope == AssignmentScope.COMPANY && employee.getMonthlySalary() != null)
-                        ? employee.getMonthlySalary()
-                        : assignment.getSalaryAtTime();
-
-                log.debug("[PAYROLL-EXPORT][DEBUG] baseSalary resolved = {}", baseSalary);
-                String projectCompany = "";
-                if (assignment.getContract() != null) {
-                    projectCompany = assignment.getContract().getCustomer() != null
-                            ? assignment.getContract().getCustomer().getCompany()
-                            : null;
-                } else {
-                    projectCompany = "Văn phòng";
-                }
-
-                log.debug("[PAYROLL-EXPORT][DEBUG] projectCompany resolved = {}", projectCompany);
-
-                String assignmentTypeVN = mapAssignmentTypeToVietnamese(assignment.getAssignmentType());
-                log.debug("[PAYROLL-EXPORT][DEBUG] assignmentTypeVN={}", assignmentTypeVN);
-
-                BigDecimal assignmentSalary = calculateAssignmentAmount(assignment, assignmentBonus, assignmentSupport);
-                log.debug("[PAYROLL-EXPORT][DEBUG] assignmentSalary calculated = {}", assignmentSalary);
-
-                PayRollAssignmentExportExcel dto = PayRollAssignmentExportExcel.builder()
-                        .employeeId(employeeId)
-                        .employeeName(employee.getName())
-                        .bankName(employee.getBankName())
-                        .bankAccount(employee.getBankAccount())
-                        .phone(employee.getPhone())
-                        .assignmentType(assignmentTypeVN)
-                        .baseSalary(baseSalary)
-                        .projectCompany(projectCompany)
-                        .assignmentDays(assignmentDays)
-                        .assignmentPlanedDays(assignment.getPlannedDays())
-                        .assignmentBonus(assignmentBonus)
-                        .assignmentPenalty(assignmentPenalty)
-                        .assignmentAllowance(assignmentAllowance)
-                        .assignmentInsurance(BigDecimal.ZERO)
-                        .assignmentAdvance(BigDecimal.ZERO)
-                        .assignmentSalary(assignmentSalary)
-                        .totalDays(null)
-                        .totalPlanedDays(null)
-                        .totalBonus(null)
-                        .totalPenalty(null)
-                        .totalAllowance(null)
-                        .totalInsurance(null)
-                        .totalAdvance(null)
-                        .finalSalary(null)
-                        .companyAllowance(null)
-                        .isTotalRow(false)
-                        .build();
-
-                log.debug("[PAYROLL-EXPORT][DEBUG] DTO created: {}", dto);
-
-                result.add(dto);
-
-                totalDays += assignmentDays;
-                totalPlanedDay += assignment.getPlannedDays();
-                totalBonus = totalBonus.add(assignmentBonus);
-                totalPenalty = totalPenalty.add(assignmentPenalty);
-//                totalAllowance = totalAllowance.add(assignmentAllowance);
-
-                log.debug("[PAYROLL-EXPORT][DEBUG] Updated totals -> days={}, planned={}, bonus={}, penalty={}, allowance={}",
-                        totalDays, totalPlanedDay, totalBonus, totalPenalty, totalAllowance);
-
-                log.info("[PAYROLL-EXPORT] Added assignment row for employee {} assignment {}", employeeId, assignment.getId());
+                totalDays += calculateActualWorkDays(assignment);
+                totalPlannedDays += assignment.getPlannedDays() != null ? assignment.getPlannedDays() : 0;
             }
 
-            PayRollAssignmentExportExcel totalRow = PayRollAssignmentExportExcel.builder()
+            // Calculate salary before advance
+            BigDecimal salaryBeforeAdvance = persistedPayroll.getFinalSalary();
+            if (persistedPayroll.getAdvanceTotal() != null) {
+                salaryBeforeAdvance = salaryBeforeAdvance.add(persistedPayroll.getAdvanceTotal());
+            }
+
+            List<Map.Entry<String, String>> entries = new ArrayList<>(note.entrySet());
+            StringBuilder sb = new StringBuilder();
+            for (int i = entries.size() - 1; i >= 0; i--) {
+                Map.Entry<String, String> e = entries.get(i);
+                String key = e.getKey();
+                String val = e.getValue() != null ? e.getValue() : "";
+                sb.append(key).append(": ").append(val);
+                if (i > 0) {
+                    sb.append('\n');
+                }
+            }
+            String noteStr = sb.toString();
+            
+            // Create single summary row for employee
+            PayRollAssignmentExportExcel summaryRow = PayRollAssignmentExportExcel.builder()
                     .employeeId(employeeId)
                     .employeeName(employee.getName())
                     .bankName(employee.getBankName())
                     .bankAccount(employee.getBankAccount())
                     .phone(employee.getPhone())
-                    .assignmentType(null)
-                    .baseSalary(null)
-                    .projectCompany(null)
+                    .assignmentType(null) // Not used in summary
+                    .baseSalary(null) // Not used in summary
+                    .projectCompany(String.join(", ", projectNames)) // Join all projects
                     .assignmentDays(null)
                     .assignmentPlanedDays(null)
                     .assignmentBonus(null)
@@ -366,28 +465,114 @@ public class PayrollServiceImpl implements PayrollService {
                     .assignmentAdvance(null)
                     .assignmentSalary(null)
                     .totalDays(totalDays)
-                    .totalPlanedDays(totalPlanedDay)
-                    .totalBonus(totalBonus)
-                    .totalPenalty(totalPenalty)
-                    .totalAllowance(totalAllowance)
-                    .totalInsurance(totalInsurance)
+                    .totalPlanedDays(totalPlannedDays)
+                    .totalBonus(persistedPayroll.getBonusTotal())
+                    .totalPenalty(persistedPayroll.getPenaltyTotal())
+                    .totalAllowance(persistedPayroll.getAllowanceTotal())
+                    .totalInsurance(persistedPayroll.getInsuranceTotal())
                     .companyAllowance(employee.getAllowance())
-                    .totalAdvance(totalAdvance)
+                    .totalSalaryBeforeAdvance(salaryBeforeAdvance)
+                    .totalAdvance(persistedPayroll.getAdvanceTotal())
                     .finalSalary(persistedPayroll.getFinalSalary())
-                    .isTotalRow(true)
+                    .note(noteStr)
+                    .isTotalRow(true) // Mark as summary row
                     .build();
 
-            log.debug("[PAYROLL-EXPORT][DEBUG] Total row created for employee {}: {}", employeeId, totalRow);
-
-            result.add(totalRow);
-            log.info("[PAYROLL-EXPORT] Added total row for employee {}", employeeId);
+            result.add(summaryRow);
+            log.info("[PAYROLL-EXPORT] Added summary row for employee {}", employeeId);
         }
 
-        log.info("[PAYROLL-EXPORT] ===== FINISHED getAllPayRollByAssignment. Total rows={} =====",
-                result.size());
-        log.debug("[PAYROLL-EXPORT][DEBUG] Final result list: {}", result);
-
+        log.info("[PAYROLL-EXPORT] COMPLETED. Total rows: {}", result.size());
         return result;
+    }
+
+    @Override
+    public PageResponse<PayrollAssignmentResponse> getPayrollAssignmentsWithFilter(
+            String keyword, Integer month, Integer year, int page, int pageSize) {
+        
+        log.info("[PAYROLL-FILTER] Getting filtered assignments: keyword='{}', month={}, year={}, page={}, pageSize={}",
+                keyword, month, year, page, pageSize);
+        
+        // Get employees based on filter
+        List<Employee> allEmployees = employeeRepository.findDistinctEmployeesByAssignmentMonthYear(month, year);
+        
+        // Apply keyword filter
+        List<Employee> filteredEmployees = allEmployees;
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            String lowerKeyword = keyword.toLowerCase();
+            filteredEmployees = allEmployees.stream()
+                    .filter(emp -> 
+                        (emp.getName() != null && emp.getName().toLowerCase().contains(lowerKeyword)) ||
+                        (emp.getEmployeeCode() != null && emp.getEmployeeCode().toLowerCase().contains(lowerKeyword)) ||
+                        (emp.getPhone() != null && emp.getPhone().contains(keyword))
+                    )
+                    .collect(Collectors.toList());
+        }
+        
+        log.info("[PAYROLL-FILTER] After filtering: {} employees", filteredEmployees.size());
+        
+        // Calculate total elements (need to count all assignment + total rows)
+        int totalAssignmentRows = 0;
+        for (Employee emp : filteredEmployees) {
+            List<Assignment> assignments = assignmentRepository
+                    .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, emp.getId(), null);
+            if (assignments != null && !assignments.isEmpty()) {
+                // assignments count + 1 total row
+                totalAssignmentRows += assignments.size() + 1;
+            }
+        }
+        
+        int totalElements = totalAssignmentRows;
+        int totalPages = (int) Math.ceil((double) totalElements / pageSize);
+        
+        // Manual pagination: collect all responses then slice
+        List<PayrollAssignmentResponse> allResponses = new ArrayList<>();
+        
+        for (Employee employee : filteredEmployees) {
+            Long employeeId = employee.getId();
+            
+            List<Assignment> assignments = assignmentRepository
+                    .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId, null);
+            
+            if (assignments == null || assignments.isEmpty()) {
+                continue;
+            }
+            
+            // Get or find payroll
+            Optional<Payroll> payrollOpt = payrollRepository.findByEmployeeAndMonthAndYear(employeeId, month, year);
+            
+            if (!payrollOpt.isPresent()) {
+                log.info("[PAYROLL-FILTER] No payroll found for employee {}, skip", employeeId);
+                continue;
+            }
+            
+            Payroll payroll = payrollOpt.get();
+            
+            // Convert to responses
+            List<PayrollAssignmentResponse> employeeResponses = convertPayrollToAssignmentResponses(
+                    payroll, employee, assignments, month, year);
+            allResponses.addAll(employeeResponses);
+        }
+        
+        // Apply pagination
+        int start = page * pageSize;
+        int end = Math.min(start + pageSize, allResponses.size());
+        
+        List<PayrollAssignmentResponse> paginatedContent = (start < allResponses.size()) 
+                ? allResponses.subList(start, end)
+                : new ArrayList<>();
+        
+        log.info("[PAYROLL-FILTER] Returning {} items (page {}/{})", paginatedContent.size(), page, totalPages);
+        
+        return PageResponse.<PayrollAssignmentResponse>builder()
+                .content(paginatedContent)
+                .page(page)
+                .pageSize(pageSize)
+                .totalElements((long) allResponses.size())
+                .totalPages((int) Math.ceil((double) allResponses.size() / pageSize))
+                .first(page == 0)
+                .last(page >= totalPages - 1)
+                .build();
     }
 
     
@@ -413,7 +598,7 @@ public class PayrollServiceImpl implements PayrollService {
                                                  List<Assignment> assignments,
                                                  Integer month,
                                                  Integer year,
-                                                 User accountant) {
+                                                 User accountant, Map<String,String> note) {
         log.debug("[PAYROLL-EXPORT][DEBUG] Enter upsertPayrollFromAssignments - employeeId={}, month={}, year={}, accountant={}",
                 employee != null ? employee.getId() : null, month, year, accountant != null ? accountant.getUsername() : null);
 
@@ -456,15 +641,20 @@ public class PayrollServiceImpl implements PayrollService {
                 .orElseGet(Payroll::new);
         log.debug("[PAYROLL-EXPORT][DEBUG] Loaded existing payroll? {} (id={})",
                 payroll.getId() != null, payroll.getId());
-
+        String finalRow = "( ";
         for (Assignment assignment : assignments) {
+
             log.debug("[PAYROLL-EXPORT][DEBUG] Processing assignment id={} for employeeId={}",
                     assignment != null ? assignment.getId() : null, employee.getId());
 
             int assignmentRealDays = calculateActualWorkDays(assignment);
             totalDays += assignmentRealDays;
             log.debug("[PAYROLL-EXPORT][DEBUG] assignmentRealDays={}, cumulative totalDays={}", assignmentRealDays, totalDays);
-
+            String key = assignment.getContract() != null ? assignment.getContract().getCustomer().getCompany() : "Văn phòng" ;
+            String value = mapAssignmentTypeToVietnamese(assignment.getAssignmentType())+" :";
+            if (note != null){
+                        note.put(key,value);
+            }
             BigDecimal bonus = attendanceRepository.sumBonusByAssignment(assignment.getId());
             BigDecimal penalty = attendanceRepository.sumPenaltyByAssignment(assignment.getId());
             BigDecimal support = attendanceRepository.sumSupportCostByAssignment(assignment.getId());
@@ -488,10 +678,12 @@ public class PayrollServiceImpl implements PayrollService {
             log.debug("[PAYROLL-EXPORT][DEBUG] Updated accumulators after assignment {} -> totalBonus={}, totalPenalties={}, totalSupportCosts={}",
                     assignment.getId(), totalBonus, totalPenalties, totalSupportCosts);
 
-            BigDecimal calculatedAssignmentAmount = calculateAssignmentAmount(assignment, safeBonus, suportAssignment);
+            BigDecimal calculatedAssignmentAmount = calculateAssignmentAmount(assignment, safeBonus, suportAssignment,note);
+            value  = note.get(key);
             log.debug("[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount returned {} for assignmentId={}",
                     calculatedAssignmentAmount, assignment.getId());
             amountTotal = amountTotal.add(calculatedAssignmentAmount);
+            finalRow += calculatedAssignmentAmount +" +";
             log.debug("[PAYROLL-EXPORT][DEBUG] amountTotal accumulated = {}", amountTotal);
         }
 
@@ -513,20 +705,22 @@ public class PayrollServiceImpl implements PayrollService {
             insuranceTotal = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal() : BigDecimal.ZERO;
             log.debug("[PAYROLL-EXPORT][DEBUG] Using payroll.insuranceTotal (existing) = {}", insuranceTotal);
         }
-        if (hasCompanyScope){
-
-        }
         // Subtract penalties, insurance and advances from total amount
         BigDecimal deductions = totalPenalties.add(insuranceTotal).add(advanceTotal);
         log.debug("[PAYROLL-EXPORT][DEBUG] Deductions calculated -> totalPenalties={}, insuranceTotal={}, advanceTotal={}, deductions={}",
                 totalPenalties, insuranceTotal, advanceTotal, deductions);
 
         BigDecimal finalAmount = amountTotal.subtract(deductions);
+        finalRow += String.format(
+                " ) - (%s + %s + %s) = %s",
+                totalPenalties,
+                insuranceTotal,
+                advanceTotal,
+                finalAmount
+        );
+        note.put("Tổng",finalRow);
         log.debug("[PAYROLL-EXPORT][DEBUG] Final salary computed before persisting = {} (amountTotal={} - deductions={})",
                 finalAmount, amountTotal, deductions);
-        if (hasCompanyScope){
-            finalAmount = finalAmount.add(employee.getAllowance());
-        }
         payroll.setBonusTotal(totalBonus);
         payroll.setTotalDays(totalDays);
         payroll.setPenaltyTotal(totalPenalties);
@@ -584,16 +778,8 @@ public class PayrollServiceImpl implements PayrollService {
         log.debug("[PAYROLL-EXPORT][DEBUG] type={}, scope={}, realWorksDay={}", type, scope, realWorksDay);
 
         BigDecimal salaryBase;
-        if (scope == AssignmentScope.COMPANY) {
-            salaryBase = assignment.getEmployee() != null && assignment.getEmployee().getMonthlySalary() != null
-                    ? assignment.getEmployee().getMonthlySalary()
-                    : BigDecimal.ZERO;
-            log.debug("[PAYROLL-EXPORT][DEBUG] Scope COMPANY -> salaryBase (employee.monthlySalary) = {}", salaryBase);
-        } else {
-            salaryBase = assignment.getSalaryAtTime() != null ? assignment.getSalaryAtTime() : BigDecimal.ZERO;
-            log.debug("[PAYROLL-EXPORT][DEBUG] Scope CONTRACT -> salaryBase (assignment.salaryAtTime) = {}", salaryBase);
-        }
-
+        salaryBase = assignment.getSalaryAtTime() != null ? assignment.getSalaryAtTime() : BigDecimal.ZERO;
+        log.debug("[PAYROLL-EXPORT][DEBUG] Scope CONTRACT -> salaryBase (assignment.salaryAtTime) = {}", salaryBase);
         if (type == AssignmentType.FIXED_BY_CONTRACT || type == AssignmentType.FIXED_BY_COMPANY) {
             log.debug("[PAYROLL-EXPORT][DEBUG] Fixed type branch. plannedDays={}, salaryBase={}, bonus={}, supportCosts={}, workDaysField={}",
                     assignment.getPlannedDays(), salaryBase, bonus, supportCosts, assignment.getWorkDays());
@@ -621,8 +807,76 @@ public class PayrollServiceImpl implements PayrollService {
                 log.debug("[PAYROLL-EXPORT][DEBUG] Day/Temporary branch conditions not met -> amount stays ZERO");
             }
         }
-
         log.debug("[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount returning amount={}", amount);
+        return amount;
+    }
+    private BigDecimal calculateAssignmentAmount(Assignment assignment, BigDecimal bonus, BigDecimal supportCosts, Map <String, String>  note) {
+        log.debug("[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount start - assignmentId={}, bonus={}, supportCosts={}",
+                assignment != null ? assignment.getId() : null, bonus, supportCosts);
+
+        if (assignment == null || assignment.getAssignmentType() == null) {
+            log.debug("[PAYROLL-EXPORT][DEBUG] assignment or assignmentType is null -> return ZERO");
+            return BigDecimal.ZERO;
+        }
+        String key = assignment.getContract() != null ? assignment.getContract().getCustomer().getCompany() : "Văn phòng";
+        String value = "";
+        if (note != null) value  = note.get(key);
+        BigDecimal amount = BigDecimal.ZERO;
+        AssignmentType type = assignment.getAssignmentType();
+        AssignmentScope scope = assignment.getScope() != null ? assignment.getScope() : AssignmentScope.CONTRACT;
+        int realWorksDay = calculateActualWorkDays(assignment);
+
+        log.debug("[PAYROLL-EXPORT][DEBUG] type={}, scope={}, realWorksDay={}", type, scope, realWorksDay);
+
+        BigDecimal salaryBase;
+        salaryBase = assignment.getSalaryAtTime() != null ? assignment.getSalaryAtTime() : BigDecimal.ZERO;
+        log.debug("[PAYROLL-EXPORT][DEBUG] Scope CONTRACT -> salaryBase (assignment.salaryAtTime) = {}", salaryBase);
+        if (type == AssignmentType.FIXED_BY_CONTRACT || type == AssignmentType.FIXED_BY_COMPANY) {
+            log.debug("[PAYROLL-EXPORT][DEBUG] Fixed type branch. plannedDays={}, salaryBase={}, bonus={}, supportCosts={}, workDaysField={}",
+                    assignment.getPlannedDays(), salaryBase, bonus, supportCosts, assignment.getWorkDays());
+
+            if (assignment.getPlannedDays() != null && assignment.getPlannedDays() > 0
+                    && salaryBase.compareTo(BigDecimal.ZERO) > 0 && assignment.getWorkDays() != null) {
+                BigDecimal dailyRate = (salaryBase.add(defaultZero(bonus)).add(defaultZero(supportCosts)))
+                        .divide(BigDecimal.valueOf(assignment.getPlannedDays()), 2, RoundingMode.HALF_UP);
+                amount = dailyRate.multiply(BigDecimal.valueOf(realWorksDay));
+                log.debug("[PAYROLL-EXPORT][DEBUG] Fixed amount computed: dailyRate={}, amount={}", dailyRate, amount);
+                value += String.format(
+                        " (%s + %s + %s) / %d * %d = %s; ",
+                        salaryBase,
+                        defaultZero(bonus),
+                        defaultZero(supportCosts),
+                        assignment.getPlannedDays(),
+                        realWorksDay,
+                        amount
+                );
+            } else {
+                log.debug("[PAYROLL-EXPORT][DEBUG] Fixed branch conditions not met -> amount stays ZERO");
+            }
+        } else {
+            log.debug("[PAYROLL-EXPORT][DEBUG] Day/Temporary type branch. plannedDays={}, salaryBase={}, bonus={}, supportCosts={}, workDaysField={}",
+                    assignment.getPlannedDays(), salaryBase, bonus, supportCosts, assignment.getWorkDays());
+
+            if (assignment.getPlannedDays() != null && assignment.getPlannedDays() > 0
+                    && salaryBase.compareTo(BigDecimal.ZERO) > 0 && assignment.getWorkDays() != null) {
+
+                BigDecimal salary = (salaryBase.multiply(BigDecimal.valueOf(realWorksDay)));
+                amount = amount.add(salary.add(defaultZero(supportCosts)).add(defaultZero(bonus)));
+                log.debug("[PAYROLL-EXPORT][DEBUG] Daily/Temporary amount computed: salary={}, amount={}", salary, amount);
+                value += String.format(
+                        " %s * %d + %s + %s = %s; ",
+                        salaryBase,
+                        realWorksDay,
+                        defaultZero(supportCosts),
+                        defaultZero(bonus),
+                        amount
+                );
+            } else {
+                log.debug("[PAYROLL-EXPORT][DEBUG] Day/Temporary branch conditions not met -> amount stays ZERO");
+            }
+        }
+        log.debug("[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount returning amount={}", amount);
+        if (note != null) note.put(key,value);
         return amount;
     }
 
@@ -630,18 +884,19 @@ public class PayrollServiceImpl implements PayrollService {
         return value != null ? value : BigDecimal.ZERO;
     }
 
-
-
     @Override
     public PayrollResponse getPayrollById(Long id) {
         log.info("getPayrollById requested: id={}", id);
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
         
-        LocalDateTime createdAt = payroll.getCreatedAt();
-                PayrollResponse resp = mapToResponse(payroll, createdAt.getMonthValue(), createdAt.getYear(), null);
-                log.info("getPayrollById completed: id={}, employeeId={}", id, resp.getEmployeeId());
-                return resp;
+//        LocalDateTime createdAt = payroll.getCreatedAt();
+//                PayrollResponse resp = mapToResponse(payroll, createdAt.getMonthValue(), createdAt.getYear(), null);
+//                log.info("getPayrollById completed: id={}, employeeId={}", id, resp.getEmployeeId());
+//                return resp;
+        PayrollUpdateRequest payrollUpdateRequest = new PayrollUpdateRequest(payroll.getAllowanceTotal(),payroll.getInsuranceTotal(),payroll.getAdvanceTotal());
+         PayrollResponse rs =  this.updatePayroll(id, payrollUpdateRequest);
+        return rs;
     }
 
     @Override
@@ -760,11 +1015,6 @@ public class PayrollServiceImpl implements PayrollService {
             totalSupportCosts = totalSupportCosts.add(support).add(additionalAllowance);
         }
 
-        // ===== ADD EMPLOYEE ALLOWANCE IF COMPANY SCOPE =====
-        if (hasCompanyScope && employee.getAllowance() != null) {
-            totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
-        }
-
         // ===== INSURANCE =====
         BigDecimal insuranceTotal;
 
@@ -785,10 +1035,6 @@ public class PayrollServiceImpl implements PayrollService {
         // ===== FINAL SALARY =====
         BigDecimal finalSalary = amountTotal
                 .subtract(totalPenalties.add(insuranceTotal).add(advanceTotal));
-
-        if (hasCompanyScope && employee.getAllowance() != null) {
-            finalSalary = finalSalary.add(employee.getAllowance());
-        }
 
         // ===== UPDATE PAYROLL =====
         payroll.setTotalDays(totalDays);

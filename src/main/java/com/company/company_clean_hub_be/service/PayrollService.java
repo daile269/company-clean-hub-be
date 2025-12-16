@@ -5,7 +5,7 @@ import java.util.List;
 import com.company.company_clean_hub_be.dto.request.PayrollRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
-import com.company.company_clean_hub_be.dto.response.PayRollExportExcel;
+import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
 
 import jakarta.validation.Valid;
@@ -22,6 +22,12 @@ public interface PayrollService {
     PayrollResponse updatePaymentStatus(Long id, Boolean isPaid);
     void deletePayroll(Long id);
 
-    PayrollResponse calculatePayroll(@Valid PayrollRequest request);
+    // Updated to return List for bulk calculation
+    List<PayrollAssignmentResponse> calculatePayroll(@Valid PayrollRequest request);
+    
+    // New method for filtered assignments with pagination
+    PageResponse<PayrollAssignmentResponse> getPayrollAssignmentsWithFilter(
+            String keyword, Integer month, Integer year, int page, int pageSize);
+    
     PayrollResponse updatePayroll(Long id, com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest request);
 }

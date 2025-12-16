@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class PayrollRequest {
 
-    @NotNull(message = "ID nhân viên không được để trống")
+    // Optional - if null, calculate for all employees
     private Long employeeId;
 
     @NotNull(message = "Tháng không được để trống")
