@@ -96,11 +96,12 @@ public class ContractServiceImpl implements ContractService {
 
         // Tính giá trị hợp đồng dựa trên loại hợp đồng
         java.math.BigDecimal calculatedTotal = calculatePriceByContractType(
-                services, 
-                request.getContractType(), 
-                request.getWorkingDaysPerWeek(), 
-                request.getStartDate(), 
-                request.getEndDate());
+                services,
+                request.getContractType(),
+                request.getWorkingDaysPerWeek(),
+                request.getStartDate(),
+                request.getEndDate(),
+                null);
 
         Contract contract = Contract.builder()
                 .customer(customer)
@@ -142,11 +143,12 @@ public class ContractServiceImpl implements ContractService {
 
         // Tính lại giá trị hợp đồng dựa trên loại hợp đồng
         java.math.BigDecimal calculatedTotal = calculatePriceByContractType(
-                services, 
-                request.getContractType(), 
-                request.getWorkingDaysPerWeek(), 
-                request.getStartDate(), 
-                request.getEndDate());
+                services,
+                request.getContractType(),
+                request.getWorkingDaysPerWeek(),
+                request.getStartDate(),
+                request.getEndDate(),
+                contract.getId());
 
         contract.setCustomer(customer);
         contract.setServices(services);
@@ -203,11 +205,12 @@ public class ContractServiceImpl implements ContractService {
         
         // Tính lại giá trị hợp đồng sau khi thêm dịch vụ
         java.math.BigDecimal calculatedTotal = calculatePriceByContractType(
-                contract.getServices(), 
-                contract.getContractType(), 
-                contract.getWorkingDaysPerWeek(), 
-                contract.getStartDate(), 
-                contract.getEndDate());
+                contract.getServices(),
+                contract.getContractType(),
+                contract.getWorkingDaysPerWeek(),
+                contract.getStartDate(),
+                contract.getEndDate(),
+                contract.getId());
         contract.setFinalPrice(calculatedTotal);
         contract.setUpdatedAt(LocalDateTime.now());
         
@@ -231,11 +234,12 @@ public class ContractServiceImpl implements ContractService {
         
         // Tính lại giá trị hợp đồng sau khi xóa dịch vụ
         java.math.BigDecimal calculatedTotal = calculatePriceByContractType(
-                contract.getServices(), 
-                contract.getContractType(), 
-                contract.getWorkingDaysPerWeek(), 
-                contract.getStartDate(), 
-                contract.getEndDate());
+                contract.getServices(),
+                contract.getContractType(),
+                contract.getWorkingDaysPerWeek(),
+                contract.getStartDate(),
+                contract.getEndDate(),
+                contract.getId());
         contract.setFinalPrice(calculatedTotal);
         contract.setUpdatedAt(LocalDateTime.now());
         
@@ -259,7 +263,28 @@ public class ContractServiceImpl implements ContractService {
                         .build())
                 .collect(Collectors.toList());
 
-        return ContractResponse.builder()
+                // compute plannedDays for month of startDate (if possible)
+                Integer plannedDays = null;
+                if (contract.getWorkingDaysPerWeek() != null && !contract.getWorkingDaysPerWeek().isEmpty()
+                                && contract.getStartDate() != null) {
+                        java.time.YearMonth ym = java.time.YearMonth.from(contract.getStartDate());
+                        java.time.LocalDate start = contract.getStartDate();
+                        java.time.LocalDate end = ym.atEndOfMonth();
+                        if (contract.getEndDate() != null && contract.getEndDate().isBefore(end)) {
+                                end = contract.getEndDate();
+                        }
+                        int count = 0;
+                        java.time.LocalDate cur = start;
+                        while (!cur.isAfter(end)) {
+                                if (contract.getWorkingDaysPerWeek().contains(cur.getDayOfWeek())) {
+                                        count++;
+                                }
+                                cur = cur.plusDays(1);
+                        }
+                        plannedDays = count;
+                }
+
+                return ContractResponse.builder()
                 .id(contract.getId())
                 .customerId(contract.getCustomer().getId())
                 .customerName(contract.getCustomer().getName())
@@ -269,6 +294,7 @@ public class ContractServiceImpl implements ContractService {
                 .workingDaysPerWeek(contract.getWorkingDaysPerWeek())
                 .contractType(contract.getContractType())
                 .finalPrice(contract.getFinalPrice())
+                                .plannedDays(plannedDays)
                 .paymentStatus(contract.getPaymentStatus())
                 .description(contract.getDescription())
                 .createdAt(contract.getCreatedAt())
@@ -282,43 +308,74 @@ public class ContractServiceImpl implements ContractService {
      * - ONE_TIME, MONTHLY_FIXED: tổng giá cố định
      */
     private java.math.BigDecimal calculatePriceByContractType(
-            Set<ServiceEntity> services, 
-            ContractType contractType, 
+            Set<ServiceEntity> services,
+            ContractType contractType,
             List<java.time.DayOfWeek> workingDaysPerWeek,
             java.time.LocalDate startDate,
-            java.time.LocalDate endDate) {
+            java.time.LocalDate endDate,
+            Long contractId) {
         
         java.math.BigDecimal dailyRate = calculateTotalFromServices(services);
         
         // Với MONTHLY_ACTUAL: giá ngày × số ngày làm việc trong tháng
-        if (contractType == ContractType.MONTHLY_ACTUAL) {
-            if (workingDaysPerWeek == null || workingDaysPerWeek.isEmpty() || startDate == null) {
-                // Nếu thiếu thông tin, trả về giá ngày (daily rate)
-                return dailyRate;
-            }
-            
-            // Tính số ngày làm việc trong tháng đầu tiên
-            java.time.YearMonth yearMonth = java.time.YearMonth.from(startDate);
-            java.time.LocalDate monthEnd = yearMonth.atEndOfMonth();
-            
-            // Nếu có endDate và endDate < monthEnd, dùng endDate
-            if (endDate != null && endDate.isBefore(monthEnd)) {
-                monthEnd = endDate;
-            }
-            
-            // Đếm số ngày làm việc trong tháng
-            int workDaysCount = 0;
-            java.time.LocalDate currentDate = startDate;
-            while (!currentDate.isAfter(monthEnd)) {
-                if (workingDaysPerWeek.contains(currentDate.getDayOfWeek())) {
-                    workDaysCount++;
+                if (contractType == ContractType.MONTHLY_ACTUAL) {
+                        int workDaysCount = 0;
+
+                        if (workingDaysPerWeek != null && !workingDaysPerWeek.isEmpty() && startDate != null) {
+                                // compute for month of startDate
+                                java.time.YearMonth yearMonth = java.time.YearMonth.from(startDate);
+                                java.time.LocalDate monthEnd = yearMonth.atEndOfMonth();
+                                if (endDate != null && endDate.isBefore(monthEnd)) {
+                                        monthEnd = endDate;
+                                }
+                                java.time.LocalDate currentDate = startDate;
+                                while (!currentDate.isAfter(monthEnd)) {
+                                        if (workingDaysPerWeek.contains(currentDate.getDayOfWeek())) {
+                                                workDaysCount++;
+                                        }
+                                        currentDate = currentDate.plusDays(1);
+                                }
+                        } else if (contractId != null) {
+                                // Fallback: sum plannedDays of assignments for this contract (month of startDate if available)
+                                List<Assignment> assignments = assignmentRepository.findByContractId(contractId);
+                                if (assignments != null && !assignments.isEmpty()) {
+                                        if (startDate != null) {
+                                                java.time.YearMonth ym = java.time.YearMonth.from(startDate);
+                                                for (Assignment a : assignments) {
+                                                        if (a.getPlannedDays() != null) {
+                                                                workDaysCount += a.getPlannedDays();
+                                                        } else if (a.getWorkingDaysPerWeek() != null && a.getStartDate() != null) {
+                                                                // compute planned days for this assignment within the month
+                                                                java.time.LocalDate start = a.getStartDate();
+                                                                java.time.LocalDate monthStart = ym.atDay(1);
+                                                                java.time.LocalDate monthEnd = ym.atEndOfMonth();
+                                                                java.time.LocalDate as = start.isBefore(monthStart) ? monthStart : start;
+                                                                java.time.LocalDate ae = a.getStartDate() != null && a.getStartDate().isAfter(monthEnd) ? monthEnd : monthEnd;
+                                                                java.time.LocalDate cur = as;
+                                                                while (!cur.isAfter(ae)) {
+                                                                        if (a.getWorkingDaysPerWeek().contains(cur.getDayOfWeek())) {
+                                                                                workDaysCount++;
+                                                                        }
+                                                                        cur = cur.plusDays(1);
+                                                                }
+                                                        }
+                                                }
+                                        } else {
+                                                // no startDate: sum all assignment.plannedDays if available
+                                                for (Assignment a : assignments) {
+                                                        if (a.getPlannedDays() != null) workDaysCount += a.getPlannedDays();
+                                                }
+                                        }
+                                }
+                        }
+
+                        if (workDaysCount <= 0) {
+                                // if still unknown, return dailyRate (best-effort)
+                                return dailyRate;
+                        }
+
+                        return dailyRate.multiply(java.math.BigDecimal.valueOf(workDaysCount));
                 }
-                currentDate = currentDate.plusDays(1);
-            }
-            
-            // Giá hợp đồng = giá ngày × số ngày làm việc
-            return dailyRate.multiply(java.math.BigDecimal.valueOf(workDaysCount));
-        }
         
         // Với ONE_TIME và MONTHLY_FIXED, giá là tổng giá cố định
         return dailyRate;

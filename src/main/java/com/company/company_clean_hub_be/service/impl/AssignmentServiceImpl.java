@@ -433,6 +433,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         .contract(replacedAssignmentEntity.getContract())
                                         .assignmentType(AssignmentType.TEMPORARY)
                                         .workDays(1)
+                                        .plannedDays(1)
                                         .salaryAtTime(request.getSalaryAtTime())
                                         .startDate(date)
                                         .status(AssignmentStatus.IN_PROGRESS)
