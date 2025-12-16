@@ -295,9 +295,10 @@ public class PayrollServiceImpl implements PayrollService {
                     .build();
             
             result.add(dto);
-            
             totalDays += assignmentDays;
-            totalPlanedDay += assignment.getPlannedDays();
+            if (!assignment.getAssignmentType().equals(AssignmentType.TEMPORARY)){
+                totalPlanedDay += assignment.getPlannedDays();
+            }
         }
         
         // Create total row
@@ -679,7 +680,7 @@ public class PayrollServiceImpl implements PayrollService {
                     assignment.getId(), totalBonus, totalPenalties, totalSupportCosts);
 
             BigDecimal calculatedAssignmentAmount = calculateAssignmentAmount(assignment, safeBonus, suportAssignment,note);
-            value  = note.get(key);
+            if (note != null) value  = note.get(key);
             log.debug("[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount returned {} for assignmentId={}",
                     calculatedAssignmentAmount, assignment.getId());
             amountTotal = amountTotal.add(calculatedAssignmentAmount);
@@ -718,7 +719,7 @@ public class PayrollServiceImpl implements PayrollService {
                 advanceTotal,
                 finalAmount
         );
-        note.put("Tổng",finalRow);
+        if (note != null) note.put("Tổng",finalRow);
         log.debug("[PAYROLL-EXPORT][DEBUG] Final salary computed before persisting = {} (amountTotal={} - deductions={})",
                 finalAmount, amountTotal, deductions);
         payroll.setBonusTotal(totalBonus);
@@ -857,8 +858,7 @@ public class PayrollServiceImpl implements PayrollService {
             log.debug("[PAYROLL-EXPORT][DEBUG] Day/Temporary type branch. plannedDays={}, salaryBase={}, bonus={}, supportCosts={}, workDaysField={}",
                     assignment.getPlannedDays(), salaryBase, bonus, supportCosts, assignment.getWorkDays());
 
-            if (assignment.getPlannedDays() != null && assignment.getPlannedDays() > 0
-                    && salaryBase.compareTo(BigDecimal.ZERO) > 0 && assignment.getWorkDays() != null) {
+            if (salaryBase.compareTo(BigDecimal.ZERO) > 0 && assignment.getWorkDays() != null) {
 
                 BigDecimal salary = (salaryBase.multiply(BigDecimal.valueOf(realWorksDay)));
                 amount = amount.add(salary.add(defaultZero(supportCosts)).add(defaultZero(bonus)));
