@@ -1,7 +1,8 @@
 package com.company.company_clean_hub_be.dto.response;
+import java.math.BigDecimal;
+
 import lombok.Builder;
 import lombok.Data;
-import java.math.BigDecimal;
 
 @Data
 @Builder
@@ -35,10 +36,14 @@ public class PayRollAssignmentExportExcel {
     private BigDecimal totalPenalty;
     private BigDecimal totalAllowance;
     private BigDecimal totalInsurance;
+    private BigDecimal totalSalaryBeforeAdvance; // Salary before deducting advances
     private BigDecimal totalAdvance;
     private BigDecimal finalSalary;
     
     // Flag to indicate if this is a total row
     private Boolean isTotalRow;
+    
+    // Note containing calculation formulas
+    private String note;
 }
 

@@ -199,7 +199,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         // This should not be called anymore, but keeping for compatibility
         return exportPayrollAssignmentsToExcel(convertToAssignmentFormat(payRollExportExcels), month, year);
     }
-
+    @Override
     public ByteArrayResource exportPayrollAssignmentsToExcel(List<PayRollAssignmentExportExcel> assignmentData, Integer month, Integer year) {
         log.info("exportPayrollAssignmentsToExcel started: total rows={}", assignmentData.size());
         try (Workbook workbook = new XSSFWorkbook()) {
@@ -213,7 +213,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // ===== COMPANY HEADER SECTION =====
             int currentRowIndex = 0;
-            int totalColumns = 12; // Simplified columns
+            int totalColumns = 15; // Updated to include note column
 
             // Row 0: Company name
             Row companyRow = sheet.createRow(currentRowIndex++);
@@ -259,7 +259,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             String[] headers = {
                     "Mã NV", "Họ tên", "Ngân hàng", "Số TK", "SĐT",
                     "Công trình", "Ngày công", "Thưởng", "Phạt",
-                    "Phụ cấp", "Bảo hiểm", "Tổng lương"
+                    "Phụ cấp", "Bảo hiểm", "Tổng lương", "Tổng lương ứng", "Lương còn lại", "Ghi chú"
             };
 
             for (int i = 0; i < headers.length; i++) {
@@ -327,10 +327,25 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                 cell10.setCellValue(row.getTotalInsurance() != null ? row.getTotalInsurance().doubleValue() : 0);
                 cell10.setCellStyle(numberStyle);
 
-                // Tổng lương
+                // Tổng lương (before advance)
                 Cell cell11 = dataRow.createCell(11);
-                cell11.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
+                cell11.setCellValue(row.getTotalSalaryBeforeAdvance() != null ? row.getTotalSalaryBeforeAdvance().doubleValue() : 0);
                 cell11.setCellStyle(numberStyle);
+
+                // Tổng lương ứng
+                Cell cell12 = dataRow.createCell(12);
+                cell12.setCellValue(row.getTotalAdvance() != null ? row.getTotalAdvance().doubleValue() : 0);
+                cell12.setCellStyle(numberStyle);
+
+                // Lương còn lại (after advance)
+                Cell cell13 = dataRow.createCell(13);
+                cell13.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
+                cell13.setCellStyle(numberStyle);
+                
+                // Ghi chú (note)
+                Cell cell14 = dataRow.createCell(14);
+                cell14.setCellValue(row.getNote() != null ? row.getNote() : "");
+                cell14.setCellStyle(dataStyle);
             }
 
             // Auto-size columns
@@ -341,6 +356,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             // Set minimum widths for readability
             sheet.setColumnWidth(1, 4000); // Name
             sheet.setColumnWidth(5, 8000); // Projects (can be long list)
+            sheet.setColumnWidth(14,  130 * 256); // Note column (wider for formulas)
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);

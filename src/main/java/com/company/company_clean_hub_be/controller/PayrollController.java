@@ -114,10 +114,7 @@ public class PayrollController {
         List<PayRollAssignmentExportExcel> assignmentData = payrollService.getAllPayRollByAssignment(month, year);
         log.info("🟢 [EXPORT PAYROLL] Số lượng dòng payroll lấy được: {}",
                 assignmentData != null ? assignmentData.size() : 0);
-
-        // Use new export method
-        ExcelExportServiceImpl excelExportServiceImpl = (ExcelExportServiceImpl) excelExportService;
-        ByteArrayResource excelFile = excelExportServiceImpl.exportPayrollAssignmentsToExcel(assignmentData, month, year);
+        ByteArrayResource excelFile = excelExportService.exportPayrollAssignmentsToExcel(assignmentData, month, year);
 
         if (excelFile == null) {
             log.warn("⚠️ [EXPORT PAYROLL] excelFile = null → Không tạo được file Excel!");
