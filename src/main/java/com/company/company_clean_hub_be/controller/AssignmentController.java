@@ -63,10 +63,24 @@ public class AssignmentController {
     public ApiResponse<AssignmentResponse> updateAssignment(
             @PathVariable Long id,
             @Valid @RequestBody AssignmentRequest request) {
+
+        log.info("[ASSIGNMENT][API][UPDATE] Start PUT /assignments/{} payload={}", id, request);
+
+        if (id == null) {
+            log.error("[ASSIGNMENT][API][UPDATE] Path variable id is null");
+        }
         AssignmentResponse assignment = assignmentService.updateAssignment(id, request);
-        log.info("cập nhập assign:{}",request);
-        return ApiResponse.success("Cập nhật phân công thành công", assignment, HttpStatus.OK.value());
+
+        log.info("[ASSIGNMENT][API][UPDATE] Update assignment success, id={}", assignment.getId());
+        log.debug("[ASSIGNMENT][API][UPDATE] Updated assignment response={}", assignment);
+
+        return ApiResponse.success(
+                "Cập nhật phân công thành công",
+                assignment,
+                HttpStatus.OK.value()
+        );
     }
+
 
     @DeleteMapping("/{id}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_DELETE')")

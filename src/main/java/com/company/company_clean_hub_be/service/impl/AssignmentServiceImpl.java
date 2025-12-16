@@ -237,65 +237,91 @@ public class AssignmentServiceImpl implements AssignmentService {
                 return mapToResponse(savedAssignment);
         }
 
-        @Override
-        @Transactional
-        public AssignmentResponse updateAssignment(Long id, AssignmentRequest request) {
+    @Override
+    @Transactional
+    public AssignmentResponse updateAssignment(Long id, AssignmentRequest request) {
 
-                Assignment assignment = assignmentRepository.findById(id)
-                                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+        log.info("[ASSIGNMENT][UPDATE] Start update assignment, id={}, request={}", id, request);
 
-                Employee employee = employeeRepository.findById(request.getEmployeeId())
-                                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
-
-                Contract contract = contractRepository.findById(request.getContractId())
-                                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
-
-                // Kiểm tra ngày bắt đầu assignment không được trước ngày bắt đầu contract
-                if (request.getStartDate().isBefore(contract.getStartDate())) {
-                        throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
-                }
-
-                // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (status
-                // IN_PROGRESS)
-                if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
-                        List<Assignment> existingAssignments = assignmentRepository
-                                        .findActiveAssignmentByEmployeeAndContractAndIdNot(
-                                                        request.getEmployeeId(),
-                                                        request.getContractId(),
-                                                        id);
-                        if (!existingAssignments.isEmpty()) {
-                                throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
-                        }
-                }
-
-                assignment.setEmployee(employee);
-                assignment.setContract(contract);
-                assignment.setStartDate(request.getStartDate());
-                assignment.setStatus(request.getStatus());
-                assignment.setSalaryAtTime(request.getSalaryAtTime());
-                assignment.setWorkingDaysPerWeek(contract.getWorkingDaysPerWeek() != null
-                                ? new ArrayList<>(contract.getWorkingDaysPerWeek())
-                                : null);
-                assignment.setAdditionalAllowance(request.getAdditionalAllowance());
-                assignment.setDescription(request.getDescription());
-                assignment.setUpdatedAt(LocalDateTime.now());
-
-                Assignment updatedAssignment = assignmentRepository.save(assignment);
-
-                // Tính lại workDays dựa vào số chấm công thực tế trong tháng
-                YearMonth ym = YearMonth.from(request.getStartDate());
-                LocalDate monthStart = ym.atDay(1);
-                LocalDate monthEnd = ym.atEndOfMonth();
-
-                int totalWorkDays = attendanceRepository
-                                .findByAssignmentAndDateBetween(updatedAssignment.getId(), monthStart, monthEnd)
-                                .size();
-
-                updatedAssignment.setWorkDays(totalWorkDays);
-                assignmentRepository.save(updatedAssignment);
-
-                return mapToResponse(updatedAssignment);
+        if (id == null) {
+            log.error("[ASSIGNMENT][UPDATE] Assignment id is null");
+            throw new IllegalArgumentException("Assignment id must not be null");
         }
+
+        Assignment assignment = assignmentRepository.findById(id)
+                .orElseThrow(() -> {
+                    log.error("[ASSIGNMENT][UPDATE] Assignment not found, id={}", id);
+                    return new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND);
+                });
+
+        log.debug("[ASSIGNMENT][UPDATE] Found assignment id={}, currentStatus={}",
+                assignment.getId(), assignment.getStatus());
+
+        Employee employee = employeeRepository.findById(request.getEmployeeId())
+                .orElseThrow(() -> {
+                    log.error("[ASSIGNMENT][UPDATE] Employee not found, employeeId={}", request.getEmployeeId());
+                    return new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
+                });
+
+
+//        log.debug("[ASSIGNMENT][UPDATE] Mapping employeeId={}, contractId={} to assignment id={}",
+//                employee.getId(), contract.getId(), assignment.getId());
+//
+//        if (request.getStartDate().isBefore(contract.getStartDate())) {
+//            log.warn("[ASSIGNMENT][UPDATE] Invalid startDate={}, contractStartDate={}",
+//                    request.getStartDate(), contract.getStartDate());
+//            throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
+//        }
+
+        // Validate active assignment uniqueness
+        if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
+            List<Assignment> existingAssignments =
+                    assignmentRepository.findActiveAssignmentByEmployeeAndContractAndIdNot(
+                            request.getEmployeeId(),
+                            request.getContractId(),
+                            id
+                    );
+
+            if (!existingAssignments.isEmpty()) {
+                log.warn("[ASSIGNMENT][UPDATE] Duplicate active assignment detected, employeeId={}, contractId={}",
+                        request.getEmployeeId(), request.getContractId());
+                throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
+            }
+        }
+
+        // Update fields
+        assignment.setEmployee(employee);
+        assignment.setStartDate(request.getStartDate());
+        assignment.setStatus(request.getStatus());
+        assignment.setSalaryAtTime(request.getSalaryAtTime());
+
+        assignment.setAdditionalAllowance(request.getAdditionalAllowance());
+        assignment.setDescription(request.getDescription());
+        assignment.setUpdatedAt(LocalDateTime.now());
+
+        Assignment updatedAssignment = assignmentRepository.save(assignment);
+
+        log.info("[ASSIGNMENT][UPDATE] Assignment updated successfully, id={}", updatedAssignment.getId());
+
+        // Recalculate work days
+        YearMonth ym = YearMonth.from(request.getStartDate());
+        LocalDate monthStart = ym.atDay(1);
+        LocalDate monthEnd = ym.atEndOfMonth();
+
+        int totalWorkDays = attendanceRepository
+                .findByAssignmentAndDateBetween(updatedAssignment.getId(), monthStart, monthEnd)
+                .size();
+
+        updatedAssignment.setWorkDays(totalWorkDays);
+        assignmentRepository.save(updatedAssignment);
+
+        log.debug("[ASSIGNMENT][UPDATE] Recalculated workDays={}, assignmentId={}",
+                totalWorkDays, updatedAssignment.getId());
+
+        log.info("[ASSIGNMENT][UPDATE] Finish update assignment, id={}", updatedAssignment.getId());
+
+        return mapToResponse(updatedAssignment);
+    }
 
         @Override
         public void deleteAssignment(Long id) {
