@@ -1,12 +1,18 @@
 package com.company.company_clean_hub_be.dto.response;
+
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.experimental.SuperBuilder;
+
 import java.math.BigDecimal;
 
-import lombok.Builder;
-import lombok.Data;
-
 @Data
-@Builder
-public class PayRollAssignmentExportExcel {
+@SuperBuilder
+@EqualsAndHashCode(callSuper = false)
+public class PayrollAssignmentResponse {
+    // Payroll reference for navigation
+    private Long payrollId;
+    
     // Employee info (will be merged across assignments)
     private Long employeeId;
     private String employeeName;
@@ -36,14 +42,9 @@ public class PayRollAssignmentExportExcel {
     private BigDecimal totalPenalty;
     private BigDecimal totalAllowance;
     private BigDecimal totalInsurance;
-    private BigDecimal totalSalaryBeforeAdvance; // Salary before deducting advances
     private BigDecimal totalAdvance;
     private BigDecimal finalSalary;
     
     // Flag to indicate if this is a total row
     private Boolean isTotalRow;
-    
-    // Note containing calculation formulas
-    private String note;
 }
-
