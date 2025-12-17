@@ -38,6 +38,7 @@ public class PayRollAssignmentExportExcel {
     private BigDecimal totalInsurance;
     private BigDecimal totalSalaryBeforeAdvance; // Salary before deducting advances
     private BigDecimal totalAdvance;
+    private BigDecimal paidAmount; // Số tiền đã thanh toán sớm
     private BigDecimal finalSalary;
     
     // Flag to indicate if this is a total row

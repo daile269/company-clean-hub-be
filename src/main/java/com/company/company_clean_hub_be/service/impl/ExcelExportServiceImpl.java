@@ -213,7 +213,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // ===== COMPANY HEADER SECTION =====
             int currentRowIndex = 0;
-            int totalColumns = 15; // Updated to include note column
+            int totalColumns = 16; // Updated to include paidAmount column
 
             // Row 0: Company name
             Row companyRow = sheet.createRow(currentRowIndex++);
@@ -259,7 +259,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             String[] headers = {
                     "Mã NV", "Họ tên", "Ngân hàng", "Số TK", "SĐT",
                     "Công trình", "Ngày công", "Thưởng", "Phạt",
-                    "Phụ cấp", "Bảo hiểm", "Tổng lương", "Tổng lương ứng", "Lương còn lại", "Ghi chú"
+                    "Phụ cấp", "Bảo hiểm", "Tổng lương", "Tổng lương ứng", "Lương đã thanh toán", "Lương còn lại", "Ghi chú"
             };
 
             for (int i = 0; i < headers.length; i++) {
@@ -337,15 +337,20 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                 cell12.setCellValue(row.getTotalAdvance() != null ? row.getTotalAdvance().doubleValue() : 0);
                 cell12.setCellStyle(numberStyle);
 
-                // Lương còn lại (after advance)
+                // Lương đã thanh toán (NEW COLUMN)
                 Cell cell13 = dataRow.createCell(13);
-                cell13.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
+                cell13.setCellValue(row.getPaidAmount() != null ? row.getPaidAmount().doubleValue() : 0);
                 cell13.setCellStyle(numberStyle);
+
+                // Lương còn lại (after advance)
+                Cell cell14 = dataRow.createCell(14);
+                cell14.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
+                cell14.setCellStyle(numberStyle);
                 
                 // Ghi chú (note)
-                Cell cell14 = dataRow.createCell(14);
-                cell14.setCellValue(row.getNote() != null ? row.getNote() : "");
-                cell14.setCellStyle(dataStyle);
+                Cell cell15 = dataRow.createCell(15);
+                cell15.setCellValue(row.getNote() != null ? row.getNote() : "");
+                cell15.setCellStyle(dataStyle);
             }
 
             // Auto-size columns
@@ -356,7 +361,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             // Set minimum widths for readability
             sheet.setColumnWidth(1, 4000); // Name
             sheet.setColumnWidth(5, 8000); // Projects (can be long list)
-            sheet.setColumnWidth(14,  130 * 256); // Note column (wider for formulas)
+            sheet.setColumnWidth(15,  130 * 256); // Note column (wider for formulas)
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);

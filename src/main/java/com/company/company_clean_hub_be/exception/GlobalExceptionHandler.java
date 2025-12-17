@@ -35,7 +35,15 @@ public class GlobalExceptionHandler {
                 errorCode.getMessage(),
                 errorCode.getCode()
         );
-        return ResponseEntity.badRequest().body(apiResponse);
+        ResponseEntity.BodyBuilder builder = ResponseEntity.badRequest();
+        if (errorCode == ErrorCode.PAYROLL_ALREADY_EXISTS) {
+            try {
+                if (exception.getData() != null) {
+                    builder.header("x-payroll-id", exception.getData().toString());
+                }
+            } catch (Exception ignored) {}
+        }
+        return builder.body(apiResponse);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
