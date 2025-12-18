@@ -606,7 +606,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // ===== COMPANY HEADER SECTION =====
             int currentRowIndex = 0;
-            int totalColumns = 13;
+            int totalColumns = 11;
 
             // Row 0: Company name
             Row companyRow = sheet.createRow(currentRowIndex++);
@@ -651,7 +651,8 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             Row headerRow = sheet.createRow(currentRowIndex++);
             String[] headers = {"STT", "Khách hàng", "Địa chỉ", "Mã số thuế", "Email",
                     "Mã hợp đồng", "Ngày ký", "Ngày hết hạn", "Ngày làm việc",
-                    "Giá trị HĐ", "Số ngày làm", "Thuế VAT", "Tổng giá trị"};
+//                    "Giá trị HĐ", "Tổng giá trị",
+                    "Số ngày làm", "Thuế VAT"};
 
             for (int i = 0; i < headers.length; i++) {
                 Cell cell = headerRow.createCell(i);
@@ -718,25 +719,25 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                     workingDaysCell.setCellValue(contract.getWorkingDays());
                     workingDaysCell.setCellStyle(dataStyle);
 
-                    // Contract value
-                    Cell contractValueCell = dataRow.createCell(9);
-                    contractValueCell.setCellValue(contract.getContractValue());
-                    contractValueCell.setCellStyle(numberStyle);
+//                    // Contract value
+//                    Cell contractValueCell = dataRow.createCell(9);
+//                    contractValueCell.setCellValue(contract.getContractValue());
+//                    contractValueCell.setCellStyle(numberStyle);
 
                     // Work days
-                    Cell workDaysCell = dataRow.createCell(10);
+                    Cell workDaysCell = dataRow.createCell(9);
                     workDaysCell.setCellValue(contract.getWorkDays());
                     workDaysCell.setCellStyle(numberStyle);
 
                     // VAT amount
-                    Cell vatCell = dataRow.createCell(11);
+                    Cell vatCell = dataRow.createCell(10);
                     vatCell.setCellValue(contract.getVatAmount());
                     vatCell.setCellStyle(numberStyle);
 
-                    // Total value
-                    Cell totalValueCell = dataRow.createCell(12);
-                    totalValueCell.setCellValue(contract.getTotalValue());
-                    totalValueCell.setCellStyle(numberStyle);
+//                    // Total value
+//                    Cell totalValueCell = dataRow.createCell(11);
+//                    totalValueCell.setCellValue(contract.getTotalValue());
+//                    totalValueCell.setCellStyle(numberStyle);
                 }
 
                 // Merge cells if customer has multiple contracts
