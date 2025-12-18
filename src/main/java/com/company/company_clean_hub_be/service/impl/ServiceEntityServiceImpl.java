@@ -114,33 +114,14 @@ public class ServiceEntityServiceImpl implements ServiceEntityService {
         service.setUpdatedAt(LocalDateTime.now());
 
         ServiceEntity updatedService = serviceEntityRepository.save(service);
-        
-        // Cập nhật lại finalPrice cho tất cả hợp đồng có sử dụng dịch vụ này
-        updateContractPricesForService(updatedService);
+
+        // Pricing is now handled by invoices. Do not modify contract pricing here.
         log.info("updateService completed by {}: id={}", username, updatedService.getId());
-        
+
         return mapToResponse(updatedService);
     }
     
-    private void updateContractPricesForService(ServiceEntity service) {
-        log.info("updateContractPricesForService: serviceId={}", service.getId());
-        // Lấy tất cả hợp đồng có sử dụng dịch vụ này
-        service.getContracts().forEach(contract -> {
-            // Tính lại tổng giá trị hợp đồng
-            java.math.BigDecimal total = contract.getServices().stream()
-                    .map(s -> {
-                        java.math.BigDecimal price = s.getPrice() != null ? s.getPrice() : java.math.BigDecimal.ZERO;
-                        java.math.BigDecimal vat = s.getVat() != null ? s.getVat() : java.math.BigDecimal.ZERO;
-                        // Giá phải trả = Giá dịch vụ + (Giá dịch vụ × VAT / 100)
-                        java.math.BigDecimal vatAmount = price.multiply(vat).divide(new java.math.BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP);
-                        return price.add(vatAmount);
-                    })
-                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
-            
-            contract.setFinalPrice(total);
-            contract.setUpdatedAt(LocalDateTime.now());
-        });
-    }
+    // Pricing moved to Invoice creation. No contract price updates here.
 
     @Override
     public void deleteService(Long id) {

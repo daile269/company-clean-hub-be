@@ -84,12 +84,10 @@ public class CustomerServiceImpl implements CustomerService {
                         .endDate(row.getEndDate() != null ? formatDate(row.getEndDate()) : "")
                         .workingDays(workingDaysStr)
                         .workDays(workDaysInt)
-                        .contractValue(row.getFinalPrice() != null ? row.getFinalPrice().doubleValue() : 0.0)
                         .contractType(row.getContractType() != null ? row.getContractType() : "")
                         .paymentStatus(row.getPaymentStatus() != null ? row.getPaymentStatus() : "")
                         .description(row.getContractDescription() != null ? row.getContractDescription() : "")
                         .vatAmount(0.0)
-                        .totalValue(row.getFinalPrice() != null ? row.getFinalPrice().doubleValue() : 0.0)
                         .build();
                 
                 contractMap.put(contractId, contract);

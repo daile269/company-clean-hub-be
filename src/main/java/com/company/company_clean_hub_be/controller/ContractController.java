@@ -105,6 +105,14 @@ public class ContractController {
         return ApiResponse.success("Xóa dịch vụ khỏi hợp đồng thành công", contract, HttpStatus.OK.value());
     }
 
+    @PutMapping("/{contractId}/services")
+    public ApiResponse<ContractResponse> updateServiceInContract(
+            @PathVariable Long contractId,
+            @Valid @RequestBody com.company.company_clean_hub_be.dto.request.UpdateServiceInContractRequest request) {
+        ContractResponse contract = contractService.updateServiceInContract(contractId, request);
+        return ApiResponse.success("Cập nhật dịch vụ trong hợp đồng thành công", contract, HttpStatus.OK.value());
+    }
+
     @PostMapping(value = "/{id}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<List<ContractDocument>> uploadContractDocuments(
             @PathVariable Long id,

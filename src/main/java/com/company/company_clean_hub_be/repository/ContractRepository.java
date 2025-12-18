@@ -35,7 +35,6 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
                 c.id,
                 CAST(c.startDate AS string),
                 CAST(c.endDate AS string),
-                c.finalPrice,
                 CAST(c.contractType AS string),
                 c.paymentStatus,
                 c.description,

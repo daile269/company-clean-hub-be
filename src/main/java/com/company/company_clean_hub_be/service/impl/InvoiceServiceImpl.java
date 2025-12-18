@@ -10,6 +10,7 @@ import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.ContractRepository;
 import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.InvoiceRepository;
+import com.company.company_clean_hub_be.repository.InvoiceLineRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.service.InvoiceService;
 import lombok.AccessLevel;
@@ -32,9 +33,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -45,6 +47,7 @@ import java.util.stream.Collectors;
 public class InvoiceServiceImpl implements InvoiceService {
 
     InvoiceRepository invoiceRepository;
+    InvoiceLineRepository invoiceLineRepository;
     ContractRepository contractRepository;
     CustomerRepository customerRepository;
     UserRepository userRepository;
@@ -73,40 +76,162 @@ public class InvoiceServiceImpl implements InvoiceService {
         User createdBy = userRepository.findByUsername(username != null ? username : "")
             .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
 
-        // Tính toán số tiền dựa trên loại hợp đồng
-        BigDecimal subtotal = calculateSubtotal(contract, request);
-        
-        // Tính tổng VAT từ tất cả các dịch vụ trong hợp đồng
-        BigDecimal totalVatAmount = calculateTotalVat(contract, subtotal, request);
-        BigDecimal totalAmount = subtotal.add(totalVatAmount);
-
         // Lấy thông tin khách hàng (snapshot tại thời điểm xuất hóa đơn)
         Customer customer = contract.getCustomer();
 
-        // Tạo invoice
+        // Tính số ngày làm việc trong tháng theo hợp đồng (contractDays)
+        final int contractDays = calculateContractWorkingDaysInMonth(contract, request.getInvoiceMonth(), request.getInvoiceYear());
+        // actualDays = computed contractDays (we compute working days at invoice creation)
+        final int actualDays = contractDays;
+
+        // Tạo invoice (chưa có invoice lines) with computed actualWorkingDays
         Invoice invoice = Invoice.builder()
-                .contract(contract)
-                .customerName(customer.getName())
-                .customerAddress(customer.getAddress())
-                .customerTaxCode(customer.getTaxCode())
-                .invoiceMonth(request.getInvoiceMonth())
-                .invoiceYear(request.getInvoiceYear())
-                .actualWorkingDays(request.getActualWorkingDays())
-                .subtotal(subtotal)
-                .vatPercentage(null) // Không lưu VAT percentage vì mỗi service có VAT khác nhau
-                .vatAmount(totalVatAmount)
-                .totalAmount(totalAmount)
-                .invoiceType(contract.getContractType())
-                .notes(request.getNotes())
-                .status(InvoiceStatus.UNPAID)
-                .createdBy(createdBy)
-                .build();
+            .contract(contract)
+            .customerName(customer.getName())
+            .customerAddress(customer.getAddress())
+            .customerTaxCode(customer.getTaxCode())
+            .invoiceMonth(request.getInvoiceMonth())
+            .invoiceYear(request.getInvoiceYear())
+            .actualWorkingDays(actualDays)
+            .subtotal(BigDecimal.ZERO)
+            .vatPercentage(null)
+            .vatAmount(BigDecimal.ZERO)
+            .totalAmount(BigDecimal.ZERO)
+            .invoiceType(contract.getContractType())
+            .notes(request.getNotes())
+            .status(InvoiceStatus.UNPAID)
+            .createdBy(createdBy)
+            .build();
 
         invoice = invoiceRepository.save(invoice);
-        log.info("Created invoice {} for contract {} - Month {}/{} by {}", 
-            invoice.getId(), contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), actor);
+
+        // Lấy danh sách services áp dụng cho tháng này
+        List<ServiceEntity> applicableServices = getApplicableServices(contract, request.getInvoiceMonth(), request.getInvoiceYear());
+        
+        BigDecimal totalSubtotal = BigDecimal.ZERO;
+        BigDecimal totalVat = BigDecimal.ZERO;
+
+        // Tạo invoice line cho từng service
+        for (ServiceEntity service : applicableServices) {
+            BigDecimal baseAmount;
+
+            // Determine service-specific start/end within the invoice month
+            YearMonth ym = YearMonth.of(request.getInvoiceYear(), request.getInvoiceMonth());
+            LocalDate firstDayOfMonth = ym.atDay(1);
+            LocalDate lastDayOfMonth = ym.atEndOfMonth();
+
+            LocalDate periodStart = contract.getStartDate() != null && contract.getStartDate().isAfter(firstDayOfMonth)
+                    ? contract.getStartDate() : firstDayOfMonth;
+            LocalDate periodEnd = contract.getEndDate() != null && contract.getEndDate().isBefore(lastDayOfMonth)
+                    ? contract.getEndDate() : lastDayOfMonth;
+
+            LocalDate serviceStart = service.getEffectiveFrom() != null && service.getEffectiveFrom().isAfter(periodStart)
+                    ? service.getEffectiveFrom() : periodStart;
+
+            int serviceDays = 0;
+            if (service.getServiceType() == ServiceType.RECURRING) {
+                serviceDays = countWorkingDaysBetween(contract.getWorkingDaysPerWeek(), serviceStart, periodEnd);
+            }
+
+            // Tính base amount dựa trên service type
+            if (service.getServiceType() == ServiceType.RECURRING) {
+                // RECURRING: multiply by number of working days the service applies in the month
+                int daysToUse = serviceDays > 0 ? serviceDays : 0;
+                baseAmount = service.getPrice().multiply(BigDecimal.valueOf(daysToUse));
+            } else {
+                // ONE_TIME: fixed price
+                baseAmount = service.getPrice();
+            }
+
+            // Tính VAT
+            BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+            BigDecimal vatAmount = baseAmount
+                .multiply(serviceVat)
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            
+            BigDecimal totalAmount = baseAmount.add(vatAmount);
+
+            // Tạo invoice line
+            InvoiceLine invoiceLine = InvoiceLine.builder()
+                .invoice(invoice)
+                .service(service)
+                .title(service.getTitle())
+                .description(service.getDescription())
+                .serviceType(service.getServiceType())
+                .unit("Dịch vụ")
+                .quantity(1)
+                .price(service.getPrice())
+                .baseAmount(baseAmount)
+                .vat(serviceVat)
+                .vatAmount(vatAmount)
+                .totalAmount(totalAmount)
+                .effectiveFrom(service.getEffectiveFrom())
+                .contractDays(contractDays)
+                .actualDays(actualDays)
+                .build();
+
+            invoiceLineRepository.save(invoiceLine);
+            
+            totalSubtotal = totalSubtotal.add(baseAmount);
+            totalVat = totalVat.add(vatAmount);
+
+            log.info("Created invoice line for service {} - Base: {}, VAT: {}, Total: {}", 
+                service.getId(), baseAmount, vatAmount, totalAmount);
+        }
+
+        // Cập nhật invoice với tổng tiền
+        invoice.setSubtotal(totalSubtotal);
+        invoice.setVatAmount(totalVat);
+        invoice.setTotalAmount(totalSubtotal.add(totalVat));
+        invoice = invoiceRepository.save(invoice);
+
+        log.info("Created invoice {} for contract {} - Month {}/{} by {} with {} lines", 
+            invoice.getId(), contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), actor, applicableServices.size());
 
         return toInvoiceResponse(invoice);
+    }
+
+    /**
+     * Tính số ngày làm việc trong tháng theo workingDaysPerWeek của hợp đồng
+     */
+    private int calculateContractWorkingDaysInMonth(Contract contract, int month, int year) {
+        YearMonth yearMonth = YearMonth.of(year, month);
+        LocalDate firstDayOfMonth = yearMonth.atDay(1);
+        LocalDate lastDayOfMonth = yearMonth.atEndOfMonth();
+
+        // Determine effective period for this contract within the invoice month
+        LocalDate periodStart = contract.getStartDate() != null && contract.getStartDate().isAfter(firstDayOfMonth)
+                ? contract.getStartDate() : firstDayOfMonth;
+
+        LocalDate periodEnd = (contract.getEndDate() != null && contract.getEndDate().isBefore(lastDayOfMonth))
+                ? contract.getEndDate() : lastDayOfMonth;
+
+        if (periodStart.isAfter(periodEnd)) {
+            log.info("Contract {} has no overlap with {}/{}", contract.getId(), month, year);
+            return 0;
+        }
+
+        if (contract.getWorkingDaysPerWeek() == null || contract.getWorkingDaysPerWeek().isEmpty()) {
+            // Fallback: return number of days in the period
+            int days = (int) (java.time.temporal.ChronoUnit.DAYS.between(periodStart, periodEnd) + 1);
+            log.info("Contract {} working days (no pattern) in {}/{}: {}", contract.getId(), month, year, days);
+            return days;
+        }
+
+        int workingDays = countWorkingDaysBetween(contract.getWorkingDaysPerWeek(), periodStart, periodEnd);
+        log.info("Contract {} working days in {}/{}: {} (period {} - {})", contract.getId(), month, year, workingDays, periodStart, periodEnd);
+        return workingDays;
+    }
+
+    private int countWorkingDaysBetween(List<java.time.DayOfWeek> workingDaysPerWeek, LocalDate start, LocalDate end) {
+        if (start == null || end == null || start.isAfter(end)) return 0;
+        int count = 0;
+        LocalDate cur = start;
+        while (!cur.isAfter(end)) {
+            if (workingDaysPerWeek.contains(cur.getDayOfWeek())) count++;
+            cur = cur.plusDays(1);
+        }
+        return count;
     }
 
     @Override
@@ -166,20 +291,7 @@ public class InvoiceServiceImpl implements InvoiceService {
                         .notes(request.getNotes())
                         .build();
 
-                // Lấy actualWorkingDays từ map nếu là MONTHLY_ACTUAL
-                if (contract.getContractType() == ContractType.MONTHLY_ACTUAL) {
-                    if (request.getContractActualWorkingDays() != null && 
-                        request.getContractActualWorkingDays().containsKey(contract.getId())) {
-                        contractRequest.setActualWorkingDays(
-                                request.getContractActualWorkingDays().get(contract.getId()));
-                    } else {
-                        errors.add(String.format("Hợp đồng #%d (MONTHLY_ACTUAL) thiếu thông tin số ngày làm thực tế", 
-                                contract.getId()));
-                        failCount++;
-                        continue;
-                    }
-                }
-
+                // Create invoice request (actual working days will be computed automatically)
                 InvoiceResponse invoiceResponse = createInvoice(contractRequest);
                 createdInvoices.add(invoiceResponse);
                 successCount++;
@@ -204,78 +316,7 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .build();
     }
 
-    private BigDecimal calculateSubtotal(Contract contract, InvoiceCreationRequest request) {
-        // Lọc services theo thời gian hiệu lực và loại dịch vụ
-        List<ServiceEntity> applicableServices = getApplicableServices(contract, request.getInvoiceMonth(), request.getInvoiceYear());
-        
-        BigDecimal totalServicePrice = applicableServices.stream()
-                .map(ServiceEntity::getPrice)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return switch (contract.getContractType()) {
-            case ONE_TIME -> {
-                // Hợp đồng 1 lần: tính tổng giá dịch vụ
-                log.info("ONE_TIME contract - Total service price: {}", totalServicePrice);
-                yield totalServicePrice;
-            }
-            case MONTHLY_FIXED -> {
-                // Hợp đồng cố định hàng tháng: tính theo giá cố định
-                log.info("MONTHLY_FIXED contract - Fixed monthly price: {}", totalServicePrice);
-                yield totalServicePrice;
-            }
-            case MONTHLY_ACTUAL -> {
-                // Hợp đồng theo ngày thực tế: (giá dịch vụ * số ngày làm thực tế) / số ngày làm việc trong tháng
-                if (request.getActualWorkingDays() == null || request.getActualWorkingDays() <= 0) {
-                    throw new AppException(ErrorCode.INVALID_ACTUAL_WORKING_DAYS);
-                }
-                
-                Integer contractWorkingDays = contract.getWorkingDaysPerWeek() != null && !contract.getWorkingDaysPerWeek().isEmpty()
-                        ? contract.getWorkingDaysPerWeek().size() * 4 // Ước tính 4 tuần/tháng
-                        : 20; // Mặc định 20 ngày/tháng nếu không có thông tin
-
-                BigDecimal actualDays = BigDecimal.valueOf(request.getActualWorkingDays());
-                BigDecimal contractDays = BigDecimal.valueOf(contractWorkingDays);
-                BigDecimal result = totalServicePrice.multiply(actualDays).divide(contractDays, 2, RoundingMode.HALF_UP);
-                
-                log.info("MONTHLY_ACTUAL contract - Service price: {}, Actual days: {}, Contract days: {}, Result: {}",
-                        totalServicePrice, actualDays, contractDays, result);
-                yield result;
-            }
-        };
-    }
-
-    private BigDecimal calculateTotalVat(Contract contract, BigDecimal subtotal, InvoiceCreationRequest request) {
-        // Lọc services theo thời gian hiệu lực và loại dịch vụ
-        List<ServiceEntity> applicableServices = getApplicableServices(contract, request.getInvoiceMonth(), request.getInvoiceYear());
-        
-        // Tính tổng VAT dựa trên từng service
-        BigDecimal totalVat = BigDecimal.ZERO;
-        
-        for (ServiceEntity service : applicableServices) {
-            BigDecimal servicePrice = service.getPrice();
-            BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
-            
-            // Tính VAT cho service này
-            BigDecimal vatAmount = servicePrice.multiply(serviceVat).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-            
-            // Điều chỉnh VAT theo loại hợp đồng
-            if (contract.getContractType() == ContractType.MONTHLY_ACTUAL && request.getActualWorkingDays() != null) {
-                Integer contractWorkingDays = contract.getWorkingDaysPerWeek() != null && !contract.getWorkingDaysPerWeek().isEmpty()
-                        ? contract.getWorkingDaysPerWeek().size() * 4
-                        : 20;
-                
-                BigDecimal actualDays = BigDecimal.valueOf(request.getActualWorkingDays());
-                BigDecimal contractDays = BigDecimal.valueOf(contractWorkingDays);
-                vatAmount = vatAmount.multiply(actualDays).divide(contractDays, 2, RoundingMode.HALF_UP);
-            }
-            
-            totalVat = totalVat.add(vatAmount);
-        }
-        
-        log.info("Total VAT calculated: {} for subtotal: {}", totalVat, subtotal);
-        return totalVat;
-    }
-    
     /**
      * Lọc services áp dụng cho tháng/năm cụ thể dựa trên effectiveFrom và serviceType
      */
@@ -397,14 +438,46 @@ public class InvoiceServiceImpl implements InvoiceService {
         if (!invoiceRepository.existsById(id)) {
             throw new AppException(ErrorCode.INVOICE_NOT_FOUND);
         }
-        invoiceRepository.deleteById(id);
+        // Load invoice and delete invoice lines explicitly to ensure cleanup,
+        // then delete the invoice entity. Cascade is configured, but explicit
+        // delete makes intent clear.
+        Invoice invoice = invoiceRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.INVOICE_NOT_FOUND));
+
+        if (invoice.getInvoiceLines() != null && !invoice.getInvoiceLines().isEmpty()) {
+            invoiceLineRepository.deleteAll(invoice.getInvoiceLines());
+        }
+
+        invoiceRepository.delete(invoice);
         log.info("Deleted invoice {} by {}", id, actor);
     }
 
     private InvoiceResponse toInvoiceResponse(Invoice invoice) {
         Contract contract = invoice.getContract();
         Customer customer = contract.getCustomer();
-        
+        List<InvoiceLine> lines = invoiceLineRepository.findByInvoiceId(invoice.getId());
+        List<com.company.company_clean_hub_be.dto.response.InvoiceLineResponse> lineResponses = lines.stream().map(l ->
+            com.company.company_clean_hub_be.dto.response.InvoiceLineResponse.builder()
+                .id(l.getId())
+                .serviceId(l.getService() != null ? l.getService().getId() : null)
+                .title(l.getTitle())
+                .description(l.getDescription())
+                .serviceType(l.getServiceType())
+                .unit(l.getUnit())
+                .quantity(l.getQuantity())
+                .price(l.getPrice())
+                .baseAmount(l.getBaseAmount())
+                .vat(l.getVat())
+                .vatAmount(l.getVatAmount())
+                .totalAmount(l.getTotalAmount())
+                .contractDays(l.getContractDays())
+                .actualDays(l.getActualDays())
+                .effectiveFrom(l.getEffectiveFrom())
+                .createdAt(l.getCreatedAt())
+                .createdAtFull(l.getCreatedAt() != null ? l.getCreatedAt().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) : null)
+                .build()
+        ).collect(java.util.stream.Collectors.toList());
+
         return InvoiceResponse.builder()
                 .id(invoice.getId())
                 .contractId(contract.getId())
@@ -420,31 +493,31 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .vatPercentage(invoice.getVatPercentage())
                 .vatAmount(invoice.getVatAmount())
                 .totalAmount(invoice.getTotalAmount())
+            .invoiceLines(lineResponses)
                 .invoiceType(invoice.getInvoiceType())
                 .notes(invoice.getNotes())
                 .status(invoice.getStatus())
                 .createdAt(invoice.getCreatedAt())
+                .createdAtFull(invoice.getCreatedAt() != null ? invoice.getCreatedAt().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) : null)
                 .paidAt(invoice.getPaidAt())
                 .createdByUsername(invoice.getCreatedBy() != null ? invoice.getCreatedBy().getUsername() : null)
                 .build();
     }
 
     private void validateInvoiceDate(Contract contract, Integer invoiceMonth, Integer invoiceYear) {
-        // Tạo ngày đầu tháng của invoice (ví dụ: 2025-12-01)
-        java.time.LocalDate invoiceDate = java.time.LocalDate.of(invoiceYear, invoiceMonth, 1);
-        
+        // Use actual issuance date (today) as invoice date
+        java.time.LocalDate issuanceDate = java.time.LocalDate.now();
+
         // Ngày bắt đầu hợp đồng
         java.time.LocalDate contractStartDate = contract.getStartDate();
-        
-        // Kiểm tra: ngày xuất hóa đơn phải >= ngày bắt đầu hợp đồng
-        if (invoiceDate.isBefore(contractStartDate)) {
-            log.error("Invoice date {}-{} is before contract start date {}", 
-                    invoiceYear, invoiceMonth, contractStartDate);
+
+        // Kiểm tra: ngày phát hành hóa đơn (issuanceDate) phải >= ngày bắt đầu hợp đồng
+        if (issuanceDate.isBefore(contractStartDate)) {
+            log.error("Invoice issuance date {} is before contract start date {}", issuanceDate, contractStartDate);
             throw new AppException(ErrorCode.INVOICE_DATE_BEFORE_CONTRACT_START);
         }
-        
-        log.info("Invoice date validation passed: {}-{} >= contract start {}", 
-                invoiceYear, invoiceMonth, contractStartDate);
+
+        log.info("Invoice issuance date validation passed: {} >= contract start {}", issuanceDate, contractStartDate);
     }
 
     private String getCurrentUsername() {

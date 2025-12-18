@@ -15,5 +15,6 @@ public interface ContractService {
     List<ContractResponse> getContractsByCustomer(Long customerId);
     ContractResponse addServiceToContract(Long contractId, Long serviceId);
     ContractResponse removeServiceFromContract(Long contractId, Long serviceId);
+    ContractResponse updateServiceInContract(Long contractId, com.company.company_clean_hub_be.dto.request.UpdateServiceInContractRequest request);
     ContractResponse getContractByAssignmentId(Long assignmentId);
 }
