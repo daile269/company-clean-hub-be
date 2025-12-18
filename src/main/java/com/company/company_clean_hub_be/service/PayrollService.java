@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.service;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.company.company_clean_hub_be.dto.request.PayrollRequest;
@@ -19,7 +20,7 @@ public interface PayrollService {
     PayrollResponse getPayrollById(Long id);
     List<PayrollResponse> getAllPayrolls();
     PageResponse<PayrollResponse> getPayrollsWithFilter(String keyword, Integer month, Integer year, Boolean isPaid, int page, int pageSize);
-    PayrollResponse updatePaymentStatus(Long id, Boolean isPaid);
+    PayrollResponse updatePaymentStatus(Long id, BigDecimal paidAmount);
     void deletePayroll(Long id);
 
     // Updated to return List for bulk calculation

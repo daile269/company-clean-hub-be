@@ -124,9 +124,9 @@ public class PayrollServiceImpl implements PayrollService {
                 payrollRepository.findByEmployeeAndMonthAndYear(
                         request.getEmployeeId(), request.getMonth(), request.getYear());
 
-        if (payrollCheck.isPresent()) {
-            throw new AppException(ErrorCode.PAYROLL_ALREADY_EXISTS);
-        }
+            if (payrollCheck.isPresent()) {
+                throw new AppException(ErrorCode.PAYROLL_ALREADY_EXISTS,payrollCheck.get().getId());
+            }
 
         // Initial totals
         BigDecimal amountTotal = BigDecimal.ZERO;
@@ -208,7 +208,8 @@ public class PayrollServiceImpl implements PayrollService {
                 .insuranceTotal(insuranceTotal)
                 .finalSalary(finalSalary)
                 .paymentDate(null)
-                .isPaid(false)
+                .status(com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID)
+                .paidAmount(BigDecimal.ZERO)
                 .accountant(accountant)
                 .createdAt(LocalDateTime.of(request.getYear(), request.getMonth(), 1, 0, 0))
                 .updatedAt(LocalDateTime.now())
@@ -474,6 +475,7 @@ public class PayrollServiceImpl implements PayrollService {
                     .companyAllowance(employee.getAllowance())
                     .totalSalaryBeforeAdvance(salaryBeforeAdvance)
                     .totalAdvance(persistedPayroll.getAdvanceTotal())
+                    .paidAmount(persistedPayroll.getPaidAmount() != null ? persistedPayroll.getPaidAmount() : BigDecimal.ZERO)
                     .finalSalary(persistedPayroll.getFinalSalary())
                     .note(noteStr)
                     .isTotalRow(true) // Mark as summary row
@@ -637,9 +639,14 @@ public class PayrollServiceImpl implements PayrollService {
         log.debug("[PAYROLL-EXPORT][DEBUG] hasCompanyScope={} for employeeId={}", hasCompanyScope, employee.getId());
         log.trace("[PAYROLL-EXPORT][TRACE] Assignments raw list: {}", assignments);
 
-        Payroll payroll = payrollRepository
-                .findByEmployeeAndMonthAndYear(employee.getId(), month, year)
-                .orElseGet(Payroll::new);
+        Optional<Payroll> optionalPayroll =
+                payrollRepository.findByEmployeeAndMonthAndYear(
+                        employee.getId(), month, year
+                );
+
+        boolean isExist = optionalPayroll.isPresent();
+
+        Payroll payroll = optionalPayroll.orElseGet(Payroll::new);
         log.debug("[PAYROLL-EXPORT][DEBUG] Loaded existing payroll? {} (id={})",
                 payroll.getId() != null, payroll.getId());
         String finalRow = "( ";
@@ -688,11 +695,13 @@ public class PayrollServiceImpl implements PayrollService {
             log.debug("[PAYROLL-EXPORT][DEBUG] amountTotal accumulated = {}", amountTotal);
         }
 
-
         payroll.setAccountant(accountant);
         payroll.setCreatedAt(LocalDateTime.of(year, month, 1, 0, 0));
         payroll.setUpdatedAt(LocalDateTime.now());
-        payroll.setIsPaid(false);
+        if (!isExist){
+            payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID);
+            payroll.setPaidAmount(BigDecimal.ZERO);
+        }
         payroll.setPaymentDate(null);
 
         BigDecimal advanceTotal = payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal() : BigDecimal.ZERO;
@@ -894,7 +903,7 @@ public class PayrollServiceImpl implements PayrollService {
 //                PayrollResponse resp = mapToResponse(payroll, createdAt.getMonthValue(), createdAt.getYear(), null);
 //                log.info("getPayrollById completed: id={}, employeeId={}", id, resp.getEmployeeId());
 //                return resp;
-        PayrollUpdateRequest payrollUpdateRequest = new PayrollUpdateRequest(payroll.getAllowanceTotal(),payroll.getInsuranceTotal(),payroll.getAdvanceTotal());
+        PayrollUpdateRequest payrollUpdateRequest = new PayrollUpdateRequest(payroll.getAllowanceTotal(),payroll.getInsuranceTotal(),payroll.getAdvanceTotal(),payroll.getPaidAmount());
          PayrollResponse rs =  this.updatePayroll(id, payrollUpdateRequest);
         return rs;
     }
@@ -939,19 +948,35 @@ public class PayrollServiceImpl implements PayrollService {
     }
 
     @Override
-    public PayrollResponse updatePaymentStatus(Long id, Boolean isPaid) {
-                log.info("updatePaymentStatus requested: id={}, isPaid={}", id, isPaid);
+    public PayrollResponse updatePaymentStatus(Long id, BigDecimal paidAmount) {
+        log.info("updatePaymentStatus requested: id={}, paidAmount={}", id, paidAmount);
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
         
-        payroll.setIsPaid(isPaid);
-        if (isPaid) {
-            payroll.setPaymentDate(LocalDateTime.now());
+        // Cập nhật paidAmount
+        if (paidAmount != null) {
+            payroll.setPaidAmount(paidAmount);
         }
+        
+        // Tự động tính status dựa trên paidAmount và finalSalary
+        BigDecimal currentPaid = payroll.getPaidAmount() != null ? payroll.getPaidAmount() : BigDecimal.ZERO;
+        BigDecimal finalSalary = payroll.getFinalSalary() != null ? payroll.getFinalSalary() : BigDecimal.ZERO;
+        
+        if (currentPaid.compareTo(BigDecimal.ZERO) == 0) {
+            payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID);
+            payroll.setPaymentDate(null);
+        } else if (currentPaid.compareTo(finalSalary) >= 0) {
+            payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PAID);
+            payroll.setPaymentDate(LocalDateTime.now());
+        } else {
+            payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PARTIAL_PAID);
+        }
+        
         payroll.setUpdatedAt(LocalDateTime.now());
         
         Payroll updatedPayroll = payrollRepository.save(payroll);
-                log.info("updatePaymentStatus completed: id={}, isPaid={}", id, isPaid);
+        log.info("updatePaymentStatus completed: id={}, status={}, paidAmount={}", 
+                id, updatedPayroll.getStatus(), updatedPayroll.getPaidAmount());
         LocalDateTime createdAt = updatedPayroll.getCreatedAt();
         return mapToResponse(updatedPayroll, createdAt.getMonthValue(), createdAt.getYear(), null);
     }
@@ -1116,7 +1141,11 @@ public class PayrollServiceImpl implements PayrollService {
                 .allowanceTotal(payroll.getAllowanceTotal())
                 .insuranceTotal(payroll.getInsuranceTotal())
                 .finalSalary(payroll.getFinalSalary())
-                .isPaid(payroll.getIsPaid())
+                .status(payroll.getStatus())
+                .paidAmount(payroll.getPaidAmount() != null ? payroll.getPaidAmount() : BigDecimal.ZERO)
+                .remainingAmount(payroll.getFinalSalary() != null && payroll.getPaidAmount() != null 
+                        ? payroll.getFinalSalary().subtract(payroll.getPaidAmount()) 
+                        : payroll.getFinalSalary())
                 .paymentDate(payroll.getPaymentDate())
                 .accountantId(accountant != null ? accountant.getId() : null)
                 .accountantName(accountant != null ? accountant.getUsername() : null)

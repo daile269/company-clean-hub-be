@@ -16,4 +16,5 @@ public class PayrollUpdateRequest {
     private BigDecimal allowanceTotal;
     private BigDecimal insuranceTotal;
     private BigDecimal advanceTotal;
+    private BigDecimal paidAmount;  // Số tiền đã thanh toán sớm
 }
