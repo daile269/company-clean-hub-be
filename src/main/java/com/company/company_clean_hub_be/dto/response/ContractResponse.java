@@ -26,7 +26,6 @@ public class ContractResponse {
     private LocalDate endDate;
     private List<DayOfWeek> workingDaysPerWeek;
     private ContractType contractType;
-    private BigDecimal finalPrice;
     private String paymentStatus;
     private String description;
     private LocalDateTime createdAt;

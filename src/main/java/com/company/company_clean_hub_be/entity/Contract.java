@@ -87,14 +87,10 @@
         @Enumerated(EnumType.STRING)
         private ContractType contractType;
 
-        @Column(name = "final_price")
-        @PositiveOrZero
-        private BigDecimal finalPrice;
-
         @Column(name = "payment_status")
         @Size(max = 50)
         private String paymentStatus;
-
+        
         private String description;
 
         @Column(name = "created_at")

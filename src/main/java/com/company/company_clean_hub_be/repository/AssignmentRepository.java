@@ -153,4 +153,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
        List<Assignment> findExpiredFixedAssignments(@Param("endOfLastMonth") LocalDate endOfLastMonth);
 
         List<Assignment> findByEmployeeId(Long employeeId);
+
+        @Query("SELECT a FROM Assignment a WHERE a.contract.id = :contractId")
+        List<Assignment> findByContractId(@Param("contractId") Long contractId);
 }
