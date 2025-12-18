@@ -21,7 +21,6 @@ public class CustomerContractServiceFlatDto {
     private Long contractId;
     private String startDate;
     private String endDate;
-    private BigDecimal finalPrice;
     private String contractType;
     private String paymentStatus;
     private String contractDescription;

@@ -23,6 +23,8 @@ public class ServiceResponse {
     private BigDecimal vat;
     private LocalDate effectiveFrom;
     private ServiceType serviceType;
+    private BigDecimal amount;
+    private BigDecimal baseAmount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

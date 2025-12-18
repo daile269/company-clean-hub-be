@@ -7,6 +7,9 @@ import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+
+import com.company.company_clean_hub_be.dto.response.InvoiceLineResponse;
 
 @Data
 @NoArgsConstructor
@@ -29,9 +32,11 @@ public class InvoiceResponse {
     BigDecimal vatAmount;
     BigDecimal totalAmount;
     ContractType invoiceType;
+    List<InvoiceLineResponse> invoiceLines;
     String notes;
     InvoiceStatus status;
     LocalDateTime createdAt;
+    String createdAtFull;
     LocalDateTime paidAt;
     String createdByUsername;
 }
