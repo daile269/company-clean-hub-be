@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -57,8 +59,12 @@ public class Payroll {
     @Column(name = "final_salary")
     private BigDecimal finalSalary;
 
-    @Column(name = "is_paid")
-    private Boolean isPaid;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private PayrollStatus status;
+
+    @Column(name = "paid_amount")
+    private BigDecimal paidAmount;
 
     @Column(name = "payment_date")
     private LocalDateTime paymentDate;

@@ -28,7 +28,9 @@ public interface PayrollRepository extends JpaRepository<Payroll, Long> {
             "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
             "AND (:month IS NULL OR MONTH(p.createdAt) = :month) " +
             "AND (:year IS NULL OR YEAR(p.createdAt) = :year) " +
-            "AND (:isPaid IS NULL OR p.isPaid = :isPaid)")
+            "AND (:isPaid IS NULL OR " +
+            "(:isPaid = true AND p.status = com.company.company_clean_hub_be.entity.PayrollStatus.PAID) OR " +
+            "(:isPaid = false AND p.status IN (com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID, com.company.company_clean_hub_be.entity.PayrollStatus.PARTIAL_PAID)))")
     Page<Payroll> findByFilters(
             @Param("keyword") String keyword,
             @Param("month") Integer month,

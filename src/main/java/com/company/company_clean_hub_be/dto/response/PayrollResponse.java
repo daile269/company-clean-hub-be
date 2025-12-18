@@ -3,6 +3,8 @@ package com.company.company_clean_hub_be.dto.response;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.company.company_clean_hub_be.entity.PayrollStatus;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -30,7 +32,9 @@ public class PayrollResponse {
     private BigDecimal insuranceTotal;
     private BigDecimal finalSalary;
     
-    private Boolean isPaid;
+    private PayrollStatus status;
+    private BigDecimal paidAmount;
+    private BigDecimal remainingAmount;  // Calculated: finalSalary - paidAmount
     private LocalDateTime paymentDate;
     
     private Long accountantId;

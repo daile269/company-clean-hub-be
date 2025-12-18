@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.controller;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import org.springframework.core.io.ByteArrayResource;
@@ -74,9 +75,9 @@ public class PayrollController {
     @PutMapping("/{id}/payment-status")
     public ApiResponse<PayrollResponse> updatePaymentStatus(
             @PathVariable Long id,
-            @RequestParam Boolean isPaid) {
-        PayrollResponse payroll = payrollService.updatePaymentStatus(id, isPaid);
-        return ApiResponse.success("Cập nhật trạng thái thanh toán thành công", payroll, HttpStatus.OK.value());
+            @RequestParam BigDecimal paidAmount) {
+        PayrollResponse payroll = payrollService.updatePaymentStatus(id, paidAmount);
+        return ApiResponse.success("Cập nhật thanh toán thành công", payroll, HttpStatus.OK.value());
     }
 
     @PutMapping("/{id}/recalculate")
