@@ -110,7 +110,7 @@ public class CustomerServiceImpl implements CustomerService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             
             contract.setVatAmount(totalVat.doubleValue());
-            contract.setTotalValue(contract.getContractValue() + totalVat.doubleValue());
+//            contract.setTotalValue(contract.getContractValue() + totalVat.doubleValue());
         }
         
         for (CustomerContractGroupDto customer : customerMap.values()) {
