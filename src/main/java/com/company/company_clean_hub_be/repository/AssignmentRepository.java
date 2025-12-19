@@ -156,4 +156,27 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 
         @Query("SELECT a FROM Assignment a WHERE a.contract.id = :contractId")
         List<Assignment> findByContractId(@Param("contractId") Long contractId);
+
+            @Query("SELECT COUNT(DISTINCT a.employee.id) FROM Assignment a " +
+                   "WHERE a.contract.id = :contractId " +
+                   "AND a.status = 'IN_PROGRESS' " +
+                   "AND a.startDate <= :endDate")
+            Long countDistinctActiveEmployeesByContractBefore(
+                    @Param("contractId") Long contractId,
+                    @Param("endDate") java.time.LocalDate endDate
+            );
+
+            @Query("SELECT a FROM Assignment a " +
+                   "WHERE a.contract.id = :contractId " +
+                   "AND (:status IS NULL OR a.status = :status) " +
+                   "AND (:month IS NULL OR MONTH(a.startDate) = :month) " +
+                   "AND (:year IS NULL OR YEAR(a.startDate) = :year) " +
+                   "ORDER BY a.startDate DESC")
+            Page<Assignment> findByContractIdWithFilters(
+                    @Param("contractId") Long contractId,
+                    @Param("status") com.company.company_clean_hub_be.entity.AssignmentStatus status,
+                    @Param("month") Integer month,
+                    @Param("year") Integer year,
+                    Pageable pageable
+            );
 }
