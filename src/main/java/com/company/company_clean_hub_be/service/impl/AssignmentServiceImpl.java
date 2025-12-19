@@ -237,91 +237,91 @@ public class AssignmentServiceImpl implements AssignmentService {
                 return mapToResponse(savedAssignment);
         }
 
-    @Override
-    @Transactional
-    public AssignmentResponse updateAssignment(Long id, AssignmentRequest request) {
+        @Override
+        @Transactional
+        public AssignmentResponse updateAssignment(Long id, AssignmentRequest request) {
 
-        log.info("[ASSIGNMENT][UPDATE] Start update assignment, id={}, request={}", id, request);
+                log.info("[ASSIGNMENT][UPDATE] Start update assignment, id={}, request={}", id, request);
 
-        if (id == null) {
-            log.error("[ASSIGNMENT][UPDATE] Assignment id is null");
-            throw new IllegalArgumentException("Assignment id must not be null");
+                if (id == null) {
+                        log.error("[ASSIGNMENT][UPDATE] Assignment id is null");
+                        throw new IllegalArgumentException("Assignment id must not be null");
+                }
+
+                Assignment assignment = assignmentRepository.findById(id)
+                                .orElseThrow(() -> {
+                                        log.error("[ASSIGNMENT][UPDATE] Assignment not found, id={}", id);
+                                        return new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND);
+                                });
+
+                log.debug("[ASSIGNMENT][UPDATE] Found assignment id={}, currentStatus={}",
+                                assignment.getId(), assignment.getStatus());
+
+                Employee employee = employeeRepository.findById(request.getEmployeeId())
+                                .orElseThrow(() -> {
+                                        log.error("[ASSIGNMENT][UPDATE] Employee not found, employeeId={}",
+                                                        request.getEmployeeId());
+                                        return new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
+                                });
+
+                // log.debug("[ASSIGNMENT][UPDATE] Mapping employeeId={}, contractId={} to
+                // assignment id={}",
+                // employee.getId(), contract.getId(), assignment.getId());
+                //
+                // if (request.getStartDate().isBefore(contract.getStartDate())) {
+                // log.warn("[ASSIGNMENT][UPDATE] Invalid startDate={}, contractStartDate={}",
+                // request.getStartDate(), contract.getStartDate());
+                // throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
+                // }
+
+                // Validate active assignment uniqueness
+                if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
+                        List<Assignment> existingAssignments = assignmentRepository
+                                        .findActiveAssignmentByEmployeeAndContractAndIdNot(
+                                                        request.getEmployeeId(),
+                                                        request.getContractId(),
+                                                        id);
+
+                        if (!existingAssignments.isEmpty()) {
+                                log.warn("[ASSIGNMENT][UPDATE] Duplicate active assignment detected, employeeId={}, contractId={}",
+                                                request.getEmployeeId(), request.getContractId());
+                                throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
+                        }
+                }
+
+                // Update fields
+                assignment.setEmployee(employee);
+                assignment.setStartDate(request.getStartDate());
+                assignment.setStatus(request.getStatus());
+                assignment.setSalaryAtTime(request.getSalaryAtTime());
+
+                assignment.setAdditionalAllowance(request.getAdditionalAllowance());
+                assignment.setDescription(request.getDescription());
+                assignment.setUpdatedAt(LocalDateTime.now());
+
+                Assignment updatedAssignment = assignmentRepository.save(assignment);
+
+                log.info("[ASSIGNMENT][UPDATE] Assignment updated successfully, id={}", updatedAssignment.getId());
+
+                // Recalculate work days
+                YearMonth ym = YearMonth.from(request.getStartDate());
+                LocalDate monthStart = ym.atDay(1);
+                LocalDate monthEnd = ym.atEndOfMonth();
+
+                int totalWorkDays = attendanceRepository
+                                .findByAssignmentAndDateBetween(updatedAssignment.getId(), monthStart, monthEnd)
+                                .size();
+
+                updatedAssignment.setWorkDays(totalWorkDays);
+                assignmentRepository.save(updatedAssignment);
+
+                log.debug("[ASSIGNMENT][UPDATE] Recalculated workDays={}, assignmentId={}",
+                                totalWorkDays, updatedAssignment.getId());
+
+                log.info("[ASSIGNMENT][UPDATE] Finish update assignment, id={}", updatedAssignment.getId());
+
+                return mapToResponse(updatedAssignment);
         }
-
-        Assignment assignment = assignmentRepository.findById(id)
-                .orElseThrow(() -> {
-                    log.error("[ASSIGNMENT][UPDATE] Assignment not found, id={}", id);
-                    return new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND);
-                });
-
-        log.debug("[ASSIGNMENT][UPDATE] Found assignment id={}, currentStatus={}",
-                assignment.getId(), assignment.getStatus());
-
-        Employee employee = employeeRepository.findById(request.getEmployeeId())
-                .orElseThrow(() -> {
-                    log.error("[ASSIGNMENT][UPDATE] Employee not found, employeeId={}", request.getEmployeeId());
-                    return new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
-                });
-
-
-//        log.debug("[ASSIGNMENT][UPDATE] Mapping employeeId={}, contractId={} to assignment id={}",
-//                employee.getId(), contract.getId(), assignment.getId());
-//
-//        if (request.getStartDate().isBefore(contract.getStartDate())) {
-//            log.warn("[ASSIGNMENT][UPDATE] Invalid startDate={}, contractStartDate={}",
-//                    request.getStartDate(), contract.getStartDate());
-//            throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
-//        }
-
-        // Validate active assignment uniqueness
-        if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
-            List<Assignment> existingAssignments =
-                    assignmentRepository.findActiveAssignmentByEmployeeAndContractAndIdNot(
-                            request.getEmployeeId(),
-                            request.getContractId(),
-                            id
-                    );
-
-            if (!existingAssignments.isEmpty()) {
-                log.warn("[ASSIGNMENT][UPDATE] Duplicate active assignment detected, employeeId={}, contractId={}",
-                        request.getEmployeeId(), request.getContractId());
-                throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
-            }
-        }
-
-        // Update fields
-        assignment.setEmployee(employee);
-        assignment.setStartDate(request.getStartDate());
-        assignment.setStatus(request.getStatus());
-        assignment.setSalaryAtTime(request.getSalaryAtTime());
-
-        assignment.setAdditionalAllowance(request.getAdditionalAllowance());
-        assignment.setDescription(request.getDescription());
-        assignment.setUpdatedAt(LocalDateTime.now());
-
-        Assignment updatedAssignment = assignmentRepository.save(assignment);
-
-        log.info("[ASSIGNMENT][UPDATE] Assignment updated successfully, id={}", updatedAssignment.getId());
-
-        // Recalculate work days
-        YearMonth ym = YearMonth.from(request.getStartDate());
-        LocalDate monthStart = ym.atDay(1);
-        LocalDate monthEnd = ym.atEndOfMonth();
-
-        int totalWorkDays = attendanceRepository
-                .findByAssignmentAndDateBetween(updatedAssignment.getId(), monthStart, monthEnd)
-                .size();
-
-        updatedAssignment.setWorkDays(totalWorkDays);
-        assignmentRepository.save(updatedAssignment);
-
-        log.debug("[ASSIGNMENT][UPDATE] Recalculated workDays={}, assignmentId={}",
-                totalWorkDays, updatedAssignment.getId());
-
-        log.info("[ASSIGNMENT][UPDATE] Finish update assignment, id={}", updatedAssignment.getId());
-
-        return mapToResponse(updatedAssignment);
-    }
 
         @Override
         public void deleteAssignment(Long id) {
@@ -807,6 +807,34 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
 
         @Override
+        public PageResponse<AssignmentResponse> getAssignmentsByContract(Long contractId, com.company.company_clean_hub_be.entity.AssignmentStatus status, Integer month, Integer year,
+                                                int page, int pageSize) {
+                contractRepository.findById(contractId)
+                                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+
+                int safePage = Math.max(0, page <= 0 ? 0 : page - 1);
+                int safePageSize = Math.max(1, pageSize);
+                Pageable pageable = PageRequest.of(safePage, safePageSize, Sort.by("startDate").descending());
+
+                Page<Assignment> assignmentPage = assignmentRepository.findByContractIdWithFilters(contractId, status, month,
+                                        year, pageable);
+
+                List<AssignmentResponse> items = assignmentPage.getContent().stream()
+                                .map(this::mapToResponse)
+                                .collect(Collectors.toList());
+
+                return PageResponse.<AssignmentResponse>builder()
+                                .content(items)
+                                .page(assignmentPage.getNumber())
+                                .pageSize(assignmentPage.getSize())
+                                .totalElements(assignmentPage.getTotalElements())
+                                .totalPages(assignmentPage.getTotalPages())
+                                .first(assignmentPage.isFirst())
+                                .last(assignmentPage.isLast())
+                                .build();
+        }
+
+        @Override
         public PageResponse<AssignmentResponse> getAssignmentsByEmployeeWithFilters(Long employeeId, Long customerId,
                         Integer month, Integer year, int page, int pageSize) {
                 // validate employee exists
@@ -1165,7 +1193,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                 List<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> result = new ArrayList<>();
 
                 org.springframework.data.domain.PageRequest pageable = org.springframework.data.domain.PageRequest
-                                .of(safePage, safePageSize, org.springframework.data.domain.Sort.by("createdAt").descending());
+                                .of(safePage, safePageSize,
+                                                org.springframework.data.domain.Sort.by("createdAt").descending());
 
                 for (Contract contract : pageContracts) {
                         org.springframework.data.domain.Page<AssignmentHistory> pageHistories = assignmentHistoryRepository
@@ -1178,24 +1207,22 @@ public class AssignmentServiceImpl implements AssignmentService {
                         result.add(new com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse(
                                         contract.getId(),
                                         contract.getDescription(),
-                                        mapped
-                        ));
+                                        mapped));
                 }
 
                 int totalPages = (int) Math.ceil((double) totalContracts / (double) safePageSize);
                 boolean first = safePage == 0;
                 boolean last = safePage >= totalPages - 1;
 
-                PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> pageResp =
-                                PageResponse.<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse>builder()
-                                                .content(result)
-                                                .page(safePage)
-                                                .pageSize(safePageSize)
-                                                .totalElements(totalContracts)
-                                                .totalPages(totalPages)
-                                                .first(first)
-                                                .last(last)
-                                                .build();
+                PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> pageResp = PageResponse.<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse>builder()
+                                .content(result)
+                                .page(safePage)
+                                .pageSize(safePageSize)
+                                .totalElements(totalContracts)
+                                .totalPages(totalPages)
+                                .first(first)
+                                .last(last)
+                                .build();
 
                 return pageResp;
         }

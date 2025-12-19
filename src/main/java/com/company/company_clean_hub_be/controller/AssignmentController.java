@@ -211,6 +211,20 @@ public class AssignmentController {
         );
     }
 
+    @GetMapping("/contract/{contractId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    public ApiResponse<PageResponse<AssignmentResponse>> getAssignmentsByContract(
+            @PathVariable Long contractId,
+            @RequestParam(required = false) com.company.company_clean_hub_be.entity.AssignmentStatus status,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+
+        PageResponse<AssignmentResponse> assignments = assignmentService.getAssignmentsByContract(contractId, status, month, year, page, pageSize);
+        return ApiResponse.success("Lấy danh sách nhân viên phụ trách hợp đồng thành công", assignments, HttpStatus.OK.value());
+    }
+
         @GetMapping("/{assignmentId}/attendances")
         @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ATTENDANCE_VIEW')")
         public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.AttendanceResponse>> getAttendancesByAssignment(
