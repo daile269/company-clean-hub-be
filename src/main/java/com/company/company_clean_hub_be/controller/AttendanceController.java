@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.util.List;
 
@@ -85,6 +86,24 @@ public class AttendanceController {
         return ApiResponse.success("Xóa chấm công thành công", null, HttpStatus.OK.value());
     }
 
+    @DeleteMapping("/by-date")
+    public ApiResponse<Void> deleteByDateContractEmployee(@Valid @RequestBody com.company.company_clean_hub_be.dto.request.AttendanceDeleteRequest request) {
+        attendanceService.softDeleteAttendance(request);
+        return ApiResponse.success("Xóa chấm công theo ngày/hợp đồng/nhân viên thành công", null, HttpStatus.OK.value());
+    }
+
+    @PutMapping("/restore/{id}")
+    public ApiResponse<Void> restoreAttendance(@PathVariable Long id) {
+        attendanceService.restoreAttendance(id);
+        return ApiResponse.success("Hoàn tác xóa chấm công thành công", null, HttpStatus.OK.value());
+    }
+
+    @PutMapping("/restore/by-date")
+    public ApiResponse<Void> restoreByDateContractEmployee(@Valid @RequestBody com.company.company_clean_hub_be.dto.request.AttendanceRestoreRequest request) {
+        attendanceService.restoreByDateContractEmployee(request);
+        return ApiResponse.success("Hoàn tác xóa chấm công theo ngày/hợp đồng/nhân viên thành công", null, HttpStatus.OK.value());
+    }
+
     @GetMapping("/total-days")
     public ApiResponse<TotalDaysResponse> getTotalDaysByEmployee(
             @RequestParam Long employeeId,
@@ -92,5 +111,26 @@ public class AttendanceController {
             @RequestParam Integer year) {
         TotalDaysResponse response = attendanceService.getTotalDaysByEmployee(employeeId, month, year);
         return ApiResponse.success("Tính tổng công thành công", response, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/contract/{contractId}")
+    public ApiResponse<java.util.Map<Long, java.util.List<AttendanceResponse>>> getAttendancesByContract(
+            @PathVariable Long contractId,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year) {
+        java.util.Map<Long, java.util.List<AttendanceResponse>> resp = attendanceService.getAttendancesByContractGroupedByEmployee(contractId, month, year);
+        return ApiResponse.success("Lấy chấm công theo hợp đồng thành công", resp, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/deleted")
+    public ApiResponse<PageResponse<AttendanceResponse>> getDeletedAttendances(
+            @RequestParam(required = false) Long contractId,
+            @RequestParam(required = false) Long employeeId,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        PageResponse<AttendanceResponse> resp = attendanceService.getDeletedAttendances(contractId, employeeId, month, year, page, pageSize);
+        return ApiResponse.success("Lấy danh sách chấm công đã xóa thành công", resp, HttpStatus.OK.value());
     }
 }

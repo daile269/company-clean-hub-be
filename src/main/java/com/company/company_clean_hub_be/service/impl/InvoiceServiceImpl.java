@@ -11,6 +11,8 @@ import com.company.company_clean_hub_be.repository.ContractRepository;
 import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.InvoiceRepository;
 import com.company.company_clean_hub_be.repository.InvoiceLineRepository;
+import com.company.company_clean_hub_be.repository.AssignmentRepository;
+import com.company.company_clean_hub_be.repository.AttendanceRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.service.InvoiceService;
 import lombok.AccessLevel;
@@ -50,6 +52,8 @@ public class InvoiceServiceImpl implements InvoiceService {
     InvoiceLineRepository invoiceLineRepository;
     ContractRepository contractRepository;
     CustomerRepository customerRepository;
+    AssignmentRepository assignmentRepository;
+    AttendanceRepository attendanceRepository;
     UserRepository userRepository;
 
     @Override
@@ -105,21 +109,18 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         invoice = invoiceRepository.save(invoice);
 
-        // Lấy danh sách services áp dụng cho tháng này
+        // Lấy danh sách services áp dụng cho tháng này và tính base amounts (không xét nghỉ)
         List<ServiceEntity> applicableServices = getApplicableServices(contract, request.getInvoiceMonth(), request.getInvoiceYear());
-        
-        BigDecimal totalSubtotal = BigDecimal.ZERO;
-        BigDecimal totalVat = BigDecimal.ZERO;
 
-        // Tạo invoice line cho từng service
+        YearMonth ym = YearMonth.of(request.getInvoiceYear(), request.getInvoiceMonth());
+        LocalDate firstDayOfMonth = ym.atDay(1);
+        LocalDate lastDayOfMonth = ym.atEndOfMonth();
+
+        // Tính base amount cho từng service (theo logic cũ) và tổng giá trị hợp đồng giả định
+        List<java.util.Map.Entry<ServiceEntity, BigDecimal>> serviceBases = new ArrayList<>();
+        BigDecimal totalContractPrice = BigDecimal.ZERO;
+
         for (ServiceEntity service : applicableServices) {
-            BigDecimal baseAmount;
-
-            // Determine service-specific start/end within the invoice month
-            YearMonth ym = YearMonth.of(request.getInvoiceYear(), request.getInvoiceMonth());
-            LocalDate firstDayOfMonth = ym.atDay(1);
-            LocalDate lastDayOfMonth = ym.atEndOfMonth();
-
             LocalDate periodStart = contract.getStartDate() != null && contract.getStartDate().isAfter(firstDayOfMonth)
                     ? contract.getStartDate() : firstDayOfMonth;
             LocalDate periodEnd = contract.getEndDate() != null && contract.getEndDate().isBefore(lastDayOfMonth)
@@ -133,56 +134,197 @@ public class InvoiceServiceImpl implements InvoiceService {
                 serviceDays = countWorkingDaysBetween(contract.getWorkingDaysPerWeek(), serviceStart, periodEnd);
             }
 
-            // Tính base amount dựa trên service type
+            BigDecimal baseAmount;
             if (service.getServiceType() == ServiceType.RECURRING) {
-                // RECURRING: multiply by number of working days the service applies in the month
-                int daysToUse = serviceDays > 0 ? serviceDays : 0;
-                baseAmount = service.getPrice().multiply(BigDecimal.valueOf(daysToUse));
+                baseAmount = service.getPrice().multiply(BigDecimal.valueOf(Math.max(0, serviceDays)));
             } else {
-                // ONE_TIME: fixed price
                 baseAmount = service.getPrice();
             }
 
-            // Tính VAT
-            BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
-            BigDecimal vatAmount = baseAmount
-                .multiply(serviceVat)
-                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-            
-            BigDecimal totalAmount = baseAmount.add(vatAmount);
-
-            // Tạo invoice line
-            InvoiceLine invoiceLine = InvoiceLine.builder()
-                .invoice(invoice)
-                .service(service)
-                .title(service.getTitle())
-                .description(service.getDescription())
-                .serviceType(service.getServiceType())
-                .unit("Dịch vụ")
-                .quantity(1)
-                .price(service.getPrice())
-                .baseAmount(baseAmount)
-                .vat(serviceVat)
-                .vatAmount(vatAmount)
-                .totalAmount(totalAmount)
-                .effectiveFrom(service.getEffectiveFrom())
-                .contractDays(contractDays)
-                .actualDays(actualDays)
-                .build();
-
-            invoiceLineRepository.save(invoiceLine);
-            
-            totalSubtotal = totalSubtotal.add(baseAmount);
-            totalVat = totalVat.add(vatAmount);
-
-            log.info("Created invoice line for service {} - Base: {}, VAT: {}, Total: {}", 
-                service.getId(), baseAmount, vatAmount, totalAmount);
+            serviceBases.add(new java.util.AbstractMap.SimpleEntry<>(service, baseAmount));
+            totalContractPrice = totalContractPrice.add(baseAmount);
         }
 
-        // Cập nhật invoice với tổng tiền
-        invoice.setSubtotal(totalSubtotal);
+        // Count number of assigned employees active for this contract in the month
+        Long numEmployeesLong = assignmentRepository.countDistinctActiveEmployeesByContractBefore(contract.getId(), lastDayOfMonth);
+        int numEmployees = numEmployeesLong != null ? numEmployeesLong.intValue() : 0;
+
+        // Count attendances for this contract in the month
+        Long attendancesCountLong = attendanceRepository.countAttendancesByContractAndMonthYear(contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear());
+        int attendancesCount = attendancesCountLong != null ? attendancesCountLong.intValue() : 0;
+
+        if (totalContractPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("Contract {} totalContractPrice is zero for month {}/{}", contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear());
+        }
+
+        // Separate one-time and recurring service totals
+        BigDecimal oneTimeTotal = BigDecimal.ZERO;
+        BigDecimal recurringTotal = BigDecimal.ZERO;
+        List<java.util.Map.Entry<ServiceEntity, BigDecimal>> oneTimeBases = new ArrayList<>();
+        List<java.util.Map.Entry<ServiceEntity, BigDecimal>> recurringBases = new ArrayList<>();
+        for (java.util.Map.Entry<ServiceEntity, BigDecimal> e : serviceBases) {
+            if (e.getKey().getServiceType() == ServiceType.ONE_TIME) {
+                oneTimeBases.add(e);
+                oneTimeTotal = oneTimeTotal.add(e.getValue());
+            } else {
+                recurringBases.add(e);
+                recurringTotal = recurringTotal.add(e.getValue());
+            }
+        }
+
+        BigDecimal subtotal = BigDecimal.ZERO;
+        BigDecimal totalVat = BigDecimal.ZERO;
+
+        // If contract itself is ONE_TIME, invoice is full contract price
+        if (contract.getContractType() == ContractType.ONE_TIME) {
+            subtotal = totalContractPrice.setScale(2, RoundingMode.HALF_UP);
+
+            // create invoice lines using full base amounts
+            for (java.util.Map.Entry<ServiceEntity, BigDecimal> entry : serviceBases) {
+                ServiceEntity service = entry.getKey();
+                BigDecimal lineBase = entry.getValue().setScale(2, RoundingMode.HALF_UP);
+                BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+                BigDecimal vatAmount = lineBase.multiply(serviceVat).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                BigDecimal totalAmount = lineBase.add(vatAmount);
+
+                InvoiceLine invoiceLine = InvoiceLine.builder()
+                        .invoice(invoice)
+                        .service(service)
+                        .title(service.getTitle())
+                        .description(service.getDescription())
+                        .serviceType(service.getServiceType())
+                        .unit("Dịch vụ")
+                        .quantity(1)
+                        .price(service.getPrice())
+                        .baseAmount(lineBase)
+                        .vat(serviceVat)
+                        .vatAmount(vatAmount)
+                        .totalAmount(totalAmount)
+                        .effectiveFrom(service.getEffectiveFrom())
+                        .contractDays(contractDays)
+                        .actualDays(attendancesCount)
+                        .build();
+
+                invoiceLineRepository.save(invoiceLine);
+                totalVat = totalVat.add(vatAmount);
+            }
+
+        } else {
+            // Monthly contracts: one-time services billed fully; recurring portion billed by attendance
+            if (recurringTotal.compareTo(BigDecimal.ZERO) > 0) {
+                if (contractDays <= 0 || numEmployees <= 0) {
+                    throw new AppException(ErrorCode.INVALID_ACTUAL_WORKING_DAYS);
+                }
+                BigDecimal denom = BigDecimal.valueOf((long) contractDays * numEmployees);
+                BigDecimal pricePerDayPerEmployee = recurringTotal.divide(denom, 2, RoundingMode.HALF_UP);
+                BigDecimal recurringSubtotal = pricePerDayPerEmployee.multiply(BigDecimal.valueOf(attendancesCount)).setScale(2, RoundingMode.HALF_UP);
+
+                // subtotal is sum of one-time full + recurring allocated by attendance
+                subtotal = oneTimeTotal.add(recurringSubtotal).setScale(2, RoundingMode.HALF_UP);
+
+                // create one-time lines (full)
+                for (java.util.Map.Entry<ServiceEntity, BigDecimal> entry : oneTimeBases) {
+                    ServiceEntity service = entry.getKey();
+                    BigDecimal lineBase = entry.getValue().setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+                    BigDecimal vatAmount = lineBase.multiply(serviceVat).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                    BigDecimal totalAmount = lineBase.add(vatAmount);
+
+                    InvoiceLine invoiceLine = InvoiceLine.builder()
+                            .invoice(invoice)
+                            .service(service)
+                            .title(service.getTitle())
+                            .description(service.getDescription())
+                            .serviceType(service.getServiceType())
+                            .unit("Dịch vụ")
+                            .quantity(1)
+                            .price(service.getPrice())
+                            .baseAmount(lineBase)
+                            .vat(serviceVat)
+                            .vatAmount(vatAmount)
+                            .totalAmount(totalAmount)
+                            .effectiveFrom(service.getEffectiveFrom())
+                            .contractDays(contractDays)
+                            .actualDays(attendancesCount)
+                            .build();
+
+                    invoiceLineRepository.save(invoiceLine);
+                    totalVat = totalVat.add(vatAmount);
+                }
+
+                // create recurring lines proportionally from recurringSubtotal
+                for (java.util.Map.Entry<ServiceEntity, BigDecimal> entry : recurringBases) {
+                    ServiceEntity service = entry.getKey();
+                    BigDecimal serviceBase = entry.getValue();
+                    BigDecimal lineBase = BigDecimal.ZERO;
+                    if (recurringTotal.compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal share = serviceBase.divide(recurringTotal, 6, RoundingMode.HALF_UP);
+                        lineBase = recurringSubtotal.multiply(share).setScale(2, RoundingMode.HALF_UP);
+                    }
+
+                    BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+                    BigDecimal vatAmount = lineBase.multiply(serviceVat).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                    BigDecimal totalAmount = lineBase.add(vatAmount);
+
+                    InvoiceLine invoiceLine = InvoiceLine.builder()
+                            .invoice(invoice)
+                            .service(service)
+                            .title(service.getTitle())
+                            .description(service.getDescription())
+                            .serviceType(service.getServiceType())
+                            .unit("Dịch vụ")
+                            .quantity(1)
+                            .price(service.getPrice())
+                            .baseAmount(lineBase)
+                            .vat(serviceVat)
+                            .vatAmount(vatAmount)
+                            .totalAmount(totalAmount)
+                            .effectiveFrom(service.getEffectiveFrom())
+                            .contractDays(contractDays)
+                            .actualDays(attendancesCount)
+                            .build();
+
+                    invoiceLineRepository.save(invoiceLine);
+                    totalVat = totalVat.add(vatAmount);
+                }
+
+            } else {
+                // No recurring services: invoice is just one-time totals
+                subtotal = oneTimeTotal.setScale(2, RoundingMode.HALF_UP);
+                for (java.util.Map.Entry<ServiceEntity, BigDecimal> entry : oneTimeBases) {
+                    ServiceEntity service = entry.getKey();
+                    BigDecimal lineBase = entry.getValue().setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+                    BigDecimal vatAmount = lineBase.multiply(serviceVat).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                    BigDecimal totalAmount = lineBase.add(vatAmount);
+
+                    InvoiceLine invoiceLine = InvoiceLine.builder()
+                            .invoice(invoice)
+                            .service(service)
+                            .title(service.getTitle())
+                            .description(service.getDescription())
+                            .serviceType(service.getServiceType())
+                            .unit("Dịch vụ")
+                            .quantity(1)
+                            .price(service.getPrice())
+                            .baseAmount(lineBase)
+                            .vat(serviceVat)
+                            .vatAmount(vatAmount)
+                            .totalAmount(totalAmount)
+                            .effectiveFrom(service.getEffectiveFrom())
+                            .contractDays(contractDays)
+                            .actualDays(attendancesCount)
+                            .build();
+
+                    invoiceLineRepository.save(invoiceLine);
+                    totalVat = totalVat.add(vatAmount);
+                }
+            }
+        }
+
+        invoice.setSubtotal(subtotal);
         invoice.setVatAmount(totalVat);
-        invoice.setTotalAmount(totalSubtotal.add(totalVat));
+        invoice.setTotalAmount(subtotal.add(totalVat));
         invoice = invoiceRepository.save(invoice);
 
         log.info("Created invoice {} for contract {} - Month {}/{} by {} with {} lines", 

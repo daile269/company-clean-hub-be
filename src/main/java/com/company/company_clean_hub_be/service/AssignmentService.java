@@ -49,6 +49,8 @@ public interface AssignmentService {
             Long customerId, com.company.company_clean_hub_be.entity.EmploymentType employmentType, Integer month, Integer year, int page, int pageSize);
     List<AssignmentResponse> getAssignmentsByEmployee(Long employeeId);
 
+        PageResponse<AssignmentResponse> getAssignmentsByContract(Long contractId, com.company.company_clean_hub_be.entity.AssignmentStatus status, Integer month, Integer year, int page, int pageSize);
+
     PageResponse<AttendanceResponse> getAttendancesByAssignment(Long assignmentId, Integer month, Integer year, int page, int pageSize);
     
     // Lịch sử điều động

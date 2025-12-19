@@ -162,13 +162,16 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("getAttendanceById requested: id={}", id);
         Attendance attendance = attendanceRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
+                if (attendance.getDeleted() != null && attendance.getDeleted()) {
+                        throw new AppException(ErrorCode.ATTENDANCE_NOT_FOUND);
+                }
         return mapToResponse(attendance);
     }
 
     @Override
     public List<AttendanceResponse> getAllAttendances() {
         log.info("getAllAttendances requested");
-        return attendanceRepository.findAll().stream()
+                return attendanceRepository.findAllActive().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
@@ -286,9 +289,123 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (!attendanceRepository.existsById(id)) {
             throw new AppException(ErrorCode.ATTENDANCE_NOT_FOUND);
         }
-        attendanceRepository.deleteById(id);
-        log.info("deleteAttendance completed by {}: id={}", username, id);
+                Attendance attendance = attendanceRepository.findById(id)
+                                .orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
+                attendance.setDeleted(true);
+                attendance.setDeletedAt(LocalDateTime.now());
+                attendance.setUpdatedAt(LocalDateTime.now());
+                attendanceRepository.save(attendance);
+                log.info("soft-delete attendance completed by {}: id={}", username, id);
     }
+
+        @Override
+        public void softDeleteAttendance(com.company.company_clean_hub_be.dto.request.AttendanceDeleteRequest request) {
+                String username = "anonymous";
+                try {
+                        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder
+                                        .getContext().getAuthentication();
+                        if (auth != null && auth.getName() != null) username = auth.getName();
+                } catch (Exception ignored) {
+                }
+                LocalDate date = request.getDate();
+                Long contractId = request.getContractId();
+                Long employeeId = request.getEmployeeId();
+                String description = request.getDescription();
+
+                log.info("softDeleteAttendance requested by {}: date={}, contractId={}, employeeId={}", username, date, contractId, employeeId);
+
+                Attendance attendance = attendanceRepository.findByContractAndEmployeeAndDate(contractId, employeeId, date)
+                                .orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
+
+                attendance.setDeleted(true);
+                attendance.setDeletedAt(LocalDateTime.now());
+                if (description != null && !description.isBlank()) {
+                        attendance.setDescription(description);
+                }
+                attendance.setUpdatedAt(LocalDateTime.now());
+                attendanceRepository.save(attendance);
+
+                // Tái tính workDays của assignment
+                Assignment assignment = attendance.getAssignment();
+                if (assignment != null) {
+                        int month = date.getMonthValue();
+                        int year = date.getYear();
+                        recalculateAssignmentWorkDays(assignment, month, year);
+                }
+
+                log.info("softDeleteAttendance completed by {}: attendanceId={}", username, attendance.getId());
+        }
+
+        @Override
+        public void restoreAttendance(Long id) {
+                String username = "anonymous";
+                try {
+                        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder
+                                        .getContext().getAuthentication();
+                        if (auth != null && auth.getName() != null) username = auth.getName();
+                } catch (Exception ignored) {
+                }
+                log.info("restoreAttendance requested by {}: id={}", username, id);
+
+                Attendance attendance = attendanceRepository.findById(id)
+                                .orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
+
+                if (attendance.getDeleted() == null || !attendance.getDeleted()) {
+                        throw new AppException(ErrorCode.ATTENDANCE_NOT_FOUND);
+                }
+
+                attendance.setDeleted(false);
+                attendance.setDeletedAt(null);
+                attendance.setUpdatedAt(LocalDateTime.now());
+                attendanceRepository.save(attendance);
+
+                // Tái tính workDays của assignment
+                Assignment assignment = attendance.getAssignment();
+                if (assignment != null && attendance.getDate() != null) {
+                        int month = attendance.getDate().getMonthValue();
+                        int year = attendance.getDate().getYear();
+                        recalculateAssignmentWorkDays(assignment, month, year);
+                }
+
+                log.info("restoreAttendance completed by {}: id={}", username, id);
+        }
+
+        @Override
+        public void restoreByDateContractEmployee(com.company.company_clean_hub_be.dto.request.AttendanceRestoreRequest request) {
+                String username = "anonymous";
+                try {
+                        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder
+                                        .getContext().getAuthentication();
+                        if (auth != null && auth.getName() != null) username = auth.getName();
+                } catch (Exception ignored) {
+                }
+                LocalDate date = request.getDate();
+                Long contractId = request.getContractId();
+                Long employeeId = request.getEmployeeId();
+                log.info("restoreByDateContractEmployee requested by {}: date={}, contractId={}, employeeId={}", username, date, contractId, employeeId);
+
+                Attendance attendance = attendanceRepository.findByContractAndEmployeeAndDate(contractId, employeeId, date)
+                                .orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
+
+                if (attendance.getDeleted() == null || !attendance.getDeleted()) {
+                        throw new AppException(ErrorCode.ATTENDANCE_NOT_FOUND);
+                }
+
+                attendance.setDeleted(false);
+                attendance.setDeletedAt(null);
+                attendance.setUpdatedAt(LocalDateTime.now());
+                attendanceRepository.save(attendance);
+
+                // Tái tính workDays của assignment
+                Assignment assignment = attendance.getAssignment();
+                if (assignment != null) {
+                        int month = date.getMonthValue();
+                        int year = date.getYear();
+                        recalculateAssignmentWorkDays(assignment, month, year);
+                }
+
+                log.info("restoreByDateContractEmployee completed by {}: attendanceId={}", username, attendance.getId());
+        }
 
         private AttendanceResponse mapToResponse(Attendance attendance) {
                 Assignment assignment = attendance.getAssignment();
@@ -345,4 +462,74 @@ public class AttendanceServiceImpl implements AttendanceService {
                         employee.getName(), totalDays, month, year))
                 .build();
     }
+
+        @Override
+        public java.util.Map<Long, java.util.Map<Long, java.util.List<AttendanceResponse>>> getAttendancesGroupedByContractAndEmployee(Integer month, Integer year) {
+                log.info("getAttendancesGroupedByContractAndEmployee requested: month={}, year={}", month, year);
+
+                // Single query to fetch attendances for the month/year ordered by contract, employee, date
+                List<Attendance> attendances = attendanceRepository.findByMonthYearOrderByContractEmployeeDate(month, year);
+
+                java.util.Map<Long, java.util.Map<Long, java.util.List<AttendanceResponse>>> result = new java.util.LinkedHashMap<>();
+
+                for (Attendance a : attendances) {
+                        if (a.getAssignment() == null || a.getAssignment().getContract() == null || a.getEmployee() == null) continue;
+                        Long contractId = a.getAssignment().getContract().getId();
+                        Long employeeId = a.getEmployee().getId();
+
+                        result.computeIfAbsent(contractId, k -> new java.util.LinkedHashMap<>())
+                                        .computeIfAbsent(employeeId, k -> new java.util.ArrayList<>())
+                                        .add(mapToResponse(a));
+                }
+
+                log.info("getAttendancesGroupedByContractAndEmployee completed: contracts={}, totalAttendances={}", result.size(), attendances.size());
+                return result;
+        }
+
+        @Override
+        public java.util.Map<Long, java.util.List<AttendanceResponse>> getAttendancesByContractGroupedByEmployee(Long contractId, Integer month, Integer year) {
+                log.info("getAttendancesByContractGroupedByEmployee requested: contractId={}, month={}, year={}", contractId, month, year);
+
+                List<Attendance> attendances = attendanceRepository.findByContractAndMonthYearOrderByEmployeeDate(contractId, month, year);
+
+                java.util.Map<Long, java.util.List<AttendanceResponse>> result = new java.util.LinkedHashMap<>();
+
+                for (Attendance a : attendances) {
+                        if (a.getEmployee() == null) continue;
+                        Long employeeId = a.getEmployee().getId();
+                        result.computeIfAbsent(employeeId, k -> new java.util.ArrayList<>()).add(mapToResponse(a));
+                }
+
+                log.info("getAttendancesByContractGroupedByEmployee completed: contractId={}, employees={}", contractId, result.size());
+                return result;
+        }
+
+        @Override
+        public PageResponse<AttendanceResponse> getDeletedAttendances(Long contractId, Long employeeId, Integer month, Integer year, int page, int pageSize) {
+                log.info("getDeletedAttendances requested: contractId={}, employeeId={}, month={}, year={}, page={}, pageSize={}", contractId, employeeId, month, year, page, pageSize);
+                Pageable pageable = PageRequest.of(page, pageSize, Sort.by("date").descending());
+                org.springframework.data.domain.Page<Attendance> attendancePage = attendanceRepository.findDeletedByFilters(contractId, employeeId, month, year, pageable);
+
+                List<AttendanceResponse> attendances = attendancePage.getContent().stream()
+                                .map(this::mapToResponse)
+                                .collect(Collectors.toList());
+
+                return PageResponse.<AttendanceResponse>builder()
+                                .content(attendances)
+                                .page(attendancePage.getNumber())
+                                .pageSize(attendancePage.getSize())
+                                .totalElements(attendancePage.getTotalElements())
+                                .totalPages(attendancePage.getTotalPages())
+                                .first(attendancePage.isFirst())
+                                .last(attendancePage.isLast())
+                                .build();
+        }
+
+        private void recalculateAssignmentWorkDays(Assignment assignment, int month, int year) {
+                Long count = attendanceRepository.countActiveAttendancesByAssignmentAndMonthYear(
+                                assignment.getId(), month, year);
+                assignment.setWorkDays(count != null ? count.intValue() : 0);
+                assignmentRepository.save(assignment);
+                log.info("Recalculated workDays for assignmentId={}: workDays={}", assignment.getId(), assignment.getWorkDays());
+        }
 }
