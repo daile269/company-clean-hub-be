@@ -764,7 +764,7 @@ public class PayrollServiceImpl implements PayrollService {
                 assignment != null ? assignment.getId() : null, today);
 
         long count = assignment.getAttendances().stream()
-                .filter(a -> a.getDate() != null && !a.getDate().isAfter(today))
+                .filter(a -> a.getDate() != null && !a.getDate().isAfter(today) && !a.getDeleted()  )
                 .count();
 
         log.debug("[PAYROLL-EXPORT][DEBUG] Actual work days counted={} for assignmentId={}", count, assignment.getId());
