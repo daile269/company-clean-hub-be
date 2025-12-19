@@ -55,7 +55,13 @@ public enum Permission {
     USER_EDIT("Chỉnh sửa thông tin user"),
     USER_DELETE("Xóa user"),
     USER_MANAGE_ALL("Quản lý tất cả user"),
-    
+
+    SERVICE_VIEW("Xem danh sách dịch vụ"),
+    SERVICE_CREATE("Tạo dịch vụ mới"),
+    SERVICE_EDIT("Chỉnh sửa dịch vụ"),
+    SERVICE_DELETE("Xóa dịch vụ"),
+    SERVICE_EXPORT("Xuất dữ liệu dịch vụ / phục vụ xuất hóa đơn"),
+
     // Profile change request
     REQUEST_PROFILE_CHANGE("Yêu cầu thay đổi thông tin cá nhân"),
     APPROVE_PROFILE_CHANGE("Phê duyệt thay đổi thông tin"),
