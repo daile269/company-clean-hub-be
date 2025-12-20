@@ -35,6 +35,7 @@ public enum ErrorCode {
     REPLACEMENT_EMPLOYEE_HAS_ATTENDANCE(400,"Người thay đã phụ trách khách hàng vào ngày này"),
     NO_ATTENDANCE_DATA(400,"Không tìm thấy dữ liệu chấm công cho nhân viên trong thời gian yêu cầu"),
     NO_ASSIGNMENT_DATA(400,"Không tìm thấy dữ liệu phân công cho nhân viên trong thời gian yêu cầu"),
+    NO_ASSIGNMENT_EMP(400,"Không có nhân viên nào được phân công cho hợp đồng này trong thời gian yêu cầu"),   
     ASSIGNMENT_START_DATE_BEFORE_CONTRACT(400,"Ngày bắt đầu phân công không được trước ngày bắt đầu hợp đồng"),
     
     INVOICE_NOT_FOUND(404,"Hóa đơn không tồn tại"),

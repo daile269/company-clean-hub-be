@@ -284,6 +284,7 @@ public class AssignmentScheduler {
                                 .penalty(penalty)
                                 .supportCost(supportCost)
                                 .isOvertime(false)
+                                .deleted(false)
                                 .description("Tự động sinh cho tháng " + currentMonth)
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
