@@ -20,7 +20,7 @@ public class PayrollResponse {
     private Long employeeId;
     private String employeeName;
     private String employeeCode;
-    
+
     private Integer month;
     private Integer year;
     private Integer totalDays;
@@ -31,15 +31,17 @@ public class PayrollResponse {
     private BigDecimal allowanceTotal;
     private BigDecimal insuranceTotal;
     private BigDecimal finalSalary;
-    
+    private BigDecimal baseSalary;
+
     private PayrollStatus status;
     private BigDecimal paidAmount;
-    private BigDecimal remainingAmount;  // Calculated: finalSalary - paidAmount
+    private BigDecimal remainingAmount; // Calculated: finalSalary - paidAmount
     private LocalDateTime paymentDate;
-    
+
     private Long accountantId;
     private String accountantName;
-    
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String note;
 }

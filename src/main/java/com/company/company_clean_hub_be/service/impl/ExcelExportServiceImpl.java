@@ -56,7 +56,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         }
     }
 
-    private <T> Workbook createWorkbookGeneric(List<T> data, List<Column<T>> columns, String sheetName,String title) {
+    private <T> Workbook createWorkbookGeneric(List<T> data, List<Column<T>> columns, String sheetName, String title) {
         Workbook workbook = new XSSFWorkbook();
         Sheet sheet = workbook.createSheet(sheetName);
 
@@ -100,13 +100,13 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
         // Row 3: Phone and Document Title
         Row phoneRow = sheet.createRow(currentRowIndex++);
-        
+
         // Phone part (left)
         sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(3, 3, 0, totalColumns / 2 - 1));
         Cell phoneCell = phoneRow.createCell(0);
         phoneCell.setCellValue("Điện Thoại: 0901417674 - 0762833102");
         phoneCell.setCellStyle(companyHeaderStyle);
-        
+
         // Document Title part (right)
         sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(3, 3, totalColumns / 2, totalColumns - 1));
         Cell titleCell = phoneRow.createCell(totalColumns / 2);
@@ -181,7 +181,6 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         return workbook;
     }
 
-
     private ByteArrayResource convertWorkbookToResource(Workbook workbook) {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             workbook.write(out);
@@ -192,15 +191,16 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         }
     }
 
-
     @Override
-    public ByteArrayResource exportUsersToExcel(List<PayRollExportExcel> payRollExportExcels, Integer month,Integer year) {
+    public ByteArrayResource exportUsersToExcel(List<PayRollExportExcel> payRollExportExcels, Integer month,
+            Integer year) {
         // For backward compatibility, convert to new format and use new export method
         // This should not be called anymore, but keeping for compatibility
         return exportPayrollAssignmentsToExcel(convertToAssignmentFormat(payRollExportExcels), month, year);
     }
+
     @Override
-    public ByteArrayResource exportPayrollAssignmentsToExcel(List<PayRollAssignmentExportExcel> assignmentData, Integer month, Integer year) {
+    public ByteArrayResource exportPayrollAssignmentsToExcel(List<PayRollAssignmentExportExcel> assignmentData,Integer month, Integer year) {
         log.info("exportPayrollAssignmentsToExcel started: total rows={}", assignmentData.size());
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Bảng lương");
@@ -213,11 +213,11 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // ===== COMPANY HEADER SECTION =====
             int currentRowIndex = 0;
-            int totalColumns = 16; // Updated to include paidAmount column
+            int totalColumns = 17; // Updated to include base salary column
 
             // Row 0: Company name
             Row companyRow = sheet.createRow(currentRowIndex++);
-            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0,totalColumns - 1));
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, totalColumns - 1));
             Cell companyCell = companyRow.createCell(0);
             companyCell.setCellValue("CÔNG TY TNHH TMDV PANPACIFIC");
             companyCell.setCellStyle(companyHeaderStyle);
@@ -258,8 +258,9 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             Row headerRow = sheet.createRow(currentRowIndex++);
             String[] headers = {
                     "Mã NV", "Họ tên", "Ngân hàng", "Số TK", "SĐT",
-                    "Công trình", "Ngày công", "Thưởng", "Phạt",
-                    "Phụ cấp", "Bảo hiểm", "Tổng lương", "Tổng lương ứng", "Lương đã thanh toán", "Lương còn lại", "Ghi chú"
+                    "Công trình", "Ngày công", "Lương ngày công", "Thưởng", "Phạt",
+                    "Phụ cấp", "Bảo hiểm", "Tổng lương", "Tổng lương ứng", "Lương đã thanh toán", "Lương còn lại",
+                    "Ghi chú"
             };
 
             for (int i = 0; i < headers.length; i++) {
@@ -307,61 +308,67 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                 cell6.setCellValue(row.getTotalDays() != null ? row.getTotalDays() : 0);
                 cell6.setCellStyle(numberStyle);
 
-                // Tổng thưởng
+                // Lương ngày công (Base Salary)
                 Cell cell7 = dataRow.createCell(7);
-                cell7.setCellValue(row.getTotalBonus() != null ? row.getTotalBonus().doubleValue() : 0);
+                cell7.setCellValue(row.getBaseSalary() != null ? row.getBaseSalary().doubleValue() : 0);
                 cell7.setCellStyle(numberStyle);
 
-                // Tổng phạt
+                // Tổng thưởng
                 Cell cell8 = dataRow.createCell(8);
-                cell8.setCellValue(row.getTotalPenalty() != null ? row.getTotalPenalty().doubleValue() : 0);
+                cell8.setCellValue(row.getTotalBonus() != null ? row.getTotalBonus().doubleValue() : 0);
                 cell8.setCellStyle(numberStyle);
 
-                // Tổng phụ cấp
+                // Tổng phạt
                 Cell cell9 = dataRow.createCell(9);
-                cell9.setCellValue(row.getTotalAllowance() != null ? row.getTotalAllowance().doubleValue() : 0);
+                cell9.setCellValue(row.getTotalPenalty() != null ? row.getTotalPenalty().doubleValue() : 0);
                 cell9.setCellStyle(numberStyle);
 
-                // Bảo hiểm
+                // Tổng phụ cấp
                 Cell cell10 = dataRow.createCell(10);
-                cell10.setCellValue(row.getTotalInsurance() != null ? row.getTotalInsurance().doubleValue() : 0);
+                cell10.setCellValue(row.getTotalAllowance() != null ? row.getTotalAllowance().doubleValue() : 0);
                 cell10.setCellStyle(numberStyle);
 
-                // Tổng lương (before advance)
+                // Bảo hiểm
                 Cell cell11 = dataRow.createCell(11);
-                cell11.setCellValue(row.getTotalSalaryBeforeAdvance() != null ? row.getTotalSalaryBeforeAdvance().doubleValue() : 0);
+                cell11.setCellValue(row.getTotalInsurance() != null ? row.getTotalInsurance().doubleValue() : 0);
                 cell11.setCellStyle(numberStyle);
 
-                // Tổng lương ứng
+                // Tổng lương (before advance)
                 Cell cell12 = dataRow.createCell(12);
-                cell12.setCellValue(row.getTotalAdvance() != null ? row.getTotalAdvance().doubleValue() : 0);
+                cell12.setCellValue(
+                        row.getTotalSalaryBeforeAdvance() != null ? row.getTotalSalaryBeforeAdvance().doubleValue()
+                                : 0);
                 cell12.setCellStyle(numberStyle);
 
-                // Lương đã thanh toán (NEW COLUMN)
+                // Tổng lương ứng
                 Cell cell13 = dataRow.createCell(13);
-                cell13.setCellValue(row.getPaidAmount() != null ? row.getPaidAmount().doubleValue() : 0);
+                cell13.setCellValue(row.getTotalAdvance() != null ? row.getTotalAdvance().doubleValue() : 0);
                 cell13.setCellStyle(numberStyle);
 
-                // Lương còn lại (after advance)
+                // Lương đã thanh toán (NEW COLUMN)
                 Cell cell14 = dataRow.createCell(14);
-                cell14.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
+                cell14.setCellValue(row.getPaidAmount() != null ? row.getPaidAmount().doubleValue() : 0);
                 cell14.setCellStyle(numberStyle);
-                
-                // Ghi chú (note)
+
+                // Lương còn lại (after advance)
                 Cell cell15 = dataRow.createCell(15);
-                cell15.setCellValue(row.getNote() != null ? row.getNote() : "");
-                cell15.setCellStyle(dataStyle);
+                cell15.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
+                cell15.setCellStyle(numberStyle);
+
+                // Ghi chú (note)
+                Cell cell16 = dataRow.createCell(16);
+                cell16.setCellValue(row.getNote() != null ? row.getNote() : "");
+                cell16.setCellStyle(dataStyle);
             }
 
             // Auto-size columns
             for (int i = 0; i < headers.length; i++) {
                 sheet.autoSizeColumn(i);
             }
-
             // Set minimum widths for readability
             sheet.setColumnWidth(1, 4000); // Name
             sheet.setColumnWidth(5, 8000); // Projects (can be long list)
-            sheet.setColumnWidth(15,  130 * 256); // Note column (wider for formulas)
+            sheet.setColumnWidth(16, 130 * 256); // Note column (wider for formulas)
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);
@@ -374,190 +381,6 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         }
     }
 
-
-    private void writeAssignmentRow(Row row, PayRollAssignmentExportExcel data,
-                                    CellStyle dataStyle, CellStyle numberStyle,
-                                    CellStyle mergedCellStyle, boolean isFirstRow) {
-        // Mã nhân viên
-        Cell cell0 = row.createCell(0);
-        cell0.setCellValue(data.getEmployeeId() != null ? data.getEmployeeId().toString() : "");
-        cell0.setCellStyle(isFirstRow ? dataStyle : mergedCellStyle);
-
-        // Họ tên
-        Cell cell1 = row.createCell(1);
-        cell1.setCellValue(data.getEmployeeName() != null ? data.getEmployeeName() : "");
-        cell1.setCellStyle(isFirstRow ? dataStyle : mergedCellStyle);
-
-        // Ngân hàng
-        Cell cell2 = row.createCell(2);
-        cell2.setCellValue(data.getBankName() != null ? data.getBankName() : "");
-        cell2.setCellStyle(isFirstRow ? dataStyle : mergedCellStyle);
-
-        // Số tài khoản
-        Cell cell3 = row.createCell(3);
-        cell3.setCellValue(data.getBankAccount() != null ? data.getBankAccount() : "");
-        cell3.setCellStyle(isFirstRow ? dataStyle : mergedCellStyle);
-
-        // Số điện thoại
-        Cell cell4 = row.createCell(4);
-        cell4.setCellValue(data.getPhone() != null ? data.getPhone() : "");
-        cell4.setCellStyle(isFirstRow ? dataStyle : mergedCellStyle);
-
-        // Loại phân công (assignmentType)
-        Cell cell5 = row.createCell(5);
-        cell5.setCellValue(data.getAssignmentType() != null ? data.getAssignmentType() : "");
-        cell5.setCellStyle(dataStyle);
-
-        // Mức lương cơ bản (baseSalary)
-        Cell cell6 = row.createCell(6);
-        cell6.setCellValue(data.getBaseSalary() != null ? data.getBaseSalary().doubleValue() : 0);
-        cell6.setCellStyle(numberStyle);
-
-        // Công trình
-        Cell cell7 = row.createCell(7);
-        cell7.setCellValue(data.getProjectCompany() != null ? data.getProjectCompany() : "");
-        cell7.setCellStyle(dataStyle);
-
-        // Tổng ngày
-        Cell cell8 = row.createCell(8);
-        cell8.setCellValue(data.getAssignmentDays() != null ? data.getAssignmentDays() : 0);
-        cell8.setCellStyle(numberStyle);
-
-        // Ngày KH
-        Cell cell8b = row.createCell(9);
-        cell8b.setCellValue(data.getAssignmentPlanedDays() != null ? data.getAssignmentPlanedDays() : 0);
-        cell8b.setCellStyle(numberStyle);
-
-        // Thưởng
-        Cell cell9 = row.createCell(10);
-        cell9.setCellValue(data.getAssignmentBonus() != null ? data.getAssignmentBonus().doubleValue() : 0);
-        cell9.setCellStyle(numberStyle);
-
-        // Phạt
-        Cell cell10 = row.createCell(11);
-        cell10.setCellValue(data.getAssignmentPenalty() != null ? data.getAssignmentPenalty().doubleValue() : 0);
-        cell10.setCellStyle(numberStyle);
-
-        // Phụ cấp
-        Cell cell11 = row.createCell(12);
-        cell11.setCellValue(data.getAssignmentAllowance() != null ? data.getAssignmentAllowance().doubleValue() : 0);
-        cell11.setCellStyle(numberStyle);
-        // Phụ cấp
-        Cell cell12 = row.createCell(13);
-        cell12.setCellValue(data.getCompanyAllowance() != null ? data.getCompanyAllowance().doubleValue() : 0);
-        cell12.setCellStyle(numberStyle);
-
-        // Bảo hiểm
-        Cell cell13 = row.createCell(14);
-        cell13.setCellValue(data.getAssignmentInsurance() != null ? data.getAssignmentInsurance().doubleValue() : 0);
-        cell13.setCellStyle(numberStyle);
-
-        // Lương ứng
-        Cell cell14 = row.createCell(15);
-        cell14.setCellValue(data.getAssignmentAdvance() != null ? data.getAssignmentAdvance().doubleValue() : 0);
-        cell14.setCellStyle(numberStyle);
-
-        Cell cell15 = row.createCell(16);
-        cell15.setCellValue(data.getAssignmentSalary() != null ? data.getAssignmentSalary().doubleValue() : 0);
-        cell15.setCellStyle(numberStyle);
-    }
-
-    private void writeTotalRow(Row row, PayRollAssignmentExportExcel data,
-                               CellStyle dataStyle, CellStyle numberStyle,
-                               CellStyle totalRowStyle, CellStyle mergedCellStyle, int assignmentCount) {
-        // Mã nhân viên
-        Cell cell0 = row.createCell(0);
-        cell0.setCellValue(data.getEmployeeId() != null ? data.getEmployeeId().toString() : "");
-        cell0.setCellStyle(assignmentCount > 1 ? mergedCellStyle : dataStyle);
-
-        // Họ tên
-        Cell cell1 = row.createCell(1);
-        cell1.setCellValue(data.getEmployeeName() != null ? data.getEmployeeName() : "");
-        cell1.setCellStyle(assignmentCount > 1 ? mergedCellStyle : dataStyle);
-
-        // Ngân hàng
-        Cell cell2 = row.createCell(2);
-        cell2.setCellValue(data.getBankName() != null ? data.getBankName() : "");
-        cell2.setCellStyle(assignmentCount > 1 ? mergedCellStyle : dataStyle);
-
-        // Số tài khoản
-        Cell cell3 = row.createCell(3);
-        cell3.setCellValue(data.getBankAccount() != null ? data.getBankAccount() : "");
-        cell3.setCellStyle(assignmentCount > 1 ? mergedCellStyle : dataStyle);
-
-        // Số điện thoại
-        Cell cell4 = row.createCell(4);
-        cell4.setCellValue(data.getPhone() != null ? data.getPhone() : "");
-        cell4.setCellStyle(assignmentCount > 1 ? mergedCellStyle : dataStyle);
-
-        // Loại phân công (blank for total)
-        Cell cell5 = row.createCell(5);
-        cell5.setCellValue("");
-        cell5.setCellStyle(totalRowStyle);
-
-        // Mức lương cơ bản (blank for total)
-        Cell cell6 = row.createCell(6);
-        cell6.setCellValue("");
-        cell6.setCellStyle(totalRowStyle);
-
-        // Công trình (blank)
-        Cell cell7 = row.createCell(7);
-        cell7.setCellValue("");
-        cell7.setCellStyle(totalRowStyle);
-
-        // Tổng ngày (total)
-        Cell cell8 = row.createCell(8);
-        cell8.setCellValue(data.getTotalDays() != null ? data.getTotalDays() : 0);
-        cell8.setCellStyle(totalRowStyle);
-
-        Cell cell15 = row.createCell(9);
-        cell15.setCellValue(data.getTotalPlanedDays() != null ? data.getTotalPlanedDays() : 0);
-        cell15.setCellStyle(totalRowStyle);
-        // Thưởng
-        Cell cell9 = row.createCell(10);
-        cell9.setCellValue(data.getTotalBonus() != null ? data.getTotalBonus().doubleValue() : 0);
-        cell9.setCellStyle(totalRowStyle);
-
-        // Phạt
-        Cell cell10 = row.createCell(11);
-        cell10.setCellValue(data.getTotalPenalty() != null ? data.getTotalPenalty().doubleValue() : 0);
-        cell10.setCellStyle(totalRowStyle);
-
-        // Phụ cấp
-        Cell cell11 = row.createCell(12);
-        cell11.setCellValue(data.getTotalAllowance() != null ? data.getTotalAllowance().doubleValue() : 0);
-        cell11.setCellStyle(totalRowStyle);
-
-        // Phụ cấp
-        Cell cell12 = row.createCell(13);
-        cell12.setCellValue(data.getCompanyAllowance() != null ? data.getCompanyAllowance().doubleValue() : 0);
-        cell12.setCellStyle(totalRowStyle);
-
-        // Bảo hiểm
-        Cell cell13 = row.createCell(14);
-        cell13.setCellValue(data.getTotalInsurance() != null ? data.getTotalInsurance().doubleValue() : 0);
-        cell13.setCellStyle(totalRowStyle);
-
-        // Lương ứng
-        Cell cell14 = row.createCell(15);
-        cell14.setCellValue(data.getTotalAdvance() != null ? data.getTotalAdvance().doubleValue() : 0);
-        cell14.setCellStyle(totalRowStyle);
-
-        // Tổng lương
-        Cell cell16 = row.createCell(16);
-        cell16.setCellValue(data.getFinalSalary() != null ? data.getFinalSalary().doubleValue() : 0);
-        cell16.setCellStyle(totalRowStyle);
-    }
-    private CellStyle createTotalRowStyle(Workbook workbook) {
-        CellStyle style = createDataStyle(workbook);
-        style.setFillForegroundColor(IndexedColors.LIGHT_GREEN.getIndex());
-        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        Font font = workbook.createFont();
-        font.setBold(true);
-        style.setFont(font);
-        return style;
-    }
-    
     private List<PayRollAssignmentExportExcel> convertToAssignmentFormat(List<PayRollExportExcel> oldData) {
         // This is a fallback conversion - should not be used in normal flow
         List<PayRollAssignmentExportExcel> result = new ArrayList<>();
@@ -569,8 +392,9 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                     .bankAccount(old.getBankAccount())
                     .phone(old.getPhone())
                     .assignmentType(old.getEmployeeType())
-                    .projectCompany(old.getProjectCompanies() != null && !old.getProjectCompanies().isEmpty() 
-                            ? String.join(", ", old.getProjectCompanies()) : null)
+                    .projectCompany(old.getProjectCompanies() != null && !old.getProjectCompanies().isEmpty()
+                            ? String.join(", ", old.getProjectCompanies())
+                            : null)
                     .assignmentDays(old.getTotalDays())
                     .assignmentBonus(old.getTotalBonus())
                     .assignmentPenalty(old.getTotalPenalty())
@@ -631,13 +455,13 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // Row 3: Phone and Document Title (2 columns merged for each)
             Row phoneRow = sheet.createRow(currentRowIndex++);
-            
+
             // Phone part (left)
             sheet.addMergedRegion(new CellRangeAddress(3, 3, 0, 5));
             Cell phoneCell = phoneRow.createCell(0);
             phoneCell.setCellValue("Điện Thoại: 0901417674 - 0762833102");
             phoneCell.setCellStyle(companyHeaderStyle);
-            
+
             // Document Title part (right)
             sheet.addMergedRegion(new CellRangeAddress(3, 3, 6, totalColumns - 1));
             Cell titleCell = phoneRow.createCell(6);
@@ -649,10 +473,10 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // Header row for table
             Row headerRow = sheet.createRow(currentRowIndex++);
-            String[] headers = {"STT", "Khách hàng", "Địa chỉ", "Mã số thuế", "Email",
+            String[] headers = { "STT", "Khách hàng", "Địa chỉ", "Mã số thuế", "Email",
                     "Mã hợp đồng", "Ngày ký", "Ngày hết hạn", "Ngày làm việc",
-//                    "Giá trị HĐ", "Tổng giá trị",
-                    "Số ngày làm", "Thuế VAT"};
+                    // "Giá trị HĐ", "Tổng giá trị",
+                    "Số ngày làm", "Thuế VAT" };
 
             for (int i = 0; i < headers.length; i++) {
                 Cell cell = headerRow.createCell(i);
@@ -677,26 +501,23 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
                     // Customer name (only first row)
                     Cell customerCell = dataRow.createCell(1);
-                    customerCell.setCellValue(customerGroup.getCustomerName() != null ? 
-                        customerGroup.getCustomerName() : "");
+                    customerCell.setCellValue(
+                            customerGroup.getCustomerName() != null ? customerGroup.getCustomerName() : "");
                     customerCell.setCellStyle(i == 0 ? dataStyle : mergedCellStyle);
 
                     // Address (only first row)
                     Cell addressCell = dataRow.createCell(2);
-                    addressCell.setCellValue(customerGroup.getAddress() != null ? 
-                        customerGroup.getAddress() : "");
+                    addressCell.setCellValue(customerGroup.getAddress() != null ? customerGroup.getAddress() : "");
                     addressCell.setCellStyle(i == 0 ? dataStyle : mergedCellStyle);
 
                     // Tax code (only first row)
                     Cell taxCell = dataRow.createCell(3);
-                    taxCell.setCellValue(customerGroup.getTaxCode() != null ? 
-                        customerGroup.getTaxCode() : "");
+                    taxCell.setCellValue(customerGroup.getTaxCode() != null ? customerGroup.getTaxCode() : "");
                     taxCell.setCellStyle(i == 0 ? dataStyle : mergedCellStyle);
 
                     // Email (only first row)
                     Cell emailCell = dataRow.createCell(4);
-                    emailCell.setCellValue(customerGroup.getEmail() != null ? 
-                        customerGroup.getEmail() : "");
+                    emailCell.setCellValue(customerGroup.getEmail() != null ? customerGroup.getEmail() : "");
                     emailCell.setCellStyle(i == 0 ? dataStyle : mergedCellStyle);
 
                     // Contract code
@@ -719,10 +540,10 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                     workingDaysCell.setCellValue(contract.getWorkingDays());
                     workingDaysCell.setCellStyle(dataStyle);
 
-//                    // Contract value
-//                    Cell contractValueCell = dataRow.createCell(9);
-//                    contractValueCell.setCellValue(contract.getContractValue());
-//                    contractValueCell.setCellStyle(numberStyle);
+                    // // Contract value
+                    // Cell contractValueCell = dataRow.createCell(9);
+                    // contractValueCell.setCellValue(contract.getContractValue());
+                    // contractValueCell.setCellStyle(numberStyle);
 
                     // Work days
                     Cell workDaysCell = dataRow.createCell(9);
@@ -734,10 +555,10 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                     vatCell.setCellValue(contract.getVatAmount());
                     vatCell.setCellStyle(numberStyle);
 
-//                    // Total value
-//                    Cell totalValueCell = dataRow.createCell(11);
-//                    totalValueCell.setCellValue(contract.getTotalValue());
-//                    totalValueCell.setCellStyle(numberStyle);
+                    // // Total value
+                    // Cell totalValueCell = dataRow.createCell(11);
+                    // totalValueCell.setCellValue(contract.getTotalValue());
+                    // totalValueCell.setCellStyle(numberStyle);
                 }
 
                 // Merge cells if customer has multiple contracts
@@ -832,7 +653,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
     public ByteArrayResource exportEmployeesToExcel(List<EmployeeExportDto> employees) {
         log.info("exportEmployeesToExcel requested with {} employees", employees.size());
         try (Workbook workbook = new XSSFWorkbook();
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                ByteArrayOutputStream out = new ByteArrayOutputStream()) {
 
             Sheet sheet = workbook.createSheet("Danh sách nhân viên");
 
@@ -867,13 +688,13 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // Row 3: Phone and Document Title
             Row phoneRow = sheet.createRow(currentRowIndex++);
-            
+
             // Phone part (left)
             sheet.addMergedRegion(new CellRangeAddress(3, 3, 0, 5));
             Cell phoneCell = phoneRow.createCell(0);
             phoneCell.setCellValue("Điện Thoại: 0901417674 - 0762833102");
             phoneCell.setCellStyle(companyHeaderStyle);
-            
+
             // Document Title part (right)
             sheet.addMergedRegion(new CellRangeAddress(3, 3, 6, totalColumns - 1));
             Cell titleCell = phoneRow.createCell(6);
@@ -886,7 +707,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             // Header columns
             String[] headers = {
                     "STT", "Mã nhân viên", "Tên", "Tên đăng nhập", "Email", "SĐT",
-                    "Địa chỉ", "CCCD", "Tài khoản ngân hàng", "Ngân hàng",  "Mô tả", "Ngày tạo", "Cập nhật lần cuối"
+                    "Địa chỉ", "CCCD", "Tài khoản ngân hàng", "Ngân hàng", "Mô tả", "Ngày tạo", "Cập nhật lần cuối"
             };
 
             // Create header row
@@ -964,8 +785,8 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                 sheet.autoSizeColumn(i);
             }
             // Set specific widths for better readability
-            sheet.setColumnWidth(2, 5000);  // Tên
-            sheet.setColumnWidth(6, 6000);  // Địa chỉ
+            sheet.setColumnWidth(2, 5000); // Tên
+            sheet.setColumnWidth(6, 6000); // Địa chỉ
             sheet.setColumnWidth(12, 5000); // Mô tả
 
             workbook.write(out);

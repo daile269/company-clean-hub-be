@@ -32,7 +32,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
 public class Payroll {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -58,6 +58,9 @@ public class Payroll {
 
     @Column(name = "final_salary")
     private BigDecimal finalSalary;
+
+    @Column(name = "base_salary")
+    private BigDecimal baseSalary;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
@@ -94,5 +97,8 @@ public class Payroll {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note;
 
 }
