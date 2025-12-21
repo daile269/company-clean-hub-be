@@ -35,6 +35,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         private final CustomerRepository customerRepository;
         private final ContractRepository contractRepository;
         private final AttendanceRepository attendanceRepository;
+        private final com.company.company_clean_hub_be.repository.RatingRepository ratingRepository;
         private final AssignmentHistoryRepository assignmentHistoryRepository;
         private final UserRepository userRepository;
 
@@ -331,8 +332,11 @@ public class AssignmentServiceImpl implements AssignmentService {
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
                 log.info("deleteAssignment by {}: assignmentId={}", username, id);
 
-                // 1) Delete related attendances for the assignment's month before removing the assignment
+                // 1) Delete related ratings and attendances for the assignment's month before removing the assignment
                 try {
+                        try {
+                                ratingRepository.deleteByAssignmentId(assignment.getId());
+                        } catch (Exception ignored) {}
                         YearMonth ym = YearMonth.from(assignment.getStartDate());
                         LocalDate monthStart = ym.atDay(1);
                         LocalDate monthEnd = ym.atEndOfMonth();
