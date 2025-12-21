@@ -1048,6 +1048,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 .employee(assignment.getEmployee())
                                                 .assignment(assignment)
                                                 .date(startDate)
+                                        .deleted(false)
                                                 .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
                                                 .bonus(java.math.BigDecimal.ZERO)
                                                 .penalty(java.math.BigDecimal.ZERO)
@@ -1098,7 +1099,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                 .assignment(assignment)
                                                                 .date(currentDate)
                                                                 .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định
-                                                                                                            // 8 giờ
+                                                        .deleted(false)                                // 8 giờ
                                                                 .bonus(java.math.BigDecimal.ZERO)
                                                                 .penalty(java.math.BigDecimal.ZERO)
                                                                 .supportCost(java.math.BigDecimal.ZERO)
