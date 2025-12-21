@@ -120,13 +120,12 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
             "JOIN a.attendances att " +
             "WHERE a.employee.id = :employeeId " +
             "AND FUNCTION('MONTH', att.date) = :month " +
-            "AND (:status IS NULL OR a.status = :status)"+
-            "AND FUNCTION('YEAR', att.date) = :year")
+            "AND FUNCTION('YEAR', att.date) = :year " +
+            "AND a.status <> com.company.company_clean_hub_be.entity.AssignmentStatus.CANCELED")
     List<Assignment> findDistinctAssignmentsByAttendanceMonthAndEmployee(
             @Param("month") Integer month,
             @Param("year") Integer year,
-            @Param("employeeId") Long employeeId,
-            @Param("status") AssignmentStatus status);
+            @Param("employeeId") Long employeeId);
 
        @Query("SELECT a FROM Assignment a " +
               "WHERE a.assignmentType = 'TEMPORARY' " +
