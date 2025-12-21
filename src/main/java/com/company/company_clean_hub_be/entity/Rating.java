@@ -7,6 +7,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -27,7 +29,8 @@ import lombok.EqualsAndHashCode;
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Rating {
     @Id
-    private Long id; // note: schema had plain PRIMARY KEY (no auto-increment)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id")
@@ -37,15 +40,32 @@ public class Rating {
     private Customer customer;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "service_id")
+    @JoinColumn(name = "employee_id")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     @JsonIgnore
-    private ServiceEntity service;
+    private Employee employee;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignment_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
+    private Assignment assignment;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "contract_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
+    private Contract contract;
 
     private Integer rating;
 
     private String comment;
+
+    @Column(name = "created_by")
+    private String createdBy;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

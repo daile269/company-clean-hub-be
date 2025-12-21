@@ -35,6 +35,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         private final CustomerRepository customerRepository;
         private final ContractRepository contractRepository;
         private final AttendanceRepository attendanceRepository;
+        private final com.company.company_clean_hub_be.repository.RatingRepository ratingRepository;
         private final AssignmentHistoryRepository assignmentHistoryRepository;
         private final UserRepository userRepository;
 
@@ -324,11 +325,50 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
 
         @Override
+        @Transactional
         public void deleteAssignment(Long id) {
                 Assignment assignment = assignmentRepository.findById(id)
                                 .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
                 log.info("deleteAssignment by {}: assignmentId={}", username, id);
+
+                // 1) Delete related ratings and attendances for the assignment's month before removing the assignment
+                try {
+                        try {
+                                ratingRepository.deleteByAssignmentId(assignment.getId());
+                        } catch (Exception ignored) {}
+                        YearMonth ym = YearMonth.from(assignment.getStartDate());
+                        LocalDate monthStart = ym.atDay(1);
+                        LocalDate monthEnd = ym.atEndOfMonth();
+
+                        List<Attendance> related = attendanceRepository.findByAssignmentAndDateBetween(
+                                        assignment.getId(), monthStart, monthEnd);
+                        if (related != null && !related.isEmpty()) {
+                                log.info("Deleting {} attendances for assignmentId={}", related.size(), assignment.getId());
+                                attendanceRepository.deleteAll(related);
+                        }
+                } catch (Exception ex) {
+                        log.warn("Failed to delete attendances for assignmentId={}: {}", assignment.getId(), ex.getMessage());
+                }
+
+                // 2) Delete assignment history entries that reference this assignment (old or new)
+                try {
+                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> oldHist = assignmentHistoryRepository.findByOldAssignmentId(assignment.getId());
+                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> newHist = assignmentHistoryRepository.findByNewAssignmentId(assignment.getId());
+
+                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> relatedHistories = new ArrayList<>();
+                        if (oldHist != null && !oldHist.isEmpty()) relatedHistories.addAll(oldHist);
+                        if (newHist != null && !newHist.isEmpty()) relatedHistories.addAll(newHist);
+
+                        if (!relatedHistories.isEmpty()) {
+                                log.info("Deleting {} assignment history records referencing assignmentId={}", relatedHistories.size(), assignment.getId());
+                                assignmentHistoryRepository.deleteAll(relatedHistories);
+                        }
+                } catch (Exception ex) {
+                        log.warn("Failed to delete assignment history for assignmentId={}: {}", assignment.getId(), ex.getMessage());
+                }
+
+                // 3) Delete the assignment itself
                 assignmentRepository.delete(assignment);
                 log.info("deleteAssignment completed: assignmentId={}", id);
         }

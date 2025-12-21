@@ -65,7 +65,14 @@ public enum Permission {
     // Profile change request
     REQUEST_PROFILE_CHANGE("Yêu cầu thay đổi thông tin cá nhân"),
     APPROVE_PROFILE_CHANGE("Phê duyệt thay đổi thông tin"),
-    
+
+    // Rating
+    REVIEW_CREATE("Đánh giá nhân viên"),
+    REVIEW_UPDATE("Cập nhật đánh giá nhân viên"),
+    REVIEW_DELETE("Xóa đánh giá nhân viên"),
+    REVIEW_VIEW_ALL("Xem danh sách đánh giá"),
+    REVIEW_VIEW_CONTRACT("Xem danh sách đánh giá của hợp đồng"),
+
     // Audit
     AUDIT_VIEW("Xem lịch sử thay đổi");
     
