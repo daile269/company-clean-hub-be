@@ -19,6 +19,7 @@ import com.company.company_clean_hub_be.dto.request.PayrollRequest;
 import com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
+import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
 import com.company.company_clean_hub_be.entity.Assignment;
@@ -26,6 +27,7 @@ import com.company.company_clean_hub_be.entity.AssignmentScope;
 import com.company.company_clean_hub_be.entity.AssignmentType;
 import com.company.company_clean_hub_be.entity.Attendance;
 import com.company.company_clean_hub_be.entity.Employee;
+import com.company.company_clean_hub_be.entity.PaymentHistory;
 import com.company.company_clean_hub_be.entity.Payroll;
 import com.company.company_clean_hub_be.entity.User;
 import com.company.company_clean_hub_be.exception.AppException;
@@ -33,6 +35,7 @@ import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.AttendanceRepository;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
+import com.company.company_clean_hub_be.repository.PaymentHistoryRepository;
 import com.company.company_clean_hub_be.repository.PayrollRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.service.PayrollService;
@@ -52,6 +55,7 @@ public class PayrollServiceImpl implements PayrollService {
     private final UserService userService;
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
+    private final PaymentHistoryRepository paymentHistoryRepository;
 
     @Override
     public List<PayrollAssignmentResponse> calculatePayroll(PayrollRequest request) {
@@ -1071,6 +1075,10 @@ public class PayrollServiceImpl implements PayrollService {
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
 
+        // Get previous paid amount to calculate the payment for this transaction
+        BigDecimal previousPaid = payroll.getPaidAmount() != null ? payroll.getPaidAmount() : BigDecimal.ZERO;
+        BigDecimal paymentAmount = paidAmount != null ? paidAmount.subtract(previousPaid) : BigDecimal.ZERO;
+
         // Cập nhật paidAmount
         if (paidAmount != null) {
             payroll.setPaidAmount(paidAmount);
@@ -1084,20 +1092,42 @@ public class PayrollServiceImpl implements PayrollService {
         BigDecimal epsilon = new BigDecimal("0.01");
         BigDecimal difference = finalSalary.subtract(currentPaid);
 
+        LocalDateTime paymentDate = null;
         if (currentPaid.compareTo(BigDecimal.ZERO) == 0) {
             payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID);
             payroll.setPaymentDate(null);
         } else if (difference.compareTo(epsilon) <= 0) {
             // If difference <= 0.01, consider it as fully paid
             payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PAID);
-            payroll.setPaymentDate(LocalDateTime.now());
+            paymentDate = LocalDateTime.now();
+            payroll.setPaymentDate(paymentDate);
         } else {
             payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PARTIAL_PAID);
+            paymentDate = LocalDateTime.now();
         }
 
         payroll.setUpdatedAt(LocalDateTime.now());
 
         Payroll updatedPayroll = payrollRepository.save(payroll);
+
+        // Create payment history record if payment was made
+        if (paymentAmount.compareTo(BigDecimal.ZERO) > 0) {
+            Integer installmentCount = paymentHistoryRepository.countByPayrollId(id);
+            Integer installmentNumber = (installmentCount != null ? installmentCount : 0) + 1;
+
+            PaymentHistory paymentHistory = PaymentHistory.builder()
+                    .payroll(updatedPayroll)
+                    .paymentDate(paymentDate != null ? paymentDate : LocalDateTime.now())
+                    .amount(paymentAmount)
+                    .installmentNumber(installmentNumber)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+
+            paymentHistoryRepository.save(paymentHistory);
+            log.info("Created payment history: payrollId={}, installment={}, amount={}",
+                    id, installmentNumber, paymentAmount);
+        }
+
         log.info("updatePaymentStatus completed: id={}, status={}, paidAmount={}",
                 id, updatedPayroll.getStatus(), updatedPayroll.getPaidAmount());
         LocalDateTime createdAt = updatedPayroll.getCreatedAt();
@@ -1285,8 +1315,6 @@ public class PayrollServiceImpl implements PayrollService {
             log.info("WARNING: payroll.getEmployee() is null!");
         }
 
-        log.info("Building PayrollResponse ...");
-
         PayrollResponse response = PayrollResponse.builder()
                 .id(payroll.getId())
                 .employeeId(employeeId)
@@ -1316,9 +1344,29 @@ public class PayrollServiceImpl implements PayrollService {
                 .note(payroll.getNote())
                 .build();
 
-        log.info("=== mapToResponse END === PayRes: {}", response);
-
         return response;
+    }
+
+    @Override
+    public List<PaymentHistoryResponse> getPaymentHistory(Long payrollId) {
+        log.info("getPaymentHistory requested: payrollId={}", payrollId);
+
+        // Verify payroll exists
+        payrollRepository.findById(payrollId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
+
+        List<PaymentHistory> histories = paymentHistoryRepository.findByPayrollIdOrderByCreatedAtAsc(payrollId);
+
+        return histories.stream()
+                .map(history -> PaymentHistoryResponse.builder()
+                        .id(history.getId())
+                        .payrollId(history.getPayroll().getId())
+                        .paymentDate(history.getPaymentDate())
+                        .amount(history.getAmount())
+                        .installmentNumber(history.getInstallmentNumber())
+                        .createdAt(history.getCreatedAt())
+                        .build())
+                .collect(Collectors.toList());
     }
 
 }

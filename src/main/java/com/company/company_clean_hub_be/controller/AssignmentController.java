@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Slf4j
@@ -81,6 +82,28 @@ public class AssignmentController {
         );
     }
 
+    @PutMapping("/{id}/allowance")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority  ('ASSIGNMENT_UPDATE','PAYROLL_EDIT')")
+    public ApiResponse<AssignmentResponse> updateAllowanceAssignment(
+            @PathVariable Long id,
+            @Valid @RequestBody  BigDecimal allowance) {
+
+        log.info("[ASSIGNMENT][API][UPDATE] Start PUT /assignments/{} allowance={}", id, allowance);
+
+        if (id == null) {
+            log.error("[ASSIGNMENT][API][UPDATE] Path variable id is null");
+        }
+        AssignmentResponse assignment = assignmentService.updateAllowanceAssignment(id, allowance);
+
+        log.info("[ASSIGNMENT][API][UPDATE] Update assignment success, id={}", assignment.getId());
+        log.debug("[ASSIGNMENT][API][UPDATE] Updated assignment response={}", assignment);
+
+        return ApiResponse.success(
+                "Cập nhật phân công thành công",
+                assignment,
+                HttpStatus.OK.value()
+        );
+    }
 
     @DeleteMapping("/{id}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_DELETE')")
