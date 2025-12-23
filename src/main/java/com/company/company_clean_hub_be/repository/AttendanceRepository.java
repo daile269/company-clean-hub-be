@@ -113,6 +113,15 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                         @Param("startDate") java.time.LocalDate startDate,
                         @Param("endDate") java.time.LocalDate endDate);
 
+        @Query("SELECT COUNT(a) FROM Attendance a WHERE a.assignment.id = :assignmentId AND a.date >= :date AND (a.deleted IS NULL OR a.deleted = false)")
+        Long countAttendancesOnOrAfter(@Param("assignmentId") Long assignmentId, @Param("date") java.time.LocalDate date);
+
+        @Query("SELECT COUNT(a) FROM Attendance a WHERE a.assignment.id = :assignmentId AND (a.deleted IS NULL OR a.deleted = false)")
+        Long countAttendancesByAssignment(@Param("assignmentId") Long assignmentId);
+
+        @Query("SELECT MAX(a.date) FROM Attendance a WHERE a.assignment.id = :assignmentId AND (a.deleted IS NULL OR a.deleted = false)")
+        java.time.LocalDate findMaxAttendanceDateByAssignmentId(@Param("assignmentId") Long assignmentId);
+
         
 
         @Query("SELECT a FROM Attendance a " +
@@ -148,6 +157,20 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                     @Param("contractId") Long contractId,
                     @Param("month") Integer month,
                     @Param("year") Integer year
+            );
+
+            @Query("SELECT COUNT(a) FROM Attendance a " +
+                    "JOIN a.assignment as asn " +
+                    "WHERE asn.contract.id = :contractId " +
+                    "AND (a.deleted IS NULL OR a.deleted = false) " +
+                    "AND (:month IS NULL OR FUNCTION('MONTH', a.date) = :month) " +
+                    "AND (:year IS NULL OR FUNCTION('YEAR', a.date) = :year) " +
+                    "AND (:excludedType IS NULL OR asn.assignmentType <> :excludedType)")
+            Long countAttendancesByContractAndMonthYearExcludingAssignmentType(
+                    @Param("contractId") Long contractId,
+                    @Param("month") Integer month,
+                    @Param("year") Integer year,
+                    @Param("excludedType") com.company.company_clean_hub_be.entity.AssignmentType excludedType
             );
 
         @Query("SELECT a FROM Attendance a WHERE (a.deleted IS NULL OR a.deleted = false)")

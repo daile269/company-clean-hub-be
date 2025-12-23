@@ -1,12 +1,19 @@
 package com.company.company_clean_hub_be.service;
 
-import com.company.company_clean_hub_be.entity.Rating;
+import com.company.company_clean_hub_be.dto.request.CreateRatingRequest;
+import com.company.company_clean_hub_be.dto.request.UpdateRatingRequest;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.RatingResponse;
+
 import java.util.List;
-import java.util.Optional;
 
 public interface RatingService {
-    List<Rating> findAll();
-    Optional<Rating> findById(Long id);
-    Rating save(Rating rating);
-    void deleteById(Long id);
+    RatingResponse createRating(CreateRatingRequest request);
+    RatingResponse getRating(Long id);
+    List<RatingResponse> getRatingsByContract(Long contractId);
+    List<RatingResponse> getRatingsByEmployee(Long employeeId);
+    PageResponse<RatingResponse> getRatingsWithFilter(Long contractId, Long assignmentId, Long customerId, Long employeeId, int page, int pageSize);
+    RatingResponse updateRating(Long id, UpdateRatingRequest request);
+    void deleteRating(Long id);
 }
+

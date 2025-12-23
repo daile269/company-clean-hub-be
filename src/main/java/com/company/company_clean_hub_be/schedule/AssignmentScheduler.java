@@ -86,6 +86,48 @@ public class AssignmentScheduler {
             } else {
                 log.info("Không có phân công tạm thời nào cần cập nhật");
             }
+
+            // --- SUPPORT assignments: complete when no upcoming attendances remain ---
+            try {
+                List<Assignment> supportAssignments = assignmentRepository.findByAssignmentTypeAndStatus(AssignmentType.SUPPORT, AssignmentStatus.IN_PROGRESS);
+                int supportCompleted = 0;
+                for (Assignment sup : supportAssignments) {
+                    try {
+                        Long total = attendanceRepository.countAttendancesByAssignment(sup.getId());
+                        java.time.LocalDate last = attendanceRepository.findMaxAttendanceDateByAssignmentId(sup.getId());
+
+                        boolean hasWorkDays = sup.getWorkDays() != null && sup.getWorkDays() > 0;
+
+                        // If workDays present: complete when total >= workDays and last attendance date is before today
+                        if (hasWorkDays) {
+                            if (total != null && total >= sup.getWorkDays()) {
+                                if (last == null || last.isBefore(LocalDate.now())) {
+                                    log.info("Cập nhật SUPPORT assignment ID={} -> COMPLETED (workDays met and lastAttendance < today)", sup.getId());
+                                    sup.setStatus(AssignmentStatus.COMPLETED);
+                                    sup.setUpdatedAt(LocalDateTime.now());
+                                    assignmentRepository.save(sup);
+                                    supportCompleted++;
+                                }
+                            }
+                        } else {
+                            // fallback: behave like previous logic — complete if no upcoming attendances
+                            Long upcoming = attendanceRepository.countAttendancesOnOrAfter(sup.getId(), LocalDate.now());
+                            if (upcoming == null || upcoming == 0) {
+                                log.info("Cập nhật SUPPORT assignment ID={} -> COMPLETED (no upcoming attendances)", sup.getId());
+                                sup.setStatus(AssignmentStatus.COMPLETED);
+                                sup.setUpdatedAt(LocalDateTime.now());
+                                assignmentRepository.save(sup);
+                                supportCompleted++;
+                            }
+                        }
+                    } catch (Exception inner) {
+                        log.warn("Failed to evaluate SUPPORT assignment id={}: {}", sup.getId(), inner.getMessage());
+                    }
+                }
+                if (supportCompleted > 0) log.info("✓ Đã cập nhật {} SUPPORT assignment sang COMPLETED", supportCompleted);
+            } catch (Exception ex) {
+                log.warn("Failed to auto-complete SUPPORT assignments: {}", ex.getMessage());
+            }
             
         } catch (Exception e) {
             log.error("❌ LỖI khi cập nhật phân công tạm thời: {}", e.getMessage(), e);
@@ -212,6 +254,13 @@ public class AssignmentScheduler {
                     continue;
                 }
 
+                // Skip automatic generation for SUPPORT assignments
+                if (oldAssignment.getAssignmentType() == AssignmentType.SUPPORT) {
+                    log.info("Bỏ qua tự động sinh cho Assignment SUPPORT ID={} (sinh thủ công theo dates)", oldAssignment.getId());
+                    skippedCount++;
+                    continue;
+                }
+
                 // Tạo Assignment mới cho tháng mới (copy thông tin từ tháng trước)
                 LocalDate firstDayOfMonth = currentMonth.atDay(1);
                 Assignment newAssignment = Assignment.builder()
@@ -284,6 +333,7 @@ public class AssignmentScheduler {
                                 .penalty(penalty)
                                 .supportCost(supportCost)
                                 .isOvertime(false)
+                                .deleted(false)
                                 .description("Tự động sinh cho tháng " + currentMonth)
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())

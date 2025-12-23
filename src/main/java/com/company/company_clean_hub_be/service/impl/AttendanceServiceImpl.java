@@ -83,6 +83,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .isOvertime(request.getIsOvertime())
                 .overtimeAmount(request.getOvertimeAmount())
                 .approvedBy(approver)
+                .deleted(false)
                 .description(request.getDescription())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
@@ -137,6 +138,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                                                 .penalty(java.math.BigDecimal.ZERO)
                                                 .supportCost(java.math.BigDecimal.ZERO)
                                                 .isOvertime(false)
+                                                .deleted(false)
                                                 .overtimeAmount(java.math.BigDecimal.ZERO)
                                                 .createdAt(LocalDateTime.now())
                                                 .updatedAt(LocalDateTime.now())
@@ -268,6 +270,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setIsOvertime(request.getIsOvertime());
         attendance.setOvertimeAmount(request.getOvertimeAmount());
         attendance.setApprovedBy(approver);
+        attendance.setDeleted(attendance.getDeleted());
         attendance.setDescription(request.getDescription());
         attendance.setUpdatedAt(LocalDateTime.now());
 

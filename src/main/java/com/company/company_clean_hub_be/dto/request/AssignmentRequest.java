@@ -29,6 +29,8 @@ public class AssignmentRequest {
     private com.company.company_clean_hub_be.entity.AssignmentScope scope = com.company.company_clean_hub_be.entity.AssignmentScope.CONTRACT;
     private AssignmentStatus status;
     private String assignmentType;
+    // For SUPPORT assignments: explicit dates to create attendances for
+    private List<java.time.LocalDate> dates;
     @PositiveOrZero(message = "Lương tại thời điểm phải lớn hơn hoặc bằng 0")
     private BigDecimal salaryAtTime;
     @PositiveOrZero(message = "Phụ cấp thêm phải lớn hơn hoặc bằng 0")

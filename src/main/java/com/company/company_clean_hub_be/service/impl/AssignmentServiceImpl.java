@@ -35,6 +35,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         private final CustomerRepository customerRepository;
         private final ContractRepository contractRepository;
         private final AttendanceRepository attendanceRepository;
+        private final com.company.company_clean_hub_be.repository.RatingRepository ratingRepository;
         private final AssignmentHistoryRepository assignmentHistoryRepository;
         private final UserRepository userRepository;
 
@@ -154,77 +155,117 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 Assignment savedAssignment = assignmentRepository.save(assignment);
 
-                // Tự động tạo chấm công nếu có workingDaysPerWeek và status là IN_PROGRESS
-                if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus()) &&
-                                workingDays != null &&
-                                !workingDays.isEmpty()) {
-
-                        // Nếu startDate trong quá khứ, tạo assignment và attendance cho các tháng từ
-                        // startDate đến hiện tại
-                        LocalDate today = LocalDate.now();
-                        YearMonth startMonth = YearMonth.from(request.getStartDate());
-                        YearMonth currentMonth = YearMonth.from(today);
-
-                        if (startMonth.isBefore(currentMonth)) {
-                                log.info("StartDate {} is in the past. Creating assignments and attendances from {} to {}",
-                                                request.getStartDate(), startMonth, currentMonth);
-
-                                // Tạo attendance cho tháng đầu tiên (savedAssignment đã được tạo ở trên)
-                                autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
-
-                                // Tạo assignment và attendance cho các tháng tiếp theo (từ tháng sau startMonth
-                                // đến currentMonth)
-                                YearMonth nextMonth = startMonth.plusMonths(1);
-                                while (!nextMonth.isAfter(currentMonth)) {
-                                        LocalDate monthStartDate = nextMonth.atDay(1);
-
-                                        // Kiểm tra đã có assignment cho tháng này chưa
-                                        Optional<Assignment> existingMonthAssignment = assignmentRepository
-                                                        .findByEmployeeAndContractAndMonth(
-                                                                        request.getEmployeeId(),
-                                                                        request.getContractId(),
-                                                                        nextMonth.getYear(),
-                                                                        nextMonth.getMonthValue());
-
-                                        if (existingMonthAssignment.isEmpty()) {
-                                                // Tạo assignment mới cho tháng này
-                                                Assignment monthlyAssignment = Assignment.builder()
-                                                                .employee(employee)
-                                                                .contract(contract)
-                                                                .scope(scope)
-                                                                .startDate(monthStartDate)
-                                                                .status(request.getStatus())
-                                                                .salaryAtTime(request.getSalaryAtTime())
-                                                                .workingDaysPerWeek(workingDays != null
-                                                                                ? new ArrayList<>(workingDays)
-                                                                                : null)
-                                                                .additionalAllowance(request.getAdditionalAllowance())
-                                                                .description(request.getDescription())
-                                                                .assignmentType(assignmentTypeParsed)
-                                                                .createdAt(LocalDateTime.now())
-                                                                .updatedAt(LocalDateTime.now())
-                                                                .build();
-
-                                                Assignment savedMonthlyAssignment = assignmentRepository
-                                                                .save(monthlyAssignment);
-                                                log.info("Created monthly assignment for {}/{}: assignmentId={}",
-                                                                nextMonth.getMonthValue(), nextMonth.getYear(),
-                                                                savedMonthlyAssignment.getId());
-
-                                                // Tạo attendance cho tháng này
-                                                autoGenerateAttendancesForAssignment(savedMonthlyAssignment,
-                                                                monthStartDate);
-                                        } else {
-                                                log.info("Assignment already exists for employee={}, contract={}, month={}/{}",
-                                                                request.getEmployeeId(), request.getContractId(),
-                                                                nextMonth.getMonthValue(), nextMonth.getYear());
+                // Tự động tạo chấm công nếu status là IN_PROGRESS
+                if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
+                        // Nếu là SUPPORT: tạo chấm công theo danh sách ngày được gửi trong request
+                        if (assignmentTypeParsed == AssignmentType.SUPPORT) {
+                                List<java.time.LocalDate> requestedDates = request.getDates();
+                                if (requestedDates != null && !requestedDates.isEmpty()) {
+                                        List<Attendance> toSave = new ArrayList<>();
+                                        for (java.time.LocalDate d : requestedDates) {
+                                                boolean alreadyExists = attendanceRepository
+                                                                .findByAssignmentAndEmployeeAndDate(savedAssignment.getId(),
+                                                                                savedAssignment.getEmployee().getId(), d)
+                                                                .isPresent();
+                                                if (!alreadyExists) {
+                                                        Attendance att = Attendance.builder()
+                                                                        .employee(savedAssignment.getEmployee())
+                                                                        .assignment(savedAssignment)
+                                                                        .date(d)
+                                                                        .workHours(java.math.BigDecimal.valueOf(8))
+                                                                        .deleted(false)
+                                                                        .bonus(java.math.BigDecimal.ZERO)
+                                                                        .penalty(java.math.BigDecimal.ZERO)
+                                                                        .supportCost(java.math.BigDecimal.ZERO)
+                                                                        .isOvertime(false)
+                                                                        .overtimeAmount(java.math.BigDecimal.ZERO)
+                                                                        .description(request.getDescription() != null
+                                                                                        ? request.getDescription()
+                                                                                        : "Tự động tạo từ phân công (SUPPORT)")
+                                                                        .createdAt(LocalDateTime.now())
+                                                                        .updatedAt(LocalDateTime.now())
+                                                                        .build();
+                                                        toSave.add(att);
+                                                }
                                         }
 
-                                        nextMonth = nextMonth.plusMonths(1);
+                                        if (!toSave.isEmpty()) {
+                                                attendanceRepository.saveAll(toSave);
+                                                int created = toSave.size();
+                                                savedAssignment.setWorkDays((savedAssignment.getWorkDays() == null ? 0 : savedAssignment.getWorkDays()) + created);
+                                                savedAssignment.setPlannedDays((savedAssignment.getPlannedDays() == null ? 0 : savedAssignment.getPlannedDays()) + created);
+                                                assignmentRepository.save(savedAssignment);
+                                                log.info("Created {} support attendances for assignmentId={}", created, savedAssignment.getId());
+                                        }
                                 }
-                        } else {
-                                // StartDate là tháng hiện tại hoặc tương lai - chỉ tạo cho tháng đó
-                                autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+                        } else if (workingDays != null && !workingDays.isEmpty()) {
+                                // Nếu startDate trong quá khứ, tạo assignment và attendance cho các tháng từ
+                                // startDate đến hiện tại
+                                LocalDate today = LocalDate.now();
+                                YearMonth startMonth = YearMonth.from(request.getStartDate());
+                                YearMonth currentMonth = YearMonth.from(today);
+
+                                if (startMonth.isBefore(currentMonth)) {
+                                        log.info("StartDate {} is in the past. Creating assignments and attendances from {} to {}",
+                                                        request.getStartDate(), startMonth, currentMonth);
+
+                                        // Tạo attendance cho tháng đầu tiên (savedAssignment đã được tạo ở trên)
+                                        autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+
+                                        // Tạo assignment và attendance cho các tháng tiếp theo (từ tháng sau startMonth
+                                        // đến currentMonth)
+                                        YearMonth nextMonth = startMonth.plusMonths(1);
+                                        while (!nextMonth.isAfter(currentMonth)) {
+                                                LocalDate monthStartDate = nextMonth.atDay(1);
+
+                                                // Kiểm tra đã có assignment cho tháng này chưa
+                                                Optional<Assignment> existingMonthAssignment = assignmentRepository
+                                                                .findByEmployeeAndContractAndMonth(
+                                                                                request.getEmployeeId(),
+                                                                                request.getContractId(),
+                                                                                nextMonth.getYear(),
+                                                                                nextMonth.getMonthValue());
+
+                                                if (existingMonthAssignment.isEmpty()) {
+                                                        // Tạo assignment mới cho tháng này
+                                                        Assignment monthlyAssignment = Assignment.builder()
+                                                                        .employee(employee)
+                                                                        .contract(contract)
+                                                                        .scope(scope)
+                                                                        .startDate(monthStartDate)
+                                                                        .status(request.getStatus())
+                                                                        .salaryAtTime(request.getSalaryAtTime())
+                                                                        .workingDaysPerWeek(workingDays != null
+                                                                                        ? new ArrayList<>(workingDays)
+                                                                                        : null)
+                                                                        .additionalAllowance(request.getAdditionalAllowance())
+                                                                        .description(request.getDescription())
+                                                                        .assignmentType(assignmentTypeParsed)
+                                                                        .createdAt(LocalDateTime.now())
+                                                                        .updatedAt(LocalDateTime.now())
+                                                                        .build();
+
+                                                        Assignment savedMonthlyAssignment = assignmentRepository
+                                                                        .save(monthlyAssignment);
+                                                        log.info("Created monthly assignment for {}/{}: assignmentId={}",
+                                                                        nextMonth.getMonthValue(), nextMonth.getYear(),
+                                                                        savedMonthlyAssignment.getId());
+
+                                                        // Tạo attendance cho tháng này
+                                                        autoGenerateAttendancesForAssignment(savedMonthlyAssignment,
+                                                                        monthStartDate);
+                                                } else {
+                                                        log.info("Assignment already exists for employee={}, contract={}, month={}/{}",
+                                                                        request.getEmployeeId(), request.getContractId(),
+                                                                        nextMonth.getMonthValue(), nextMonth.getYear());
+                                                }
+
+                                                nextMonth = nextMonth.plusMonths(1);
+                                        }
+                                } else {
+                                        // StartDate là tháng hiện tại hoặc tương lai - chỉ tạo cho tháng đó
+                                        autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+                                }
                         }
                 }
 
@@ -345,12 +386,51 @@ public class AssignmentServiceImpl implements AssignmentService {
         return mapToResponse(updatedAssignment);
     }
 
-    @Override
+        @Override
+        @Transactional
         public void deleteAssignment(Long id) {
                 Assignment assignment = assignmentRepository.findById(id)
                                 .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
                 log.info("deleteAssignment by {}: assignmentId={}", username, id);
+
+                // 1) Delete related ratings and attendances for the assignment's month before removing the assignment
+                try {
+                        try {
+                                ratingRepository.deleteByAssignmentId(assignment.getId());
+                        } catch (Exception ignored) {}
+                        YearMonth ym = YearMonth.from(assignment.getStartDate());
+                        LocalDate monthStart = ym.atDay(1);
+                        LocalDate monthEnd = ym.atEndOfMonth();
+
+                        List<Attendance> related = attendanceRepository.findByAssignmentAndDateBetween(
+                                        assignment.getId(), monthStart, monthEnd);
+                        if (related != null && !related.isEmpty()) {
+                                log.info("Deleting {} attendances for assignmentId={}", related.size(), assignment.getId());
+                                attendanceRepository.deleteAll(related);
+                        }
+                } catch (Exception ex) {
+                        log.warn("Failed to delete attendances for assignmentId={}: {}", assignment.getId(), ex.getMessage());
+                }
+
+                // 2) Delete assignment history entries that reference this assignment (old or new)
+                try {
+                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> oldHist = assignmentHistoryRepository.findByOldAssignmentId(assignment.getId());
+                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> newHist = assignmentHistoryRepository.findByNewAssignmentId(assignment.getId());
+
+                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> relatedHistories = new ArrayList<>();
+                        if (oldHist != null && !oldHist.isEmpty()) relatedHistories.addAll(oldHist);
+                        if (newHist != null && !newHist.isEmpty()) relatedHistories.addAll(newHist);
+
+                        if (!relatedHistories.isEmpty()) {
+                                log.info("Deleting {} assignment history records referencing assignmentId={}", relatedHistories.size(), assignment.getId());
+                                assignmentHistoryRepository.deleteAll(relatedHistories);
+                        }
+                } catch (Exception ex) {
+                        log.warn("Failed to delete assignment history for assignmentId={}: {}", assignment.getId(), ex.getMessage());
+                }
+
+                // 3) Delete the assignment itself
                 assignmentRepository.delete(assignment);
                 log.info("deleteAssignment completed: assignmentId={}", id);
         }
@@ -539,6 +619,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         .bonus(java.math.BigDecimal.ZERO)
                                         .penalty(java.math.BigDecimal.ZERO)
                                         .supportCost(java.math.BigDecimal.ZERO)
+                                        .deleted(false)
                                         .isOvertime(deletedAttendance.getIsOvertime())
                                         .overtimeAmount(deletedAttendance.getOvertimeAmount())
                                         .description(request.getDescription() != null
@@ -1076,6 +1157,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 .penalty(java.math.BigDecimal.ZERO)
                                                 .supportCost(java.math.BigDecimal.ZERO)
                                                 .isOvertime(false)
+                                                .deleted(false)
                                                 .overtimeAmount(java.math.BigDecimal.ZERO)
                                                 .description("Tự động tạo từ phân công (Hợp đồng 1 lần)")
                                                 .createdAt(LocalDateTime.now())
@@ -1126,6 +1208,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                 .penalty(java.math.BigDecimal.ZERO)
                                                                 .supportCost(java.math.BigDecimal.ZERO)
                                                                 .isOvertime(false)
+                                                                .deleted(false)
                                                                 .overtimeAmount(java.math.BigDecimal.ZERO)
                                                                 .description("Tự động tạo từ phân công")
                                                                 .createdAt(LocalDateTime.now())
@@ -1303,6 +1386,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         .penalty(java.math.BigDecimal.ZERO)
                                         .supportCost(java.math.BigDecimal.ZERO)
                                         .isOvertime(false)
+                                        .deleted(false)
                                         .description("Khôi phục sau rollback điều động")
                                         .createdAt(LocalDateTime.now())
                                         .updatedAt(LocalDateTime.now())

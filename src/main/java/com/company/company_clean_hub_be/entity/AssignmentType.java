@@ -4,5 +4,6 @@ public enum AssignmentType {
     FIXED_BY_CONTRACT,  // phân công cố định theo hợp đồng
     FIXED_BY_DAY,       // phân công cố định theo ngày
     TEMPORARY,           // phan công tạm thoi
-    FIXED_BY_COMPANY    // phân công làm việc ở công ty
+    FIXED_BY_COMPANY,   // phân công làm việc ở công ty
+    SUPPORT             // phân công hỗ trợ (sinh attendance nhưng không tính vào hóa đơn)
 }

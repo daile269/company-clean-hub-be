@@ -19,40 +19,41 @@ public enum ErrorCode {
     ASSIGNMENT_NOT_FOUND(404, "Phân công không tồn tại"),
     ROLE_NOT_FOUND(404, "Vai trò không tồn tại"),
     IMAGE_NOT_FOUND(404, "Ảnh nhân viên không tồn tại"),
-
-    USERNAME_ALREADY_EXISTS(400, "Tên đăng nhập đã tồn tại"),
-    PHONE_ALREADY_EXISTS(400, "Số điện thoại đã tồn tại"),
-    EMPLOYEE_CODE_ALREADY_EXISTS(400, "Mã nhân viên đã tồn tại"),
-    CCCD_ALREADY_EXISTS(400, "Số CCCD đã tồn tại"),
-    BANK_ACCOUNT_ALREADY_EXISTS(400, "Số tài khoản ngân hàng đã tồn tại"),
-    PAYROLL_NOT_FOUND(404, "Bảng lương không tồn tại"),
-    PAYROLL_ALREADY_EXISTS(400, "Bảng lương tháng này đã tồn tại"),
-    ATTENDANCE_NOT_FOUND(404, "Nhân viên không đi làm vào ngày này"),
-    ATTENDANCE_ALREADY_EXISTS(400, "Chấm công ngày này đã tồn tại"),
-    ASSIGNMENT_ALREADY_EXISTS(400,
-            "Nhân viên này đã được phân công phụ trách khách hàng này và đang ở trạng thái hoạt động"),
-    REPLACED_EMPLOYEE_NO_ATTENDANCE(400, "Người bị thay không có chấm công vào ngày này"),
-    REPLACED_EMPLOYEE_DUPLICATE(400, "Người bị thay không được trùng với người làm thay"),
-    REPLACEMENT_EMPLOYEE_HAS_ATTENDANCE(400, "Người thay đã phụ trách khách hàng vào ngày này"),
-    NO_ATTENDANCE_DATA(400, "Không tìm thấy dữ liệu chấm công cho nhân viên trong thời gian yêu cầu"),
-    NO_ASSIGNMENT_DATA(400, "Không tìm thấy dữ liệu phân công cho nhân viên trong thời gian yêu cầu"),
-    ASSIGNMENT_START_DATE_BEFORE_CONTRACT(400, "Ngày bắt đầu phân công không được trước ngày bắt đầu hợp đồng"),
-
-    INVOICE_NOT_FOUND(404, "Hóa đơn không tồn tại"),
-    INVOICE_ALREADY_EXISTS(400, "Hóa đơn tháng này cho hợp đồng đã tồn tại"),
-    INVALID_ACTUAL_WORKING_DAYS(400, "Số ngày làm thực tế không hợp lệ"),
-    INVOICE_DATE_BEFORE_CONTRACT_START(400, "Ngày xuất hóa đơn phải sau hoặc bằng ngày bắt đầu hợp đồng"),
-
-    COMPANY_STAFF_CANNOT_BE_ASSIGNED(400, "Nhân viên văn phòng không thể được phân công làm việc cho khách hàng"),
-    COMPANY_STAFF_CANNOT_BE_REASSIGNED(400, "Nhân viên văn phòng không thể được điều động thay thế"),
-
+    
+    USERNAME_ALREADY_EXISTS(400,"Tên đăng nhập đã tồn tại"),
+    PHONE_ALREADY_EXISTS(400,"Số điện thoại đã tồn tại"),
+    EMPLOYEE_CODE_ALREADY_EXISTS(400,"Mã nhân viên đã tồn tại"),
+    CCCD_ALREADY_EXISTS(400,"Số CCCD đã tồn tại"),
+    BANK_ACCOUNT_ALREADY_EXISTS(400,"Số tài khoản ngân hàng đã tồn tại"),
+    PAYROLL_NOT_FOUND(404,"Bảng lương không tồn tại"),
+    PAYROLL_ALREADY_EXISTS(400,"Bảng lương tháng này đã tồn tại"),
+    ATTENDANCE_NOT_FOUND(404,"Nhân viên không đi làm vào ngày này"),
+    REVIEW_NOT_FOUND(404,"Đánh giá không tồn tại"),
+    ATTENDANCE_ALREADY_EXISTS(400,"Chấm công ngày này đã tồn tại"),
+    ASSIGNMENT_ALREADY_EXISTS(400,"Nhân viên này đã được phân công phụ trách khách hàng này và đang ở trạng thái hoạt động"),
+    REPLACED_EMPLOYEE_NO_ATTENDANCE(400,"Người bị thay không có chấm công vào ngày này"),
+    REPLACED_EMPLOYEE_DUPLICATE(400,"Người bị thay không được trùng với người làm thay"),
+    REPLACEMENT_EMPLOYEE_HAS_ATTENDANCE(400,"Người thay đã phụ trách khách hàng vào ngày này"),
+    NO_ATTENDANCE_DATA(400,"Không tìm thấy dữ liệu chấm công cho nhân viên trong thời gian yêu cầu"),
+    NO_ASSIGNMENT_DATA(400,"Không tìm thấy dữ liệu phân công cho nhân viên trong thời gian yêu cầu"),
+    NO_ASSIGNMENT_EMP(400,"Không có nhân viên nào được phân công cho hợp đồng này trong thời gian yêu cầu"),   
+    ASSIGNMENT_START_DATE_BEFORE_CONTRACT(400,"Ngày bắt đầu phân công không được trước ngày bắt đầu hợp đồng"),
+    
+    INVOICE_NOT_FOUND(404,"Hóa đơn không tồn tại"),
+    INVOICE_ALREADY_EXISTS(400,"Hóa đơn tháng này cho hợp đồng đã tồn tại"),
+    INVALID_ACTUAL_WORKING_DAYS(400,"Số ngày làm thực tế không hợp lệ"),
+    INVOICE_DATE_BEFORE_CONTRACT_START(400,"Ngày xuất hóa đơn phải sau hoặc bằng ngày bắt đầu hợp đồng"),
+    
+    COMPANY_STAFF_CANNOT_BE_ASSIGNED(400,"Nhân viên văn phòng không thể được phân công làm việc cho khách hàng"),
+    COMPANY_STAFF_CANNOT_BE_REASSIGNED(400,"Nhân viên văn phòng không thể được điều động thay thế"),
     INVALID_TOKEN(401, "Token không hợp lệ"),
     TOKEN_EXPIRED(401, "Token đã hết hạn, vui lòng đăng nhập lại"),
     UNSUPPORTED_TOKEN(401, "Token không được hỗ trợ"),
     TOKEN_CLAIMS_EMPTY(401, "Token không chứa thông tin"),
 
     FORBIDDEN(403, "Bạn không có quyền truy cập tài nguyên này"),
-    UNAUTHENTICATED(403, "Không có quyền truy cập");
+    NOT_PERMISSION_REVIEW(403,"Bạn không thuộc hợp đồng này" ),
+    UNAUTHENTICATED(403,"Không có quyền truy cập" );
 
     private final int code;
     private final String message;

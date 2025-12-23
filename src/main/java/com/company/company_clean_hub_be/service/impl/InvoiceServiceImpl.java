@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -135,22 +136,26 @@ public class InvoiceServiceImpl implements InvoiceService {
             }
 
             BigDecimal baseAmount;
-            if (service.getServiceType() == ServiceType.RECURRING) {
-                baseAmount = service.getPrice().multiply(BigDecimal.valueOf(Math.max(0, serviceDays)));
-            } else {
+            // For ONE_TIME and MONTHLY_FIXED contracts all services are fixed-price (do not prorate by days)
+            if (contract.getContractType() == ContractType.ONE_TIME || contract.getContractType() == ContractType.MONTHLY_FIXED) {
                 baseAmount = service.getPrice();
+            } else {
+                if (service.getServiceType() == ServiceType.RECURRING) {
+                    baseAmount = service.getPrice().multiply(BigDecimal.valueOf(Math.max(0, serviceDays)));
+                } else {
+                    baseAmount = service.getPrice();
+                }
             }
 
             serviceBases.add(new java.util.AbstractMap.SimpleEntry<>(service, baseAmount));
             totalContractPrice = totalContractPrice.add(baseAmount);
         }
 
-        // Count number of assigned employees active for this contract in the month
-        Long numEmployeesLong = assignmentRepository.countDistinctActiveEmployeesByContractBefore(contract.getId(), lastDayOfMonth);
+        // Count number of assigned employees active for this contract in the month (exclude SUPPORT assignments)
+        Long numEmployeesLong = assignmentRepository.countDistinctActiveEmployeesByContractBeforeExcludingType(contract.getId(), lastDayOfMonth, com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT);
         int numEmployees = numEmployeesLong != null ? numEmployeesLong.intValue() : 0;
-
-        // Count attendances for this contract in the month
-        Long attendancesCountLong = attendanceRepository.countAttendancesByContractAndMonthYear(contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear());
+        // Count attendances for this contract in the month (exclude attendances from SUPPORT assignments)
+        Long attendancesCountLong = attendanceRepository.countAttendancesByContractAndMonthYearExcludingAssignmentType(contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT);
         int attendancesCount = attendancesCountLong != null ? attendancesCountLong.intValue() : 0;
 
         if (totalContractPrice.compareTo(BigDecimal.ZERO) <= 0) {
@@ -175,45 +180,59 @@ public class InvoiceServiceImpl implements InvoiceService {
         BigDecimal subtotal = BigDecimal.ZERO;
         BigDecimal totalVat = BigDecimal.ZERO;
 
-        // If contract itself is ONE_TIME, invoice is full contract price
+        // If contract itself is ONE_TIME, invoice is full contract price (single line = base + VAT)
         if (contract.getContractType() == ContractType.ONE_TIME) {
             subtotal = totalContractPrice.setScale(2, RoundingMode.HALF_UP);
 
-            // create invoice lines using full base amounts
+            // compute total VAT across services (respecting each service VAT rate)
             for (java.util.Map.Entry<ServiceEntity, BigDecimal> entry : serviceBases) {
                 ServiceEntity service = entry.getKey();
                 BigDecimal lineBase = entry.getValue().setScale(2, RoundingMode.HALF_UP);
                 BigDecimal serviceVat = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
                 BigDecimal vatAmount = lineBase.multiply(serviceVat).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-                BigDecimal totalAmount = lineBase.add(vatAmount);
-
-                InvoiceLine invoiceLine = InvoiceLine.builder()
-                        .invoice(invoice)
-                        .service(service)
-                        .title(service.getTitle())
-                        .description(service.getDescription())
-                        .serviceType(service.getServiceType())
-                        .unit("Dịch vụ")
-                        .quantity(1)
-                        .price(service.getPrice())
-                        .baseAmount(lineBase)
-                        .vat(serviceVat)
-                        .vatAmount(vatAmount)
-                        .totalAmount(totalAmount)
-                        .effectiveFrom(service.getEffectiveFrom())
-                        .contractDays(contractDays)
-                        .actualDays(attendancesCount)
-                        .build();
-
-                invoiceLineRepository.save(invoiceLine);
                 totalVat = totalVat.add(vatAmount);
             }
+
+            // compute invoice-level VAT percentage as weighted average (if applicable)
+            BigDecimal vatPercentage = BigDecimal.ZERO;
+            if (subtotal.compareTo(BigDecimal.ZERO) > 0) {
+                vatPercentage = totalVat.divide(subtotal, 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP);
+            }
+
+            // set invoice VAT percentage for the invoice header
+            invoice.setVatPercentage(vatPercentage.compareTo(BigDecimal.ZERO) > 0 ? vatPercentage : null);
+
+            // create single invoice line representing the whole contract
+            BigDecimal lineTotal = subtotal.add(totalVat).setScale(2, RoundingMode.HALF_UP);
+
+            InvoiceLine invoiceLine = InvoiceLine.builder()
+                    .invoice(invoice)
+                    .service(null)
+                    .title(contract.getDescription() != null ? contract.getDescription() : ("Contract #" + contract.getId()))
+                    .description("Hợp đồng trọn gói")
+                    .serviceType(ServiceType.ONE_TIME)
+                    .unit("Hợp đồng")
+                    .quantity(1)
+                    .price(lineTotal)
+                    .baseAmount(subtotal)
+                    .vat(vatPercentage.compareTo(BigDecimal.ZERO) > 0 ? vatPercentage : null)
+                    .vatAmount(totalVat.setScale(2, RoundingMode.HALF_UP))
+                    .totalAmount(lineTotal)
+                    .effectiveFrom(null)
+                    .contractDays(contractDays)
+                    .actualDays(attendancesCount)
+                    .build();
+
+            invoiceLineRepository.save(invoiceLine);
 
         } else {
             // Monthly contracts: one-time services billed fully; recurring portion billed by attendance
             if (recurringTotal.compareTo(BigDecimal.ZERO) > 0) {
-                if (contractDays <= 0 || numEmployees <= 0) {
+                if (contractDays <= 0) {
                     throw new AppException(ErrorCode.INVALID_ACTUAL_WORKING_DAYS);
+                }
+                if (numEmployees <= 0) {
+                    throw new AppException(ErrorCode.NO_ASSIGNMENT_EMP);
                 }
                 BigDecimal denom = BigDecimal.valueOf((long) contractDays * numEmployees);
                 BigDecimal pricePerDayPerEmployee = recurringTotal.divide(denom, 2, RoundingMode.HALF_UP);
@@ -546,6 +565,40 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     @Override
+    public List<InvoiceResponse> getFullInvoicesByMonthAndYear(Integer month, Integer year) {
+        log.info("getFullInvoicesByMonthAndYear requested: month={}, year={}", month, year);
+        List<Invoice> invoices = invoiceRepository.findAllWithLinesByMonthAndYear(month, year);
+        List<InvoiceResponse> resp = invoices.stream()
+                .map(this::toInvoiceResponse)
+                .collect(Collectors.toList());
+        log.info("getFullInvoicesByMonthAndYear completed: month={}, year={}, count={}", month, year, resp.size());
+        return resp;
+    }
+
+        @Override
+        public com.company.company_clean_hub_be.dto.response.PageResponse<InvoiceResponse> getInvoicesWithFilters(String customerCode, Integer month, Integer year, int page, int pageSize) {
+        int safePage = Math.max(0, page <= 0 ? 0 : page - 1);
+        int safePageSize = Math.max(1, pageSize);
+        Pageable pageable = org.springframework.data.domain.PageRequest.of(safePage, safePageSize);
+
+        org.springframework.data.domain.Page<Invoice> invoicePage = invoiceRepository.findByFilters(customerCode, month, year, pageable);
+
+        List<InvoiceResponse> items = invoicePage.getContent().stream()
+            .map(this::toInvoiceResponse)
+            .collect(java.util.stream.Collectors.toList());
+
+        return com.company.company_clean_hub_be.dto.response.PageResponse.<InvoiceResponse>builder()
+            .content(items)
+            .page(invoicePage.getNumber())
+            .pageSize(invoicePage.getSize())
+            .totalElements(invoicePage.getTotalElements())
+            .totalPages(invoicePage.getTotalPages())
+            .first(invoicePage.isFirst())
+            .last(invoicePage.isLast())
+            .build();
+        }
+
+    @Override
     @Transactional
     public InvoiceResponse updateInvoice(Long id, InvoiceUpdateRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
@@ -736,54 +789,53 @@ public class InvoiceServiceImpl implements InvoiceService {
                 cell.setCellStyle(headerStyle);
             }
 
-            // Service rows
-            Set<ServiceEntity> services = contract.getServices();
+            // Use saved invoice lines to ensure exported totals match the invoice
+            List<InvoiceLine> lines = invoiceLineRepository.findByInvoiceId(invoice.getId());
             int stt = 1;
             BigDecimal totalSubtotal = BigDecimal.ZERO;
             BigDecimal totalVat = BigDecimal.ZERO;
 
-            for (ServiceEntity service : services) {
+            for (InvoiceLine line : lines) {
                 Row serviceRow = sheet.createRow(rowNum++);
-                
+
                 // STT
                 Cell sttCell = serviceRow.createCell(0);
                 sttCell.setCellValue(stt++);
                 sttCell.setCellStyle(centerStyle);
 
                 // Tên dịch vụ
-                serviceRow.createCell(1).setCellValue(service.getTitle());
+                serviceRow.createCell(1).setCellValue(line.getTitle() != null ? line.getTitle() : "");
 
                 // Đơn vị tính
-                String unit = getUnitByContractType(invoice.getInvoiceType());
-                serviceRow.createCell(2).setCellValue(unit);
+                serviceRow.createCell(2).setCellValue(line.getUnit() != null ? line.getUnit() : getUnitByContractType(invoice.getInvoiceType()));
 
                 // Số lượng
-                BigDecimal quantity = getQuantityByContractType(invoice, contract);
+                BigDecimal quantity = line.getQuantity() != null ? BigDecimal.valueOf(line.getQuantity()) : BigDecimal.ONE;
                 Cell qtyCell = serviceRow.createCell(3);
                 qtyCell.setCellValue(quantity.doubleValue());
                 qtyCell.setCellStyle(numberStyle);
 
                 // Đơn giá
-                BigDecimal unitPrice = service.getPrice();
+                BigDecimal unitPrice = line.getPrice() != null ? line.getPrice() : BigDecimal.ZERO;
                 Cell priceCell = serviceRow.createCell(4);
                 priceCell.setCellValue(unitPrice.doubleValue());
                 priceCell.setCellStyle(currencyStyle);
 
-                // Thành tiền
-                BigDecimal amount = calculateServiceAmount(service, invoice, contract);
+                // Thành tiền (use stored baseAmount)
+                BigDecimal amount = line.getBaseAmount() != null ? line.getBaseAmount() : BigDecimal.ZERO;
                 Cell amountCell = serviceRow.createCell(5);
                 amountCell.setCellValue(amount.doubleValue());
                 amountCell.setCellStyle(currencyStyle);
                 totalSubtotal = totalSubtotal.add(amount);
 
                 // Thuế suất VAT
-                BigDecimal vatRate = service.getVat() != null ? service.getVat() : BigDecimal.ZERO;
+                BigDecimal vatRate = line.getVat() != null ? line.getVat() : BigDecimal.ZERO;
                 Cell vatRateCell = serviceRow.createCell(6);
                 vatRateCell.setCellValue(vatRate.doubleValue() + "%");
                 vatRateCell.setCellStyle(centerStyle);
 
-                // Tiền thuế VAT
-                BigDecimal vatAmount = calculateServiceVat(service, invoice, contract);
+                // Tiền thuế VAT (use stored vatAmount)
+                BigDecimal vatAmount = line.getVatAmount() != null ? line.getVatAmount() : BigDecimal.ZERO;
                 Cell vatAmountCell = serviceRow.createCell(7);
                 vatAmountCell.setCellValue(vatAmount.doubleValue());
                 vatAmountCell.setCellStyle(currencyStyle);
@@ -824,6 +876,158 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         } catch (IOException e) {
             log.error("Error exporting invoice to Excel: invoiceId={}", invoiceId, e);
+            throw new AppException(ErrorCode.INVOICE_NOT_FOUND);
+        }
+    }
+
+    @Override
+    public ByteArrayOutputStream exportInvoicesToExcel(Integer month, Integer year) {
+        String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
+        log.info("exportInvoicesToExcel (zip per-invoice) requested by {}: month={}, year={}", actor, month, year);
+
+        List<Invoice> invoices = invoiceRepository.findAllWithLinesByMonthAndYear(month, year);
+
+        try (ByteArrayOutputStream zipOut = new ByteArrayOutputStream(); java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(zipOut)) {
+            for (Invoice invoice : invoices) {
+                // Create a workbook per invoice
+                try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                    // Prepare styles for this workbook
+                    CellStyle headerStyle = createHeaderStyle(workbook);
+                    CellStyle boldStyle = createBoldStyle(workbook);
+                    CellStyle centerStyle = createCenterStyle(workbook);
+                    CellStyle numberStyle = createNumberStyle(workbook);
+                    CellStyle currencyStyle = createCurrencyStyle(workbook);
+
+                    String sheetName = "Invoice";
+                    Sheet sheet = workbook.createSheet(sheetName);
+
+                    int rowNum = 0;
+                    Row row0 = sheet.createRow(rowNum++);
+                    Cell companyCell = row0.createCell(0);
+                    companyCell.setCellValue("HÓA ĐƠN GIÁ TRỊ GIA TĂNG");
+                    companyCell.setCellStyle(boldStyle);
+
+                    rowNum++;
+
+                    // Customer info
+                    Row custRow1 = sheet.createRow(rowNum++);
+                    custRow1.createCell(0).setCellValue("Khách hàng:");
+                    custRow1.createCell(1).setCellValue(invoice.getCustomerName() != null ? invoice.getCustomerName() : "");
+
+                    Row custRow2 = sheet.createRow(rowNum++);
+                    custRow2.createCell(0).setCellValue("Địa chỉ:");
+                    custRow2.createCell(1).setCellValue(invoice.getCustomerAddress() != null ? invoice.getCustomerAddress() : "");
+
+                    Row custRow3 = sheet.createRow(rowNum++);
+                    custRow3.createCell(0).setCellValue("Mã số thuế:");
+                    custRow3.createCell(1).setCellValue(invoice.getCustomerTaxCode() != null ? invoice.getCustomerTaxCode() : "");
+
+                    Row custRow4 = sheet.createRow(rowNum++);
+                    custRow4.createCell(0).setCellValue("Số điện thoại:");
+                    String phone = invoice.getContract() != null && invoice.getContract().getCustomer() != null
+                            ? invoice.getContract().getCustomer().getPhone() : null;
+                    custRow4.createCell(1).setCellValue(phone != null ? phone : "");
+
+                    Row invoiceInfoRow = sheet.createRow(rowNum++);
+                    invoiceInfoRow.createCell(0).setCellValue("Hóa đơn tháng:");
+                    invoiceInfoRow.createCell(1).setCellValue(invoice.getInvoiceMonth() + "/" + invoice.getInvoiceYear());
+
+                    rowNum++;
+
+                    // Table header
+                    Row headerRow = sheet.createRow(rowNum++);
+                    String[] headers = {"STT", "Tên hàng hóa, dịch vụ", "Đơn vị tính", "Số lượng", "Đơn giá", "Thành tiền", "Thuế suất GTGT", "Tiền thuế GTGT"};
+                    for (int i = 0; i < headers.length; i++) {
+                        Cell cell = headerRow.createCell(i);
+                        cell.setCellValue(headers[i]);
+                        cell.setCellStyle(headerStyle);
+                    }
+
+                    // Use stored invoice lines
+                    List<InvoiceLine> lines = invoiceLineRepository.findByInvoiceId(invoice.getId());
+                    int stt = 1;
+                    for (InvoiceLine line : lines) {
+                        Row serviceRow = sheet.createRow(rowNum++);
+                        Cell sttCell = serviceRow.createCell(0);
+                        sttCell.setCellValue(stt++);
+                        sttCell.setCellStyle(centerStyle);
+
+                        serviceRow.createCell(1).setCellValue(line.getTitle() != null ? line.getTitle() : "");
+                        serviceRow.createCell(2).setCellValue(line.getUnit() != null ? line.getUnit() : getUnitByContractType(invoice.getInvoiceType()));
+
+                        BigDecimal quantity = line.getQuantity() != null ? BigDecimal.valueOf(line.getQuantity()) : BigDecimal.ONE;
+                        Cell qtyCell = serviceRow.createCell(3);
+                        qtyCell.setCellValue(quantity.doubleValue());
+                        qtyCell.setCellStyle(numberStyle);
+
+                        BigDecimal unitPrice = line.getPrice() != null ? line.getPrice() : BigDecimal.ZERO;
+                        Cell priceCell = serviceRow.createCell(4);
+                        priceCell.setCellValue(unitPrice.doubleValue());
+                        priceCell.setCellStyle(currencyStyle);
+
+                        BigDecimal amount = line.getBaseAmount() != null ? line.getBaseAmount() : BigDecimal.ZERO;
+                        Cell amountCell = serviceRow.createCell(5);
+                        amountCell.setCellValue(amount.doubleValue());
+                        amountCell.setCellStyle(currencyStyle);
+
+                        BigDecimal vatRate = line.getVat() != null ? line.getVat() : BigDecimal.ZERO;
+                        Cell vatRateCell = serviceRow.createCell(6);
+                        vatRateCell.setCellValue(vatRate.doubleValue() + "%");
+                        vatRateCell.setCellStyle(centerStyle);
+
+                        BigDecimal vatAmount = line.getVatAmount() != null ? line.getVatAmount() : BigDecimal.ZERO;
+                        Cell vatAmountCell = serviceRow.createCell(7);
+                        vatAmountCell.setCellValue(vatAmount.doubleValue());
+                        vatAmountCell.setCellStyle(currencyStyle);
+                    }
+
+                    rowNum++;
+
+                    // Totals per sheet (use invoice values)
+                    Row totalRow1 = sheet.createRow(rowNum++);
+                    totalRow1.createCell(4).setCellValue("Tổng tiền trước thuế:");
+                    Cell subtotalCell = totalRow1.createCell(5);
+                    subtotalCell.setCellValue(invoice.getSubtotal() != null ? invoice.getSubtotal().doubleValue() : 0);
+                    subtotalCell.setCellStyle(currencyStyle);
+
+                    Row totalRow2 = sheet.createRow(rowNum++);
+                    totalRow2.createCell(4).setCellValue("Tổng tiền thuế GTGT:");
+                    Cell totalVatCell = totalRow2.createCell(5);
+                    totalVatCell.setCellValue(invoice.getVatAmount() != null ? invoice.getVatAmount().doubleValue() : 0);
+                    totalVatCell.setCellStyle(currencyStyle);
+
+                    Row totalRow3 = sheet.createRow(rowNum++);
+                    Cell totalLabelCell = totalRow3.createCell(4);
+                    totalLabelCell.setCellValue("Tổng cộng thanh toán:");
+                    totalLabelCell.setCellStyle(boldStyle);
+                    Cell totalAmountCell = totalRow3.createCell(5);
+                    totalAmountCell.setCellValue(invoice.getTotalAmount() != null ? invoice.getTotalAmount().doubleValue() : 0);
+                    totalAmountCell.setCellStyle(currencyStyle);
+
+                    // Auto-size columns for this sheet
+                    for (int i = 0; i < 8; i++) sheet.autoSizeColumn(i);
+
+                    // Write workbook to byte array
+                    workbook.write(baos);
+                    byte[] workbookBytes = baos.toByteArray();
+
+                    // Build a safe filename
+                    String safeName = (invoice.getCustomerName() != null ? invoice.getCustomerName().replaceAll("[\\/:*?\"<>|]", "_") : "customer");
+                    String entryName = String.format("Invoice_%d_%s_%d-%d.xlsx", invoice.getId(), safeName, invoice.getInvoiceMonth(), invoice.getInvoiceYear());
+
+                    java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry(entryName);
+                    zos.putNextEntry(entry);
+                    zos.write(workbookBytes);
+                    zos.closeEntry();
+                }
+            }
+
+            zos.finish();
+            log.info("exportInvoicesToExcel (zip) completed by {}: month={}, year={}, count={}", actor, month, year, invoices.size());
+            return zipOut;
+
+        } catch (IOException e) {
+            log.error("Error exporting invoices to ZIP: month={}, year={}", month, year, e);
             throw new AppException(ErrorCode.INVOICE_NOT_FOUND);
         }
     }
