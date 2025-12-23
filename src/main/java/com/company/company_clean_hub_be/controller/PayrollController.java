@@ -23,6 +23,7 @@ import com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
+import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
 import com.company.company_clean_hub_be.service.ExcelExportService;
@@ -40,7 +41,7 @@ import lombok.extern.slf4j.Slf4j;
 public class PayrollController {
     private final PayrollService payrollService;
     private final ExcelExportService excelExportService;
-    
+
     @PostMapping("/calculate")
     public ApiResponse<List<PayrollAssignmentResponse>> calculatePayroll(@Valid @RequestBody PayrollRequest request) {
         List<PayrollAssignmentResponse> payrolls = payrollService.calculatePayroll(request);
@@ -93,7 +94,7 @@ public class PayrollController {
         payrollService.deletePayroll(id);
         return ApiResponse.success("Xóa bảng lương thành công", null, HttpStatus.OK.value());
     }
-    
+
     @GetMapping("/assignments/filter")
     public ApiResponse<PageResponse<PayrollAssignmentResponse>> getPayrollAssignmentsWithFilter(
             @RequestParam(required = false) String keyword,
@@ -101,11 +102,11 @@ public class PayrollController {
             @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        PageResponse<PayrollAssignmentResponse> result = 
-            payrollService.getPayrollAssignmentsWithFilter(keyword, month, year, page, pageSize);
+        PageResponse<PayrollAssignmentResponse> result = payrollService.getPayrollAssignmentsWithFilter(keyword, month,
+                year, page, pageSize);
         return ApiResponse.success("Lấy danh sách thành công", result, HttpStatus.OK.value());
     }
-    
+
     @GetMapping("export/excel/{month}/{year}")
     public ResponseEntity<ByteArrayResource> exportPayroll(
             @PathVariable Integer month,
@@ -133,6 +134,10 @@ public class PayrollController {
                 .body(excelFile);
     }
 
-
+    @GetMapping("/{id}/payment-history")
+    public ApiResponse<List<PaymentHistoryResponse>> getPaymentHistory(@PathVariable Long id) {
+        List<PaymentHistoryResponse> history = payrollService.getPaymentHistory(id);
+        return ApiResponse.success("Lấy lịch sử thanh toán thành công", history, HttpStatus.OK.value());
+    }
 
 }

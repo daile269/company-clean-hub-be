@@ -364,6 +364,28 @@ public class AssignmentServiceImpl implements AssignmentService {
                 return mapToResponse(updatedAssignment);
         }
 
+    @Override
+    public AssignmentResponse updateAllowanceAssignment(Long id, BigDecimal allowance) {
+        log.info("[ASSIGNMENT][UPDATE] Start update assignment, id={}, allowance={}", id, allowance);
+
+        if (id == null) {
+            log.error("[ASSIGNMENT][UPDATE] Assignment id is null");
+            throw new IllegalArgumentException("Assignment id must not be null");
+        }
+
+        Assignment assignment = assignmentRepository.findById(id)
+                .orElseThrow(() -> {
+                    log.error("[ASSIGNMENT][UPDATE] Assignment not found, id={}", id);
+                    return new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND);
+                });
+        assignment.setAdditionalAllowance(allowance);
+        Assignment updatedAssignment = assignmentRepository.save(assignment);
+
+        log.info("[ASSIGNMENT][UPDATE] Assignment updated successfully, id={}", updatedAssignment.getId());
+
+        return mapToResponse(updatedAssignment);
+    }
+
         @Override
         @Transactional
         public void deleteAssignment(Long id) {

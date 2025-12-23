@@ -9,6 +9,7 @@ import com.company.company_clean_hub_be.dto.response.RollbackResponse;
 import com.company.company_clean_hub_be.dto.response.TemporaryAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.AttendanceResponse;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public interface AssignmentService {
@@ -17,6 +18,7 @@ public interface AssignmentService {
     AssignmentResponse getAssignmentById(Long id);
     AssignmentResponse createAssignment(AssignmentRequest request);
     AssignmentResponse updateAssignment(Long id, AssignmentRequest request);
+    AssignmentResponse updateAllowanceAssignment(Long id, BigDecimal allowance);
     void deleteAssignment(Long id);
     TemporaryAssignmentResponse temporaryReassignment(TemporaryReassignmentRequest request);
     List<AssignmentResponse> getEmployeesByCustomer(Long customerId);

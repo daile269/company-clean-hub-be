@@ -57,7 +57,8 @@ public class EmployeeController {
             @RequestParam(required = false) com.company.company_clean_hub_be.entity.EmploymentType employmentType,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        PageResponse<EmployeeResponse> employees = employeeService.getEmployeesWithFilter(keyword, employmentType, page, pageSize);
+        PageResponse<EmployeeResponse> employees = employeeService.getEmployeesWithFilter(keyword, employmentType, page,
+                pageSize);
         return ApiResponse.success("Lấy danh sách nhân viên thành công", employees, HttpStatus.OK.value());
     }
 
@@ -97,7 +98,7 @@ public class EmployeeController {
             @RequestParam("file") MultipartFile[] files) throws IOException {
 
         log.info("Start uploadEmployeeImages: employeeId={}, fileCount={}", id, files.length);
-        
+
         List<EmployeeImage> uploadedImages = new ArrayList<>();
         for (int i = 0; i < files.length; i++) {
             MultipartFile file = files[i];
@@ -106,25 +107,29 @@ public class EmployeeController {
             try {
                 EmployeeImage saved = employeeImageService.uploadImage(id, file);
                 uploadedImages.add(saved);
-                log.info("Upload successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
+                log.info("Upload successful: employeeId={}, imageId={}, url={}", id, saved.getId(),
+                        saved.getCloudinaryPublicId());
             } catch (IOException ex) {
-                log.error("Failed to upload image {}/{} for employeeId={}: {}", i + 1, files.length, id, ex.getMessage(), ex);
+                log.error("Failed to upload image {}/{} for employeeId={}: {}", i + 1, files.length, id,
+                        ex.getMessage(), ex);
                 throw ex;
             }
         }
-        
-        return ApiResponse.success("Upload " + uploadedImages.size() + " ảnh nhân viên thành công", uploadedImages, HttpStatus.CREATED.value());
+
+        return ApiResponse.success("Upload " + uploadedImages.size() + " ảnh nhân viên thành công", uploadedImages,
+                HttpStatus.CREATED.value());
     }
 
     @PostMapping(value = "/{id}/images/single", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<EmployeeImage> uploadEmployeeImage(@PathVariable Long id,
-                                                          @RequestParam("file") MultipartFile file) throws IOException {
+            @RequestParam("file") MultipartFile file) throws IOException {
 
         log.info("Start uploadEmployeeImage: employeeId={}, originalFilename={}, size={}, contentType={}",
                 id, file.getOriginalFilename(), file.getSize(), file.getContentType());
         try {
             EmployeeImage saved = employeeImageService.uploadImage(id, file);
-            log.info("Upload successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
+            log.info("Upload successful: employeeId={}, imageId={}, url={}", id, saved.getId(),
+                    saved.getCloudinaryPublicId());
             return ApiResponse.success("Upload ảnh nhân viên thành công", saved, HttpStatus.CREATED.value());
         } catch (IOException ex) {
             log.error("Failed to upload image for employeeId={}: {}", id, ex.getMessage(), ex);
@@ -134,14 +139,15 @@ public class EmployeeController {
 
     @PutMapping(value = "/{id}/images/{imageId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<EmployeeImage> replaceEmployeeImage(@PathVariable Long id,
-                                                           @PathVariable Long imageId,
-                                                           @RequestParam("file") MultipartFile file) throws IOException {
+            @PathVariable Long imageId,
+            @RequestParam("file") MultipartFile file) throws IOException {
         log.info("Start replaceEmployeeImage: employeeId={}, imageId={}, originalFilename={}, size={}",
                 id, imageId, file.getOriginalFilename(), file.getSize());
-        
+
         try {
             EmployeeImage saved = employeeImageService.replaceImage(id, imageId, file);
-            log.info("Replace successful: employeeId={}, imageId={}, url={}", id, saved.getId(), saved.getCloudinaryPublicId());
+            log.info("Replace successful: employeeId={}, imageId={}, url={}", id, saved.getId(),
+                    saved.getCloudinaryPublicId());
             return ApiResponse.success("Cập nhật ảnh nhân viên thành công", saved, HttpStatus.OK.value());
         } catch (IOException ex) {
             log.error("Failed to replace image for employeeId={}: {}", id, ex.getMessage(), ex);
@@ -151,9 +157,9 @@ public class EmployeeController {
 
     @DeleteMapping("/{id}/images/{imageId}")
     public ApiResponse<Void> deleteEmployeeImage(@PathVariable Long id,
-                                                 @PathVariable Long imageId) throws IOException {
+            @PathVariable Long imageId) throws IOException {
         log.info("Start deleteEmployeeImage: employeeId={}, imageId={}", id, imageId);
-        
+
         try {
             employeeImageService.deleteImage(id, imageId);
             log.info("Delete successful: employeeId={}, imageId={}", id, imageId);
@@ -167,7 +173,7 @@ public class EmployeeController {
     @DeleteMapping("/{id}/images")
     public ApiResponse<Void> deleteAllEmployeeImages(@PathVariable Long id) throws IOException {
         log.info("Start deleteAllEmployeeImages: employeeId={}", id);
-        
+
         try {
             List<EmployeeImage> images = employeeImageService.findByEmployeeId(id);
             for (EmployeeImage image : images) {
@@ -184,14 +190,15 @@ public class EmployeeController {
     @GetMapping("/{id}/images")
     public ApiResponse<List<EmployeeImage>> getImagesByEmployeeId(@PathVariable Long id) {
         log.info("GET /api/employees/{}/images - fetch images for employee", id);
-        
+
         try {
             List<EmployeeImage> images = employeeImageService.findByEmployeeId(id);
             log.info("Fetched {} images for employee {}", images.size(), id);
             return ApiResponse.success("Lấy danh sách ảnh nhân viên thành công", images, HttpStatus.OK.value());
         } catch (Exception ex) {
             log.error("Failed to fetch images for employeeId={}: {}", id, ex.getMessage(), ex);
-            return ApiResponse.success("Lấy danh sách ảnh nhân viên thành công", new ArrayList<>(), HttpStatus.OK.value());
+            return ApiResponse.success("Lấy danh sách ảnh nhân viên thành công", new ArrayList<>(),
+                    HttpStatus.OK.value());
         }
     }
 

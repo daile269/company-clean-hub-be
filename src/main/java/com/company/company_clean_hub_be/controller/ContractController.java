@@ -23,6 +23,7 @@ import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.ContractDocument;
 import com.company.company_clean_hub_be.service.ContractDocumentService;
 import com.company.company_clean_hub_be.service.ContractService;
+import com.company.company_clean_hub_be.util.AuthorizationUtils;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -54,13 +55,18 @@ public class ContractController {
     @GetMapping("/{id}")
     public ApiResponse<ContractResponse> getContractById(@PathVariable Long id) {
         ContractResponse contract = contractService.getContractById(id);
+        // CUSTOMER can only view their own contracts
+        AuthorizationUtils.validateContractOwnership(contract.getCustomerId());
         return ApiResponse.success("Lấy thông tin hợp đồng thành công", contract, HttpStatus.OK.value());
     }
 
     @GetMapping("/customer/{customerId}")
     public ApiResponse<List<ContractResponse>> getContractsByCustomer(@PathVariable Long customerId) {
+        // CUSTOMER can only view their own contracts
+        AuthorizationUtils.validateCustomerAccess(customerId);
         List<ContractResponse> contracts = contractService.getContractsByCustomer(customerId);
-        return ApiResponse.success("Lấy danh sách hợp đồng của khách hàng thành công", contracts, HttpStatus.OK.value());
+        return ApiResponse.success("Lấy danh sách hợp đồng của khách hàng thành công", contracts,
+                HttpStatus.OK.value());
     }
 
     @GetMapping("/assignment/{assignmentId}")
@@ -119,9 +125,9 @@ public class ContractController {
             @RequestParam("file") MultipartFile[] files) throws IOException {
 
         log.info("Start uploadContractDocuments: contractId={}, fileCount={}", id, files.length);
-        
+
         List<ContractDocument> uploadedDocuments = contractDocumentService.uploadDocuments(id, files);
-        
+
         return ApiResponse.success("Tải tài liệu hợp đồng thành công", uploadedDocuments, HttpStatus.OK.value());
     }
 
@@ -131,18 +137,18 @@ public class ContractController {
             @PathVariable Long documentId) throws IOException {
 
         log.info("Start deleteContractDocument: contractId={}, documentId={}", id, documentId);
-        
+
         contractDocumentService.deleteDocument(id, documentId);
-        
+
         return ApiResponse.success("Xóa tài liệu hợp đồng thành công", null, HttpStatus.OK.value());
     }
 
     @GetMapping("/{id}/documents")
     public ApiResponse<List<ContractDocument>> getContractDocuments(@PathVariable Long id) {
         log.info("Fetching contract documents: contractId={}", id);
-        
+
         List<ContractDocument> documents = contractDocumentService.getContractDocuments(id);
-        
+
         return ApiResponse.success("Lấy tài liệu hợp đồng thành công", documents, HttpStatus.OK.value());
     }
 }
