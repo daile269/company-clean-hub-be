@@ -73,6 +73,13 @@ public enum Permission {
     REVIEW_VIEW_ALL("Xem danh sách đánh giá"),
     REVIEW_VIEW_CONTRACT("Xem danh sách đánh giá của hợp đồng"),
 
+    // Invoice
+    INVOICE_VIEW("Xem hóa đơn"),
+    INVOICE_CREATE("Tạo hóa đơn"),
+    INVOICE_EDIT("Chỉnh sửa hóa đơn"),
+    INVOICE_DELETE("Xóa hóa đơn"),
+    INVOICE_EXPORT("Xuất Excel hóa đơn"),
+
     // Audit
     AUDIT_VIEW("Xem lịch sử thay đổi");
     

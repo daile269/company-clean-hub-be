@@ -155,77 +155,117 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 Assignment savedAssignment = assignmentRepository.save(assignment);
 
-                // Tự động tạo chấm công nếu có workingDaysPerWeek và status là IN_PROGRESS
-                if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus()) &&
-                                workingDays != null &&
-                                !workingDays.isEmpty()) {
-
-                        // Nếu startDate trong quá khứ, tạo assignment và attendance cho các tháng từ
-                        // startDate đến hiện tại
-                        LocalDate today = LocalDate.now();
-                        YearMonth startMonth = YearMonth.from(request.getStartDate());
-                        YearMonth currentMonth = YearMonth.from(today);
-
-                        if (startMonth.isBefore(currentMonth)) {
-                                log.info("StartDate {} is in the past. Creating assignments and attendances from {} to {}",
-                                                request.getStartDate(), startMonth, currentMonth);
-
-                                // Tạo attendance cho tháng đầu tiên (savedAssignment đã được tạo ở trên)
-                                autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
-
-                                // Tạo assignment và attendance cho các tháng tiếp theo (từ tháng sau startMonth
-                                // đến currentMonth)
-                                YearMonth nextMonth = startMonth.plusMonths(1);
-                                while (!nextMonth.isAfter(currentMonth)) {
-                                        LocalDate monthStartDate = nextMonth.atDay(1);
-
-                                        // Kiểm tra đã có assignment cho tháng này chưa
-                                        Optional<Assignment> existingMonthAssignment = assignmentRepository
-                                                        .findByEmployeeAndContractAndMonth(
-                                                                        request.getEmployeeId(),
-                                                                        request.getContractId(),
-                                                                        nextMonth.getYear(),
-                                                                        nextMonth.getMonthValue());
-
-                                        if (existingMonthAssignment.isEmpty()) {
-                                                // Tạo assignment mới cho tháng này
-                                                Assignment monthlyAssignment = Assignment.builder()
-                                                                .employee(employee)
-                                                                .contract(contract)
-                                                                .scope(scope)
-                                                                .startDate(monthStartDate)
-                                                                .status(request.getStatus())
-                                                                .salaryAtTime(request.getSalaryAtTime())
-                                                                .workingDaysPerWeek(workingDays != null
-                                                                                ? new ArrayList<>(workingDays)
-                                                                                : null)
-                                                                .additionalAllowance(request.getAdditionalAllowance())
-                                                                .description(request.getDescription())
-                                                                .assignmentType(assignmentTypeParsed)
-                                                                .createdAt(LocalDateTime.now())
-                                                                .updatedAt(LocalDateTime.now())
-                                                                .build();
-
-                                                Assignment savedMonthlyAssignment = assignmentRepository
-                                                                .save(monthlyAssignment);
-                                                log.info("Created monthly assignment for {}/{}: assignmentId={}",
-                                                                nextMonth.getMonthValue(), nextMonth.getYear(),
-                                                                savedMonthlyAssignment.getId());
-
-                                                // Tạo attendance cho tháng này
-                                                autoGenerateAttendancesForAssignment(savedMonthlyAssignment,
-                                                                monthStartDate);
-                                        } else {
-                                                log.info("Assignment already exists for employee={}, contract={}, month={}/{}",
-                                                                request.getEmployeeId(), request.getContractId(),
-                                                                nextMonth.getMonthValue(), nextMonth.getYear());
+                // Tự động tạo chấm công nếu status là IN_PROGRESS
+                if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
+                        // Nếu là SUPPORT: tạo chấm công theo danh sách ngày được gửi trong request
+                        if (assignmentTypeParsed == AssignmentType.SUPPORT) {
+                                List<java.time.LocalDate> requestedDates = request.getDates();
+                                if (requestedDates != null && !requestedDates.isEmpty()) {
+                                        List<Attendance> toSave = new ArrayList<>();
+                                        for (java.time.LocalDate d : requestedDates) {
+                                                boolean alreadyExists = attendanceRepository
+                                                                .findByAssignmentAndEmployeeAndDate(savedAssignment.getId(),
+                                                                                savedAssignment.getEmployee().getId(), d)
+                                                                .isPresent();
+                                                if (!alreadyExists) {
+                                                        Attendance att = Attendance.builder()
+                                                                        .employee(savedAssignment.getEmployee())
+                                                                        .assignment(savedAssignment)
+                                                                        .date(d)
+                                                                        .workHours(java.math.BigDecimal.valueOf(8))
+                                                                        .deleted(false)
+                                                                        .bonus(java.math.BigDecimal.ZERO)
+                                                                        .penalty(java.math.BigDecimal.ZERO)
+                                                                        .supportCost(java.math.BigDecimal.ZERO)
+                                                                        .isOvertime(false)
+                                                                        .overtimeAmount(java.math.BigDecimal.ZERO)
+                                                                        .description(request.getDescription() != null
+                                                                                        ? request.getDescription()
+                                                                                        : "Tự động tạo từ phân công (SUPPORT)")
+                                                                        .createdAt(LocalDateTime.now())
+                                                                        .updatedAt(LocalDateTime.now())
+                                                                        .build();
+                                                        toSave.add(att);
+                                                }
                                         }
 
-                                        nextMonth = nextMonth.plusMonths(1);
+                                        if (!toSave.isEmpty()) {
+                                                attendanceRepository.saveAll(toSave);
+                                                int created = toSave.size();
+                                                savedAssignment.setWorkDays((savedAssignment.getWorkDays() == null ? 0 : savedAssignment.getWorkDays()) + created);
+                                                savedAssignment.setPlannedDays((savedAssignment.getPlannedDays() == null ? 0 : savedAssignment.getPlannedDays()) + created);
+                                                assignmentRepository.save(savedAssignment);
+                                                log.info("Created {} support attendances for assignmentId={}", created, savedAssignment.getId());
+                                        }
                                 }
-                        } else {
-                                // StartDate là tháng hiện tại hoặc tương lai - chỉ tạo cho tháng đó
-                                autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+                        } else if (workingDays != null && !workingDays.isEmpty()) {
+                                // Nếu startDate trong quá khứ, tạo assignment và attendance cho các tháng từ
+                                // startDate đến hiện tại
+                                LocalDate today = LocalDate.now();
+                                YearMonth startMonth = YearMonth.from(request.getStartDate());
+                                YearMonth currentMonth = YearMonth.from(today);
+
+                                if (startMonth.isBefore(currentMonth)) {
+                                        log.info("StartDate {} is in the past. Creating assignments and attendances from {} to {}",
+                                                        request.getStartDate(), startMonth, currentMonth);
+
+                                        // Tạo attendance cho tháng đầu tiên (savedAssignment đã được tạo ở trên)
+                                        autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+
+                                        // Tạo assignment và attendance cho các tháng tiếp theo (từ tháng sau startMonth
+                                        // đến currentMonth)
+                                        YearMonth nextMonth = startMonth.plusMonths(1);
+                                        while (!nextMonth.isAfter(currentMonth)) {
+                                                LocalDate monthStartDate = nextMonth.atDay(1);
+
+                                                // Kiểm tra đã có assignment cho tháng này chưa
+                                                Optional<Assignment> existingMonthAssignment = assignmentRepository
+                                                                .findByEmployeeAndContractAndMonth(
+                                                                                request.getEmployeeId(),
+                                                                                request.getContractId(),
+                                                                                nextMonth.getYear(),
+                                                                                nextMonth.getMonthValue());
+
+                                                if (existingMonthAssignment.isEmpty()) {
+                                                        // Tạo assignment mới cho tháng này
+                                                        Assignment monthlyAssignment = Assignment.builder()
+                                                                        .employee(employee)
+                                                                        .contract(contract)
+                                                                        .scope(scope)
+                                                                        .startDate(monthStartDate)
+                                                                        .status(request.getStatus())
+                                                                        .salaryAtTime(request.getSalaryAtTime())
+                                                                        .workingDaysPerWeek(workingDays != null
+                                                                                        ? new ArrayList<>(workingDays)
+                                                                                        : null)
+                                                                        .additionalAllowance(request.getAdditionalAllowance())
+                                                                        .description(request.getDescription())
+                                                                        .assignmentType(assignmentTypeParsed)
+                                                                        .createdAt(LocalDateTime.now())
+                                                                        .updatedAt(LocalDateTime.now())
+                                                                        .build();
+
+                                                        Assignment savedMonthlyAssignment = assignmentRepository
+                                                                        .save(monthlyAssignment);
+                                                        log.info("Created monthly assignment for {}/{}: assignmentId={}",
+                                                                        nextMonth.getMonthValue(), nextMonth.getYear(),
+                                                                        savedMonthlyAssignment.getId());
+
+                                                        // Tạo attendance cho tháng này
+                                                        autoGenerateAttendancesForAssignment(savedMonthlyAssignment,
+                                                                        monthStartDate);
+                                                } else {
+                                                        log.info("Assignment already exists for employee={}, contract={}, month={}/{}",
+                                                                        request.getEmployeeId(), request.getContractId(),
+                                                                        nextMonth.getMonthValue(), nextMonth.getYear());
+                                                }
+
+                                                nextMonth = nextMonth.plusMonths(1);
+                                        }
+                                } else {
+                                        // StartDate là tháng hiện tại hoặc tương lai - chỉ tạo cho tháng đó
+                                        autoGenerateAttendancesForAssignment(savedAssignment, request.getStartDate());
+                                }
                         }
                 }
 

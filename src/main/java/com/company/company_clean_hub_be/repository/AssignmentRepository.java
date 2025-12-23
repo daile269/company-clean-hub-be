@@ -156,14 +156,29 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
         @Query("SELECT a FROM Assignment a WHERE a.contract.id = :contractId")
         List<Assignment> findByContractId(@Param("contractId") Long contractId);
 
+        @Query("SELECT a FROM Assignment a WHERE a.assignmentType = :type AND a.status = :status")
+        List<Assignment> findByAssignmentTypeAndStatus(@Param("type") com.company.company_clean_hub_be.entity.AssignmentType type,
+                                                      @Param("status") com.company.company_clean_hub_be.entity.AssignmentStatus status);
+
             @Query("SELECT COUNT(DISTINCT a.employee.id) FROM Assignment a " +
                    "WHERE a.contract.id = :contractId " +
                    "AND a.status = 'IN_PROGRESS' " +
-                   "AND a.startDate <= :endDate")
+                     "AND a.startDate <= :endDate")
             Long countDistinctActiveEmployeesByContractBefore(
                     @Param("contractId") Long contractId,
                     @Param("endDate") java.time.LocalDate endDate
             );
+
+             @Query("SELECT COUNT(DISTINCT a.employee.id) FROM Assignment a " +
+                     "WHERE a.contract.id = :contractId " +
+                     "AND a.status = 'IN_PROGRESS' " +
+                     "AND a.startDate <= :endDate " +
+                     "AND (:excludedType IS NULL OR a.assignmentType <> :excludedType)")
+             Long countDistinctActiveEmployeesByContractBeforeExcludingType(
+                      @Param("contractId") Long contractId,
+                      @Param("endDate") java.time.LocalDate endDate,
+                      @Param("excludedType") com.company.company_clean_hub_be.entity.AssignmentType excludedType
+             );
 
             @Query("SELECT a FROM Assignment a " +
                    "WHERE a.contract.id = :contractId " +

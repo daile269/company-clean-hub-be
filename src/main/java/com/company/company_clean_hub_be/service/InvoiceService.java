@@ -17,6 +17,9 @@ public interface InvoiceService {
     List<InvoiceResponse> getInvoicesByCustomer(Long customerId);
     List<InvoiceResponse> getInvoicesByStatus(InvoiceStatus status);
     List<InvoiceResponse> getInvoicesByMonthAndYear(Integer month, Integer year);
+    List<InvoiceResponse> getFullInvoicesByMonthAndYear(Integer month, Integer year);
+    ByteArrayOutputStream exportInvoicesToExcel(Integer month, Integer year);
+    com.company.company_clean_hub_be.dto.response.PageResponse<InvoiceResponse> getInvoicesWithFilters(String customerCode, Integer month, Integer year, int page, int pageSize);
     InvoiceResponse updateInvoice(Long id, InvoiceUpdateRequest request);
     void deleteInvoice(Long id);
     ByteArrayOutputStream exportInvoiceToExcel(Long invoiceId);
