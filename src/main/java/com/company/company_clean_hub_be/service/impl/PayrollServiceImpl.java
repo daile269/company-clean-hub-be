@@ -630,6 +630,8 @@ public class PayrollServiceImpl implements PayrollService {
                 return "Điều động";
             case FIXED_BY_COMPANY:
                 return "Nhân viên văn phòng";
+            case SUPPORT:
+                return "Tăng ca";
             default:
                 return "";
         }
@@ -996,7 +998,7 @@ public class PayrollServiceImpl implements PayrollService {
             }
         }
         // For other types: salary * actualDays
-        else if (type == AssignmentType.FIXED_BY_DAY || type == AssignmentType.TEMPORARY) {
+        else if (type == AssignmentType.FIXED_BY_DAY || type == AssignmentType.TEMPORARY || type == AssignmentType.SUPPORT) {
             if (salaryBase.compareTo(BigDecimal.ZERO) > 0) {
                 return salaryBase.multiply(BigDecimal.valueOf(realWorkDays));
             }
