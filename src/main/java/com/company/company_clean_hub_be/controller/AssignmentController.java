@@ -40,7 +40,8 @@ public class AssignmentController {
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        PageResponse<AssignmentResponse> assignments = assignmentService.getAssignmentsWithFilter(keyword, page, pageSize);
+        PageResponse<AssignmentResponse> assignments = assignmentService.getAssignmentsWithFilter(keyword, page,
+                pageSize);
         return ApiResponse.success("Lấy danh sách phân công thành công", assignments, HttpStatus.OK.value());
     }
 
@@ -48,7 +49,7 @@ public class AssignmentController {
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<AssignmentResponse> getAssignmentById(@PathVariable Long id) {
         AssignmentResponse assignment = assignmentService.getAssignmentById(id);
-        System.out.println("id ass:"+id);
+        System.out.println("id ass:" + id);
         return ApiResponse.success("Lấy thông tin phân công thành công", assignment, HttpStatus.OK.value());
     }
 
@@ -78,22 +79,22 @@ public class AssignmentController {
         return ApiResponse.success(
                 "Cập nhật phân công thành công",
                 assignment,
-                HttpStatus.OK.value()
-        );
+                HttpStatus.OK.value());
     }
 
     @PutMapping("/{id}/allowance")
     @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority  ('ASSIGNMENT_UPDATE','PAYROLL_EDIT')")
     public ApiResponse<AssignmentResponse> updateAllowanceAssignment(
             @PathVariable Long id,
-            @Valid @RequestBody  BigDecimal allowance) {
+            @Valid @RequestBody com.company.company_clean_hub_be.dto.request.UpdateAllowanceRequest request) {
 
-        log.info("[ASSIGNMENT][API][UPDATE] Start PUT /assignments/{} allowance={}", id, allowance);
+        log.info("[ASSIGNMENT][API][UPDATE] Start PUT /assignments/{}/allowance allowance={}", id,
+                request.getAllowance());
 
         if (id == null) {
             log.error("[ASSIGNMENT][API][UPDATE] Path variable id is null");
         }
-        AssignmentResponse assignment = assignmentService.updateAllowanceAssignment(id, allowance);
+        AssignmentResponse assignment = assignmentService.updateAllowanceAssignment(id, request.getAllowance());
 
         log.info("[ASSIGNMENT][API][UPDATE] Update assignment success, id={}", assignment.getId());
         log.debug("[ASSIGNMENT][API][UPDATE] Updated assignment response={}", assignment);
@@ -101,8 +102,7 @@ public class AssignmentController {
         return ApiResponse.success(
                 "Cập nhật phân công thành công",
                 assignment,
-                HttpStatus.OK.value()
-        );
+                HttpStatus.OK.value());
     }
 
     @DeleteMapping("/{id}")
@@ -127,10 +127,9 @@ public class AssignmentController {
     public ApiResponse<List<AssignmentResponse>> getEmployeesByCustomer(@PathVariable Long customerId) {
         List<AssignmentResponse> assignments = assignmentService.getEmployeesByCustomer(customerId);
         return ApiResponse.success(
-                "Lấy danh sách nhân viên phụ trách khách hàng thành công", 
-                assignments, 
-                HttpStatus.OK.value()
-        );
+                "Lấy danh sách nhân viên phụ trách khách hàng thành công",
+                assignments,
+                HttpStatus.OK.value());
     }
 
     @GetMapping("/customer/{customerId}/all")
@@ -146,10 +145,9 @@ public class AssignmentController {
         PageResponse<AssignmentResponse> assignments = assignmentService.getAllEmployeesByCustomerWithFilters(
                 customerId, contractType, status, month, year, page, pageSize);
         return ApiResponse.success(
-                "Lấy tất cả danh sách nhân viên phụ trách khách hàng thành công", 
-                assignments, 
-                HttpStatus.OK.value()
-        );
+                "Lấy tất cả danh sách nhân viên phụ trách khách hàng thành công",
+                assignments,
+                HttpStatus.OK.value());
     }
 
     @GetMapping("/customer/{customerId}/by-contract")
@@ -163,31 +161,30 @@ public class AssignmentController {
             @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        PageResponse<com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse> assignments = 
-                assignmentService.getAssignmentsByCustomerGroupedByContract(
+        PageResponse<com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse> assignments = assignmentService
+                .getAssignmentsByCustomerGroupedByContract(
                         customerId, contractId, contractType, status, month, year, page, pageSize);
         return ApiResponse.success(
-                "Lấy danh sách phân công theo hợp đồng thành công", 
-                assignments, 
-                HttpStatus.OK.value()
-        );
+                "Lấy danh sách phân công theo hợp đồng thành công",
+                assignments,
+                HttpStatus.OK.value());
     }
 
     @GetMapping("/employee/{employeeId}/customers")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<List<com.company.company_clean_hub_be.dto.response.CustomerResponse>> getCustomersByEmployee(
             @PathVariable Long employeeId) {
-        List<com.company.company_clean_hub_be.dto.response.CustomerResponse> customers = assignmentService.getCustomersByEmployee(employeeId);
+        List<com.company.company_clean_hub_be.dto.response.CustomerResponse> customers = assignmentService
+                .getCustomersByEmployee(employeeId);
         return ApiResponse.success(
                 "Lấy danh sách khách hàng nhân viên phụ trách thành công",
                 customers,
-                HttpStatus.OK.value()
-        );
+                HttpStatus.OK.value());
     }
 
-        @GetMapping("/employee/{employeeId}")
-        @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
-        public ApiResponse<PageResponse<AssignmentResponse>> getAssignmentsByEmployee(
+    @GetMapping("/employee/{employeeId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    public ApiResponse<PageResponse<AssignmentResponse>> getAssignmentsByEmployee(
             @PathVariable Long employeeId,
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) Integer month,
@@ -196,24 +193,25 @@ public class AssignmentController {
             @RequestParam(defaultValue = "10") int pageSize) {
 
         PageResponse<AssignmentResponse> assignments = assignmentService.getAssignmentsByEmployeeWithFilters(
-            employeeId, customerId, month, year, page, pageSize);
+                employeeId, customerId, month, year, page, pageSize);
 
-        return ApiResponse.success(
-            "Lấy danh sách phân công của nhân viên thành công",
-            assignments,
-            HttpStatus.OK.value()
-        );
-        }
-    @GetMapping("/assignments/{employeeId}/{month}/" +
-            "{year}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
-    public ApiResponse<List<AssignmentResponse>> getAssignmentsByEmployeeMonthYear(@PathVariable Long employeeId, @PathVariable Integer month, @PathVariable Integer year) {
-        List<AssignmentResponse> assignments = assignmentService.getAssignmentsByEmployeeMonthYear(employeeId,month,year);
         return ApiResponse.success(
                 "Lấy danh sách phân công của nhân viên thành công",
                 assignments,
-                HttpStatus.OK.value()
-        );
+                HttpStatus.OK.value());
+    }
+
+    @GetMapping("/assignments/{employeeId}/{month}/" +
+            "{year}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    public ApiResponse<List<AssignmentResponse>> getAssignmentsByEmployeeMonthYear(@PathVariable Long employeeId,
+            @PathVariable Integer month, @PathVariable Integer year) {
+        List<AssignmentResponse> assignments = assignmentService.getAssignmentsByEmployeeMonthYear(employeeId, month,
+                year);
+        return ApiResponse.success(
+                "Lấy danh sách phân công của nhân viên thành công",
+                assignments,
+                HttpStatus.OK.value());
     }
 
     @GetMapping("/customer/{customerId}/not-assigned")
@@ -225,13 +223,12 @@ public class AssignmentController {
             @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> employees = 
-                assignmentService.getEmployeesNotAssignedToCustomer(customerId, employmentType, month, year, page, pageSize);
+        PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> employees = assignmentService
+                .getEmployeesNotAssignedToCustomer(customerId, employmentType, month, year, page, pageSize);
         return ApiResponse.success(
-                "Lấy danh sách nhân viên chưa phân công thành công", 
-                employees, 
-                HttpStatus.OK.value()
-        );
+                "Lấy danh sách nhân viên chưa phân công thành công",
+                employees,
+                HttpStatus.OK.value());
     }
 
     @GetMapping("/contract/{contractId}")
@@ -244,53 +241,53 @@ public class AssignmentController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
 
-        PageResponse<AssignmentResponse> assignments = assignmentService.getAssignmentsByContract(contractId, status, month, year, page, pageSize);
-        return ApiResponse.success("Lấy danh sách nhân viên phụ trách hợp đồng thành công", assignments, HttpStatus.OK.value());
+        PageResponse<AssignmentResponse> assignments = assignmentService.getAssignmentsByContract(contractId, status,
+                month, year, page, pageSize);
+        return ApiResponse.success("Lấy danh sách nhân viên phụ trách hợp đồng thành công", assignments,
+                HttpStatus.OK.value());
     }
 
-        @GetMapping("/{assignmentId}/attendances")
-        @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ATTENDANCE_VIEW')")
-        public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.AttendanceResponse>> getAttendancesByAssignment(
+    @GetMapping("/{assignmentId}/attendances")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ATTENDANCE_VIEW')")
+    public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.AttendanceResponse>> getAttendancesByAssignment(
             @PathVariable Long assignmentId,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
 
-        PageResponse<com.company.company_clean_hub_be.dto.response.AttendanceResponse> attendances =
-            assignmentService.getAttendancesByAssignment(assignmentId, month, year, page, pageSize);
+        PageResponse<com.company.company_clean_hub_be.dto.response.AttendanceResponse> attendances = assignmentService
+                .getAttendancesByAssignment(assignmentId, month, year, page, pageSize);
 
-        return ApiResponse.success("Lấy danh sách chấm công theo phân công thành công", attendances, HttpStatus.OK.value());
-        }
+        return ApiResponse.success("Lấy danh sách chấm công theo phân công thành công", attendances,
+                HttpStatus.OK.value());
+    }
 
     @PostMapping("/update-expired-temporary")
     public ApiResponse<String> testUpdateExpiredTemporaryAssignments() {
         assignmentScheduler.executeUpdateExpiredTemporaryAssignments();
         return ApiResponse.success(
-                "Đã chạy job cập nhật phân công tạm thời, kiểm tra console log để xem kết quả", 
-                "OK", 
-                HttpStatus.OK.value()
-        );
+                "Đã chạy job cập nhật phân công tạm thời, kiểm tra console log để xem kết quả",
+                "OK",
+                HttpStatus.OK.value());
     }
 
     @PostMapping("/update-expired-fixed")
     public ApiResponse<String> testUpdateExpiredFixedAssignments() {
         assignmentScheduler.executeUpdateExpiredFixedAssignments();
         return ApiResponse.success(
-                "Đã chạy job cập nhật phân công cố định, kiểm tra console log để xem kết quả", 
-                "OK", 
-                HttpStatus.OK.value()
-        );
+                "Đã chạy job cập nhật phân công cố định, kiểm tra console log để xem kết quả",
+                "OK",
+                HttpStatus.OK.value());
     }
 
     @PostMapping("/generate-monthly-attendances")
     public ApiResponse<String> testGenerateMonthlyAttendances() {
         assignmentScheduler.executeGenerateMonthlyAttendances();
         return ApiResponse.success(
-                "Đã chạy job sinh chấm công tháng mới, kiểm tra console log để xem kết quả", 
-                "OK", 
-                HttpStatus.OK.value()
-        );
+                "Đã chạy job sinh chấm công tháng mới, kiểm tra console log để xem kết quả",
+                "OK",
+                HttpStatus.OK.value());
     }
 
     // ==================== LỊCH SỬ ĐIỀU ĐỘNG ====================
@@ -302,35 +299,34 @@ public class AssignmentController {
         return ApiResponse.success(
                 "Lấy lịch sử điều động thành công",
                 history,
-                HttpStatus.OK.value()
-        );
+                HttpStatus.OK.value());
     }
 
     @GetMapping("/history/contract/{contractId}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
-    public ApiResponse<List<AssignmentHistoryResponse>> getReassignmentHistoryByContract(@PathVariable Long contractId) {
+    public ApiResponse<List<AssignmentHistoryResponse>> getReassignmentHistoryByContract(
+            @PathVariable Long contractId) {
         List<AssignmentHistoryResponse> history = assignmentService.getReassignmentHistoryByContract(contractId);
         return ApiResponse.success(
                 "Lấy lịch sử điều động theo hợp đồng thành công",
                 history,
-                HttpStatus.OK.value()
-        );
+                HttpStatus.OK.value());
     }
 
-        @GetMapping("/history/customer/{customerId}")
-        @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
-            public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse>> getReassignmentHistoryByCustomerId(
-                @PathVariable Long customerId,
-                @RequestParam(required = false) Long contractId,
-                @RequestParam(defaultValue = "0") int page,
-                @RequestParam(defaultValue = "10") int pageSize) {
-            PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> history = assignmentService.getReassignmentHistoryByCustomerId(customerId, contractId, page, pageSize);
-            return ApiResponse.success(
+    @GetMapping("/history/customer/{customerId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse>> getReassignmentHistoryByCustomerId(
+            @PathVariable Long customerId,
+            @RequestParam(required = false) Long contractId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> history = assignmentService
+                .getReassignmentHistoryByCustomerId(customerId, contractId, page, pageSize);
+        return ApiResponse.success(
                 "Lấy lịch sử điều động theo khách hàng thành công",
                 history,
-                HttpStatus.OK.value()
-            );
-            }
+                HttpStatus.OK.value());
+    }
 
     @GetMapping("/history/{historyId}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
@@ -339,8 +335,7 @@ public class AssignmentController {
         return ApiResponse.success(
                 "Lấy chi tiết lịch sử điều động thành công",
                 history,
-                HttpStatus.OK.value()
-        );
+                HttpStatus.OK.value());
     }
 
     @PostMapping("/history/{historyId}/rollback")
@@ -350,7 +345,6 @@ public class AssignmentController {
         return ApiResponse.success(
                 "Rollback điều động thành công",
                 response,
-                HttpStatus.OK.value()
-        );
+                HttpStatus.OK.value());
     }
 }
