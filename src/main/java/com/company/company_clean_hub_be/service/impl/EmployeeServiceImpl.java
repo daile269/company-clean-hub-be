@@ -46,8 +46,10 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     @Override
-    public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, com.company.company_clean_hub_be.entity.EmploymentType employmentType, int page, int pageSize) {
-        log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, page={}, pageSize={}", keyword, employmentType, page, pageSize);
+    public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword,
+            com.company.company_clean_hub_be.entity.EmploymentType employmentType, int page, int pageSize) {
+        log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, page={}, pageSize={}", keyword,
+                employmentType, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, pageable);
 
@@ -78,32 +80,33 @@ public class EmployeeServiceImpl implements EmployeeService {
     public EmployeeResponse createEmployee(EmployeeRequest request) {
         String username = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();
-        log.info("createEmployee by {}: username={}, employeeCode={}", username, request.getUsername(), request.getEmployeeCode());
+        log.info("createEmployee by {}: username={}, employeeCode={}", username, request.getUsername(),
+                request.getEmployeeCode());
         // Kiểm tra trùng username
         if (employeeRepository.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
-        
+
         // Kiểm tra trùng phone
         if (request.getPhone() != null && employeeRepository.existsByPhone(request.getPhone())) {
             throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
         }
-        
+
         // Kiểm tra trùng employeeCode
         if (employeeRepository.existsByEmployeeCode(request.getEmployeeCode())) {
             throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
         }
-        
+
         // Kiểm tra trùng CCCD
         if (employeeRepository.existsByCccd(request.getCccd())) {
             throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
         }
-        
+
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
         Employee employee = Employee.builder()
-            .employeeCode(request.getEmployeeCode())
+                .employeeCode(request.getEmployeeCode())
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .phone(request.getPhone())
@@ -120,6 +123,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .monthlySalary(request.getMonthlySalary())
                 .allowance(request.getAllowance())
                 .insuranceSalary(request.getInsuranceSalary())
+                .monthlyAdvanceLimit(request.getMonthlyAdvanceLimit())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -132,7 +136,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     public EmployeeResponse updateEmployee(Long id, EmployeeRequest request) {
         String username = org.springframework.security.core.context.SecurityContextHolder
-            .getContext().getAuthentication().getName();
+                .getContext().getAuthentication().getName();
         log.info("updateEmployee by {}: id={}, employeeCode={}", username, id, request.getEmployeeCode());
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
@@ -141,25 +145,24 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (request.getPhone() != null && employeeRepository.existsByPhoneAndIdNot(request.getPhone(), id)) {
             throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
         }
-        
+
         // Kiểm tra trùng employeeCode (ngoại trừ chính nó)
         if (employeeRepository.existsByEmployeeCodeAndIdNot(request.getEmployeeCode(), id)) {
             throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
         }
-        
+
         // Kiểm tra trùng CCCD (ngoại trừ chính nó)
         if (employeeRepository.existsByCccdAndIdNot(request.getCccd(), id)) {
             throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
         }
 
-        
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
-//        employee.setUsername(request.getUsername());
-//        if (request.getPassword() != null && !request.getPassword().isEmpty()) {
-//            employee.setPassword(passwordEncoder.encode(request.getPassword()));
-//        }
+        // employee.setUsername(request.getUsername());
+        // if (request.getPassword() != null && !request.getPassword().isEmpty()) {
+        // employee.setPassword(passwordEncoder.encode(request.getPassword()));
+        // }
         employee.setPhone(request.getPhone());
         employee.setRole(role);
         employee.setStatus(request.getStatus());
@@ -174,6 +177,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setMonthlySalary(request.getMonthlySalary());
         employee.setAllowance(request.getAllowance());
         employee.setInsuranceSalary(request.getInsuranceSalary());
+        employee.setMonthlyAdvanceLimit(request.getMonthlyAdvanceLimit());
         employee.setUpdatedAt(LocalDateTime.now());
 
         Employee updatedEmployee = employeeRepository.save(employee);
@@ -213,6 +217,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .monthlySalary(employee.getMonthlySalary())
                 .allowance(employee.getAllowance())
                 .insuranceSalary(employee.getInsuranceSalary())
+                .monthlyAdvanceLimit(employee.getMonthlyAdvanceLimit())
                 .createdAt(employee.getCreatedAt())
                 .updatedAt(employee.getUpdatedAt())
                 .build();
@@ -242,7 +247,8 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     @Override
-    public List<EmployeeExportDto> getEmployeesForExportByType(com.company.company_clean_hub_be.entity.EmploymentType employmentType) {
+    public List<EmployeeExportDto> getEmployeesForExportByType(
+            com.company.company_clean_hub_be.entity.EmploymentType employmentType) {
         log.info("getEmployeesForExportByType requested: employmentType={}", employmentType);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
         return employeeRepository.findByEmploymentType(employmentType).stream()

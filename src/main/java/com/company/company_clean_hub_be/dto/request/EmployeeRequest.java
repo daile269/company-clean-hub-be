@@ -61,4 +61,7 @@ public class EmployeeRequest {
 
     private BigDecimal insuranceSalary;
 
+    // Số tiền xin ứng hàng tháng
+    private BigDecimal monthlyAdvanceLimit;
+
 }
