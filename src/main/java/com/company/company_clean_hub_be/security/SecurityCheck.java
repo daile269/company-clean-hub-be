@@ -2,6 +2,7 @@ package com.company.company_clean_hub_be.security;
 
 import com.company.company_clean_hub_be.entity.Employee;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
+import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.RatingRepository;
 import com.company.company_clean_hub_be.entity.Rating;
@@ -17,6 +18,7 @@ import java.util.Optional;
 public class SecurityCheck {
     private final UserService userService;
     private final EmployeeRepository employeeRepository;
+    private final CustomerRepository customerRepository;
     private final AssignmentRepository assignmentRepository;
     private final RatingRepository ratingRepository;
 
@@ -63,5 +65,23 @@ public class SecurityCheck {
         List<com.company.company_clean_hub_be.entity.Customer> customers = assignmentRepository.findActiveCustomersByEmployee(empId);
         if (customers == null || customers.isEmpty()) return false;
         return customers.stream().anyMatch(c -> c != null && c.getId() != null && c.getId().equals(customerId));
+    }
+
+    public boolean isCustomerSelf(Long customerId) {
+        if (customerId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        return customerRepository.findById(customerId)
+                .map(c -> c.getUsername() != null && c.getUsername().equals(username))
+                .orElse(false);
+    }
+
+    public boolean isRatingOwnedByCustomer(Long ratingId) {
+        if (ratingId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        return ratingRepository.findById(ratingId)
+                .map(r -> r.getCustomer() != null && r.getCustomer().getUsername() != null && r.getCustomer().getUsername().equals(username))
+                .orElse(false);
     }
 }
