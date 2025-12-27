@@ -6,6 +6,7 @@ import lombok.Data;
 public class CreateRatingRequest {
     private Long contractId;
     private Long assignmentId;
+    private Long employeeId;
     private Integer rating;
     private String comment;
     private String createdBy;

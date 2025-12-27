@@ -19,4 +19,6 @@ public class RatingResponse {
     private String comment;
     private String createdBy;
     private LocalDateTime createdAt;
+    private Long reviewerId;
+    private String reviewerName;
 }
