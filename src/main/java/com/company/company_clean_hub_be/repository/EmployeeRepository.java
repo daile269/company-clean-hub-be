@@ -1,6 +1,7 @@
 package com.company.company_clean_hub_be.repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import com.company.company_clean_hub_be.entity.EmploymentType;
 import org.springframework.data.domain.Page;
@@ -77,5 +78,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     );
 
     List<Employee> findByEmploymentType(EmploymentType employmentType);
+
+        Optional<Employee> findByUsername(String username);
 
 }

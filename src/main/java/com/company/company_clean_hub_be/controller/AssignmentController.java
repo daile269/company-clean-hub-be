@@ -82,6 +82,7 @@ public class AssignmentController {
                 HttpStatus.OK.value());
     }
 
+
     @PutMapping("/{id}/allowance")
     @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority  ('ASSIGNMENT_UPDATE','PAYROLL_EDIT')")
     public ApiResponse<AssignmentResponse> updateAllowanceAssignment(
@@ -123,7 +124,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/customer/{customerId}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW') or @securityCheck.isEmployeeAssignedToCustomer(#customerId)")
     public ApiResponse<List<AssignmentResponse>> getEmployeesByCustomer(@PathVariable Long customerId) {
         List<AssignmentResponse> assignments = assignmentService.getEmployeesByCustomer(customerId);
         return ApiResponse.success(
@@ -132,8 +133,8 @@ public class AssignmentController {
                 HttpStatus.OK.value());
     }
 
-    @GetMapping("/customer/{customerId}/all")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    @GetMapping("/customer ./{customerId}/all")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW') or @securityCheck.isEmployeeAssignedToCustomer(#customerId)")
     public ApiResponse<PageResponse<AssignmentResponse>> getAllEmployeesByCustomer(
             @PathVariable Long customerId,
             @RequestParam(required = false) com.company.company_clean_hub_be.entity.ContractType contractType,
@@ -171,7 +172,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/employee/{employeeId}/customers")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW') or @securityCheck.isEmployeeSelf(#employeeId)")
     public ApiResponse<List<com.company.company_clean_hub_be.dto.response.CustomerResponse>> getCustomersByEmployee(
             @PathVariable Long employeeId) {
         List<com.company.company_clean_hub_be.dto.response.CustomerResponse> customers = assignmentService
@@ -183,7 +184,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/employee/{employeeId}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW') or @securityCheck.isEmployeeSelf(#employeeId)")
     public ApiResponse<PageResponse<AssignmentResponse>> getAssignmentsByEmployee(
             @PathVariable Long employeeId,
             @RequestParam(required = false) Long customerId,
