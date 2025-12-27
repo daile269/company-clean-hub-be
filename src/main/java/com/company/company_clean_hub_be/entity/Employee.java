@@ -24,7 +24,7 @@ import lombok.experimental.SuperBuilder;
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
 @SuperBuilder
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
 public class Employee extends User {
 
     @NotBlank
@@ -67,8 +67,12 @@ public class Employee extends User {
     // Chỉ cho COMPANY_STAFF: Mức lương đóng BHXH/BHYT
     @Column(name = "insurance_salary", precision = 18, scale = 2)
     private BigDecimal insuranceSalary;
-//    @Column(name = "created_at")
-//    private LocalDateTime createdAt;
-//    @Column(name = "updated_at")
-//    private LocalDateTime updatedAt;
+
+    // Số tiền xin ứng hàng tháng
+    @Column(name = "monthly_advance_limit", precision = 18, scale = 2)
+    private BigDecimal monthlyAdvanceLimit;
+    // @Column(name = "created_at")
+    // private LocalDateTime createdAt;
+    // @Column(name = "updated_at")
+    // private LocalDateTime updatedAt;
 }

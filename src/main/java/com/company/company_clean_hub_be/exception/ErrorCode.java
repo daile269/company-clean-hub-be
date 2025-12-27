@@ -4,20 +4,20 @@ import lombok.Getter;
 
 @Getter
 public enum ErrorCode {
-    USER_IS_EXISTS(400,"Người dùng đã tồn tại"),
-    USER_IS_NOT_EXISTS(400,"Người dùng không tồn tại"),
-    USERNAME_OR_PASSWORD_VALID(969,"Username or password is valid!"),
-    EMAIL_IS_EXISTS(400,"Email đã tồn tại"),
-    VERIFY_CODE_VALID(400,"Mã xác nhận không chính xác, vui lòng kiểm tra lại trong email!!"),
-    LOGIN_VALID(400,"Tên đăng nhập hoặc mật khẩu không chính xác!"),
-    PASS_NOT_MATCH(400,"Mật khẩu cũ không chính xác!"),
-    VALID_TOKEN(401,"Token không chính xác hoặc đã hết hạn sử dụng!"),
-    EMPLOYEE_NOT_FOUND(404,"Nhân viên không tồn tại"),
-    CUSTOMER_NOT_FOUND(404,"Khách hàng không tồn tại"),
-    CONTRACT_NOT_FOUND(404,"Hợp đồng không tồn tại"),
-    SERVICE_NOT_FOUND(404,"Dịch vụ không tồn tại"),
-    ASSIGNMENT_NOT_FOUND(404,"Phân công không tồn tại"),
-    ROLE_NOT_FOUND(404,"Vai trò không tồn tại"),
+    USER_IS_EXISTS(400, "Người dùng đã tồn tại"),
+    USER_IS_NOT_EXISTS(400, "Người dùng không tồn tại"),
+    USERNAME_OR_PASSWORD_VALID(969, "Username or password is valid!"),
+    EMAIL_IS_EXISTS(400, "Email đã tồn tại"),
+    VERIFY_CODE_VALID(400, "Mã xác nhận không chính xác, vui lòng kiểm tra lại trong email!!"),
+    LOGIN_VALID(400, "Tên đăng nhập hoặc mật khẩu không chính xác!"),
+    PASS_NOT_MATCH(400, "Mật khẩu cũ không chính xác!"),
+    VALID_TOKEN(401, "Token không chính xác hoặc đã hết hạn sử dụng!"),
+    EMPLOYEE_NOT_FOUND(404, "Nhân viên không tồn tại"),
+    CUSTOMER_NOT_FOUND(404, "Khách hàng không tồn tại"),
+    CONTRACT_NOT_FOUND(404, "Hợp đồng không tồn tại"),
+    SERVICE_NOT_FOUND(404, "Dịch vụ không tồn tại"),
+    ASSIGNMENT_NOT_FOUND(404, "Phân công không tồn tại"),
+    ROLE_NOT_FOUND(404, "Vai trò không tồn tại"),
     IMAGE_NOT_FOUND(404, "Ảnh nhân viên không tồn tại"),
     
     USERNAME_ALREADY_EXISTS(400,"Tên đăng nhập đã tồn tại"),
@@ -46,17 +46,18 @@ public enum ErrorCode {
     
     COMPANY_STAFF_CANNOT_BE_ASSIGNED(400,"Nhân viên văn phòng không thể được phân công làm việc cho khách hàng"),
     COMPANY_STAFF_CANNOT_BE_REASSIGNED(400,"Nhân viên văn phòng không thể được điều động thay thế"),
+    INVALID_TOKEN(401, "Token không hợp lệ"),
+    TOKEN_EXPIRED(401, "Token đã hết hạn, vui lòng đăng nhập lại"),
+    UNSUPPORTED_TOKEN(401, "Token không được hỗ trợ"),
+    TOKEN_CLAIMS_EMPTY(401, "Token không chứa thông tin"),
 
-    INVALID_TOKEN(401,"Token không hợp lệ"),
-    TOKEN_EXPIRED(401,"Token đã hết hạn, vui lòng đăng nhập lại"),
-    UNSUPPORTED_TOKEN(401,"Token không được hỗ trợ"),
-    TOKEN_CLAIMS_EMPTY(401,"Token không chứa thông tin"),
-
+    FORBIDDEN(403, "Bạn không có quyền truy cập tài nguyên này"),
     NOT_PERMISSION_REVIEW(403,"Bạn không thuộc hợp đồng này" ),
     UNAUTHENTICATED(403,"Không có quyền truy cập" );
 
     private final int code;
     private final String message;
+
     ErrorCode(int code, String message) {
         this.code = code;
         this.message = message;
