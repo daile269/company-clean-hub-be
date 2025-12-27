@@ -41,6 +41,13 @@ public class RatingController {
         return ApiResponse.success("Lấy đánh giá theo nhân viên thành công", list, HttpStatus.OK.value());
     }
 
+    @GetMapping("/customer/{customerId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_VIEW_ALL') or @securityCheck.isEmployeeAssignedToCustomer(#customerId) or @securityCheck.isCustomerSelf(#customerId)")
+    public ApiResponse<List<RatingResponse>> getByCustomer(@PathVariable Long customerId) {
+        List<RatingResponse> list = ratingService.getRatingsByCustomer(customerId);
+        return ApiResponse.success("Lấy đánh giá theo khách hàng thành công", list, HttpStatus.OK.value());
+    }
+
     @GetMapping("/reviewer/{reviewerId}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_VIEW_ALL') or @securityCheck.isEmployeeSelf(#reviewerId)")
     public ApiResponse<List<RatingResponse>> getByReviewer(@PathVariable Long reviewerId) {
@@ -76,7 +83,7 @@ public class RatingController {
     }
 
     @DeleteMapping("/{id}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_DELETE') or @securityCheck.isRatingCreatedByCurrentUser(#id)")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_DELETE') or @securityCheck.isRatingCreatedByCurrentUser(#id) or @securityCheck.isRatingOwnedByCustomer(#id)")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         ratingService.deleteRating(id);
         return ApiResponse.success("Xóa đánh giá thành công", null, HttpStatus.NO_CONTENT.value());

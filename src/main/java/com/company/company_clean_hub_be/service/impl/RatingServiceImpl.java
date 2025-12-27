@@ -148,6 +148,11 @@ public class RatingServiceImpl implements RatingService {
     }
 
     @Override
+    public List<RatingResponse> getRatingsByCustomer(Long customerId) {
+        return ratingRepository.findByContractCustomerId(customerId).stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional
     public RatingResponse updateRating(Long id, UpdateRatingRequest request) {
         Rating r = ratingRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.ATTENDANCE_NOT_FOUND));
