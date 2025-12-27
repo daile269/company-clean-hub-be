@@ -106,7 +106,7 @@ public class PayrollServiceImpl implements PayrollService {
                         }
 
                         Payroll payroll = upsertPayrollFromAssignments(employee, assignments, month, year, accountant,
-                                        new HashMap<>());
+                                        new LinkedHashMap<>());
 
                         if (payroll == null) {
                                 log.info("[BULK-CALC] Employee {} skipped (no attendance)", employeeId);
@@ -180,7 +180,7 @@ public class PayrollServiceImpl implements PayrollService {
                                 .anyMatch(a -> a.getScope() != null && a.getScope() == AssignmentScope.COMPANY);
                 log.debug("[SINGLE-CALC][SCOPE] hasCompanyScope={}", hasCompanyScope);
 
-                Map<String, String> note = new HashMap<>();
+                Map<String, String> note = new LinkedHashMap<>();
                 String finalRow = "( ";
                 BigDecimal baseSalaryTotal = BigDecimal.ZERO;
 
@@ -483,7 +483,7 @@ public class PayrollServiceImpl implements PayrollService {
                         }
                         User accountant = userRepository.findByUsername(userService.getCurrentUsername())
                                         .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
-                        Map<String, String> note = new HashMap<>();
+                        Map<String, String> note = new LinkedHashMap<>();
                         Payroll persistedPayroll = upsertPayrollFromAssignments(employee, assignments, month, year,
                                         accountant,
                                         note);
@@ -761,7 +761,8 @@ public class PayrollServiceImpl implements PayrollService {
 
                 for (Assignment assignment : assignments) {
 
-                        log.debug("[PAYROLL-EXPORT][DEBUG] Processing assignment id={} for employeeId={}",
+                        log.debug(
+                                        "[PAYROLL-EXPORT][DEBUG] Processing assignment id={} for employeeId={}",
                                         assignment != null ? assignment.getId() : null, employee.getId());
 
                         int assignmentRealDays = calculateActualWorkDays(assignment);
@@ -769,14 +770,6 @@ public class PayrollServiceImpl implements PayrollService {
                         log.debug("[PAYROLL-EXPORT][DEBUG] assignmentRealDays={}, cumulative totalDays={}",
                                         assignmentRealDays,
                                         totalDays);
-                        String key = assignment.getContract() != null
-                                        ? assignment.getContract().getCustomer().getCompany() + " ("
-                                                        + assignment.getId() + ")"
-                                        : "Văn phòng";
-                        String value = mapAssignmentTypeToVietnamese(assignment.getAssignmentType()) + " :";
-                        if (note != null) {
-                                note.put(key, value);
-                        }
                         BigDecimal bonus = attendanceRepository.sumBonusByAssignment(assignment.getId());
                         BigDecimal penalty = attendanceRepository.sumPenaltyByAssignment(assignment.getId());
                         BigDecimal support = attendanceRepository.sumSupportCostByAssignment(assignment.getId());
@@ -811,8 +804,6 @@ public class PayrollServiceImpl implements PayrollService {
                         BigDecimal calculatedAssignmentAmount = calculateAssignmentAmount(assignment, safeBonus,
                                         suportAssignment,
                                         note);
-                        if (note != null)
-                                value = note.get(key);
                         log.debug("[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount returned {} for assignmentId={}",
                                         calculatedAssignmentAmount, assignment.getId());
                         amountTotal = amountTotal.add(calculatedAssignmentAmount);
@@ -867,14 +858,13 @@ public class PayrollServiceImpl implements PayrollService {
 
                 BigDecimal finalAmount = amountTotal.subtract(deductions);
                 finalRow += String.format(
-                                " ) - (%s + %s) = %s (Xin ứng: %s - chỉ là ghi chú)",
+                                " ) - (%s + %s) = %s ",
                                 totalPenalties,
                                 insuranceTotal,
-                                finalAmount,
-                                advanceTotal);
+                                finalAmount);
 
                 if (note != null) {
-                        note.put("Tổng", finalRow);
+
                         StringBuilder sb = new StringBuilder();
                         for (Map.Entry<String, String> entry : note.entrySet()) {
                                 if (!entry.getKey().equals("Tổng")) {
@@ -884,6 +874,7 @@ public class PayrollServiceImpl implements PayrollService {
                         if (note.containsKey("Tổng")) {
                                 sb.append("Tổng: ").append(note.get("Tổng"));
                         }
+                        note.put("Tổng", finalRow);
                         payroll.setNote(sb.toString());
                 }
                 log.debug(
@@ -1025,7 +1016,7 @@ public class PayrollServiceImpl implements PayrollService {
                                 ? assignment.getContract().getCustomer().getCompany() + " (" + assignment.getId()
                                                 + "): "
                                 : "Văn phòng: ";
-
+                key += mapAssignmentTypeToVietnamese(assignment.getAssignmentType());
                 String value = "";
                 BigDecimal amount = BigDecimal.ZERO;
 
