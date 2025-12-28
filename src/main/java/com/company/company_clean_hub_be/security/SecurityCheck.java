@@ -8,6 +8,7 @@ import com.company.company_clean_hub_be.repository.RatingRepository;
 import com.company.company_clean_hub_be.entity.Rating;
 import com.company.company_clean_hub_be.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class SecurityCheck {
     private final UserService userService;
     private final EmployeeRepository employeeRepository;
@@ -37,9 +39,18 @@ public class SecurityCheck {
         Optional<Employee> emp = employeeRepository.findByUsername(username);
         if (emp.isEmpty()) return false;
         Long empId = emp.get().getId();
+        log.info("[SECURITY] isAssignmentOwnedByCurrentUser start - assignmentId={} username={} empId={}", assignmentId, username, empId);
         return assignmentRepository.findById(assignmentId)
-                .map(a -> a.getEmployee() != null && a.getEmployee().getId() != null && a.getEmployee().getId().equals(empId))
-                .orElse(false);
+                .map(a -> {
+                    boolean owns = a.getEmployee() != null && a.getEmployee().getId() != null && a.getEmployee().getId().equals(empId);
+                    log.info("[SECURITY] isAssignmentOwnedByCurrentUser result - assignmentId={} assignmentEmployeeId={} empId={} owns={}", assignmentId,
+                            a.getEmployee() != null ? a.getEmployee().getId() : null, empId, owns);
+                    return owns;
+                })
+                .orElseGet(() -> {
+                    log.info("[SECURITY] isAssignmentOwnedByCurrentUser result - assignmentId={} not found", assignmentId);
+                    return false;
+                });
     }
 
     public boolean isRatingCreatedByCurrentUser(Long ratingId) {
@@ -74,6 +85,33 @@ public class SecurityCheck {
         return customerRepository.findById(customerId)
                 .map(c -> c.getUsername() != null && c.getUsername().equals(username))
                 .orElse(false);
+    }
+
+    public boolean isEmployeeAssignedToAssignment(Long assignmentId) {
+        if (assignmentId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        Optional<Employee> emp = employeeRepository.findByUsername(username);
+        if (emp.isEmpty()) return false;
+        Long empId = emp.get().getId();
+
+        log.info("[SECURITY] isEmployeeAssignedToAssignment start - assignmentId={} username={} empId={}", assignmentId, username, empId);
+        return assignmentRepository.findById(assignmentId)
+                .map(a -> {
+                    Long contractId = a.getContract() != null ? a.getContract().getId() : null;
+                    if (contractId == null) {
+                        log.info("[SECURITY] isEmployeeAssignedToAssignment - assignmentId={} has no contract", assignmentId);
+                        return false;
+                    }
+                    List<com.company.company_clean_hub_be.entity.Assignment> myAssignments = assignmentRepository.findActiveAssignmentByEmployeeAndContract(empId, contractId);
+                    boolean assigned = myAssignments != null && !myAssignments.isEmpty();
+                    log.info("[SECURITY] isEmployeeAssignedToAssignment result - assignmentId={} contractId={} empId={} myAssignmentsCount={} assigned={}",
+                            assignmentId, contractId, empId, myAssignments != null ? myAssignments.size() : 0, assigned);
+                    return assigned;
+                }).orElseGet(() -> {
+                    log.info("[SECURITY] isEmployeeAssignedToAssignment - assignmentId={} not found", assignmentId);
+                    return false;
+                });
     }
 
     public boolean isRatingOwnedByCustomer(Long ratingId) {

@@ -24,9 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class RatingServiceImpl implements RatingService {
 
     private final RatingRepository ratingRepository;
@@ -44,6 +46,8 @@ public class RatingServiceImpl implements RatingService {
 
         String username = userService.getCurrentUsername();
         if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
+        log.info("[RATING][CREATE] start - user={}, contractId={}, assignmentId={}, employeeId={}, rating={}",
+            username, request.getContractId(), request.getAssignmentId(), request.getEmployeeId(), request.getRating());
         // Determine provided target: optional assignmentId or employeeId
         Assignment assignment = null;
         Employee targetEmployee = null;
@@ -72,13 +76,14 @@ public class RatingServiceImpl implements RatingService {
         String roleCode = currentUser.getRole() != null ? currentUser.getRole().getCode() : null;
 
         if ("CUSTOMER".equalsIgnoreCase(roleCode)) {
+            log.info("[RATING][CREATE][CUSTOMER] user={} creating for contractId={}", username, contract.getId());
             // preserve existing behavior: only customer owning contract can create
             ensureCustomerOwnsContract(contract);
             r.setCustomer(contract.getCustomer());
             r.setCreatedBy(username != null ? username : request.getCreatedBy());
-
             // keep original requirement: customer must provide assignment to rate an employee
             if (assignment == null) {
+                log.warn("[RATING][CREATE][CUSTOMER] missing assignment when customer tries to rate employee - user={}", username);
                 throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
             }
         } else if ("EMPLOYEE".equalsIgnoreCase(roleCode)) {
@@ -98,11 +103,16 @@ public class RatingServiceImpl implements RatingService {
             // ensure reviewer had/has assignment with the effective contract (permission)
             List<Assignment> reviewerAssignments = assignmentRepository.findActiveAssignmentByEmployeeAndContract(reviewer.getId(), effectiveContract.getId());
             if (reviewerAssignments == null || reviewerAssignments.isEmpty()) {
+                log.warn("[RATING][CREATE][EMPLOYEE] user={} has no active assignment on contractId={}", username, effectiveContract.getId());
                 throw new AppException(ErrorCode.NOT_PERMISSION_REVIEW);
             }
 
             r.setReviewer(reviewer);
             r.setCreatedBy(username);
+
+            log.info("[RATING][CREATE][EMPLOYEE] reviewerId={} assignmentId={} targetEmployeeId={} contractId={}",
+                    reviewer.getId(), assignment != null ? assignment.getId() : null,
+                    targetEmployee != null ? targetEmployee.getId() : null, effectiveContract.getId());
 
             // If caller is employee and did NOT provide employeeId explicitly, do NOT set employee target
             if (request.getEmployeeId() == null) {
@@ -118,6 +128,7 @@ public class RatingServiceImpl implements RatingService {
         }
 
         Rating saved = ratingRepository.save(r);
+        log.info("[RATING][CREATE] saved rating id={} by user={}", saved.getId(), username);
         return toResponse(saved);
     }
 
@@ -149,9 +160,9 @@ public class RatingServiceImpl implements RatingService {
 
     @Override
     public List<RatingResponse> getRatingsByCustomer(Long customerId) {
-        return ratingRepository.findByContractCustomerId(customerId).stream().map(this::toResponse).collect(Collectors.toList());
+        return ratingRepository.findByContractCustomerIdAndEmployeeIsNotNull(customerId).stream().map(this::toResponse).collect(Collectors.toList());
     }
-
+    
     @Override
     @Transactional
     public RatingResponse updateRating(Long id, UpdateRatingRequest request) {
@@ -218,6 +229,7 @@ public class RatingServiceImpl implements RatingService {
                 .createdAt(r.getCreatedAt())
                 .reviewerId(r.getReviewer() != null ? r.getReviewer().getId() : null)
                 .reviewerName(r.getReviewer() != null ? r.getReviewer().getName() : null)
+                .reviewerRole(r.getReviewer() != null && r.getReviewer().getRole() != null ? r.getReviewer().getRole().getCode() : null)
                 .build();
     }
 
