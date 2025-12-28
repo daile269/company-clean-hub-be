@@ -183,7 +183,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/employee/{employeeId}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority  ('ASSIGNMENT_VIEW','EMPLOYEE_VIEW_OWN')")
     public ApiResponse<PageResponse<AssignmentResponse>> getAssignmentsByEmployee(
             @PathVariable Long employeeId,
             @RequestParam(required = false) Long customerId,

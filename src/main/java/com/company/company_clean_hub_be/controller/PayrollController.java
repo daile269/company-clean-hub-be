@@ -140,4 +140,14 @@ public class PayrollController {
         return ApiResponse.success("Lấy lịch sử thanh toán thành công", history, HttpStatus.OK.value());
     }
 
+    @GetMapping("/employee/{employeeId}/assignment-details")
+    public ApiResponse<List<com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse>> getAssignmentPayrollDetails(
+            @PathVariable Long employeeId,
+            @RequestParam Integer month,
+            @RequestParam Integer year) {
+        List<com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse> details = payrollService
+                .getAssignmentPayrollDetails(employeeId, month, year);
+        return ApiResponse.success("Lấy chi tiết lương assignment thành công", details, HttpStatus.OK.value());
+    }
+
 }
