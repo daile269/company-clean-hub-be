@@ -160,7 +160,7 @@ public class RatingServiceImpl implements RatingService {
 
     @Override
     public List<RatingResponse> getRatingsByCustomer(Long customerId) {
-        return ratingRepository.findByContractCustomerIdAndEmployeeIsNotNull(customerId).stream().map(this::toResponse).collect(Collectors.toList());
+        return ratingRepository.findByContractCustomerIdAndEmployeeIsNotNullAndReviewerIsNull(customerId).stream().map(this::toResponse).collect(Collectors.toList());
     }
     
     @Override

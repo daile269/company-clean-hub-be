@@ -14,6 +14,6 @@ public interface RatingRepository extends JpaRepository<Rating, Long>, JpaSpecif
     List<Rating> findByEmployeeId(Long employeeId);
     List<Rating> findByReviewerId(Long reviewerId);
     List<Rating> findByContractCustomerId(Long customerId);
-    List<Rating> findByContractCustomerIdAndEmployeeIsNotNull(Long customerId);
+    List<Rating> findByContractCustomerIdAndEmployeeIsNotNullAndReviewerIsNull(Long customerId);
 }
 
