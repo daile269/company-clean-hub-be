@@ -149,12 +149,15 @@ public class PayrollServiceImpl implements PayrollService {
                 BigDecimal totalSupportCosts = BigDecimal.ZERO;
                 int totalDays = 0;
 
-                BigDecimal advanceTotal = request.getAdvanceSalary() != null ? request.getAdvanceSalary()
-                                : BigDecimal.ZERO;
                 BigDecimal insuranceTotal = request.getInsuranceAmount() != null ? request.getInsuranceAmount()
                                 : BigDecimal.ZERO;
 
-                log.debug("[SINGLE-CALC][INIT] advanceTotal={}, insuranceTotal={}",
+                // Read advance from employee.monthlyAdvanceLimit instead of request
+                BigDecimal advanceTotal = employee.getMonthlyAdvanceLimit() != null
+                                ? employee.getMonthlyAdvanceLimit()
+                                : BigDecimal.ZERO;
+
+                log.debug("[SINGLE-CALC][INIT] advanceTotal={} (from employee.monthlyAdvanceLimit), insuranceTotal={}",
                                 advanceTotal, insuranceTotal);
 
                 List<Assignment> assignments = assignmentRepository
@@ -653,6 +656,17 @@ public class PayrollServiceImpl implements PayrollService {
 
                         Payroll payroll = payrollOpt.get();
 
+                        // Sync advance from employee to payroll (in case employee was updated)
+                        if (employee.getMonthlyAdvanceLimit() != null) {
+                                if (payroll.getAdvanceTotal() == null ||
+                                                !payroll.getAdvanceTotal().equals(employee.getMonthlyAdvanceLimit())) {
+                                        payroll.setAdvanceTotal(employee.getMonthlyAdvanceLimit());
+                                        payrollRepository.save(payroll);
+                                        log.info("[PAYROLL-FILTER-SYNC] Synced advance {} from employee {} to payroll",
+                                                        employee.getMonthlyAdvanceLimit(), employeeId);
+                                }
+                        }
+
                         // Convert to responses
                         List<PayrollAssignmentResponse> employeeResponses = convertPayrollToAssignmentResponses(
                                         payroll, employee, assignments, month, year);
@@ -733,7 +747,10 @@ public class PayrollServiceImpl implements PayrollService {
                 BigDecimal totalBonus = BigDecimal.ZERO;
                 BigDecimal totalPenalties = BigDecimal.ZERO;
                 BigDecimal totalSupportCosts = BigDecimal.ZERO;
-                BigDecimal totalAdvance = BigDecimal.ZERO;
+                // Read advance from employee.monthlyAdvanceLimit
+                BigDecimal totalAdvance = employee.getMonthlyAdvanceLimit() != null
+                                ? employee.getMonthlyAdvanceLimit()
+                                : BigDecimal.ZERO;
                 BigDecimal totalInsurance = BigDecimal.ZERO;
                 int totalDays = 0;
 
@@ -1399,8 +1416,25 @@ public class PayrollServiceImpl implements PayrollService {
                         log.info("[PAYROLL-CALC] Insurance taken from Request/Existing: {}", insuranceTotal);
                 }
 
-                BigDecimal advanceTotal = request.getAdvanceTotal() != null ? request.getAdvanceTotal()
-                                : (payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal() : BigDecimal.ZERO);
+                BigDecimal advanceTotal;
+                if (request.getAdvanceTotal() != null) {
+                        // User is updating advance - use request value and sync to employee
+                        advanceTotal = request.getAdvanceTotal();
+                        Employee employee = payroll.getEmployee();
+                        if (employee != null) {
+                                employee.setMonthlyAdvanceLimit(advanceTotal);
+                                employeeRepository.save(employee);
+                                log.info("[PAYROLL-SYNC] Updated employee.monthlyAdvanceLimit to {}", advanceTotal);
+                        }
+                } else {
+                        // No update to advance - read from employee
+                        Employee employee = payroll.getEmployee();
+                        advanceTotal = (employee != null && employee.getMonthlyAdvanceLimit() != null)
+                                        ? employee.getMonthlyAdvanceLimit()
+                                        : (payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal()
+                                                        : BigDecimal.ZERO);
+                        log.info("[PAYROLL-SYNC] Reading advance from employee.monthlyAdvanceLimit: {}", advanceTotal);
+                }
 
                 // Calculate total deductions: penalties + insurance (advanceTotal is now only a
                 // note, not deducted)
@@ -1554,6 +1588,60 @@ public class PayrollServiceImpl implements PayrollService {
                                                 .createdAt(history.getCreatedAt())
                                                 .build())
                                 .collect(Collectors.toList());
+        }
+
+        @Override
+        public List<com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse> getAssignmentPayrollDetails(
+                        Long employeeId, Integer month, Integer year) {
+                log.info("[ASSIGNMENT-PAYROLL-DETAILS] Getting details for employeeId={}, month={}, year={}",
+                                employeeId, month, year);
+
+                // Get assignments for this employee in month/year
+                List<Assignment> assignments = assignmentRepository
+                                .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId);
+
+                if (assignments == null || assignments.isEmpty()) {
+                        log.info("[ASSIGNMENT-PAYROLL-DETAILS] No assignments found");
+                        return new ArrayList<>();
+                }
+
+                List<com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse> result = new ArrayList<>();
+
+                for (Assignment assignment : assignments) {
+                        // Calculate work days
+                        int workDays = calculateActualWorkDays(assignment);
+
+                        // Get base salary
+                        BigDecimal baseSalary = assignment.getSalaryAtTime() != null
+                                        ? assignment.getSalaryAtTime()
+                                        : BigDecimal.ZERO;
+
+                        // Calculate expected salary using same formula as payroll
+                        BigDecimal bonus = defaultZero(
+                                        attendanceRepository.sumBonusByAssignment(assignment.getId()));
+                        BigDecimal support = defaultZero(
+                                        attendanceRepository.sumSupportCostByAssignment(assignment.getId()));
+                        BigDecimal additionalAllowance = defaultZero(assignment.getAdditionalAllowance());
+
+                        BigDecimal expectedSalary = calculateAssignmentAmount(
+                                        assignment, bonus, support.add(additionalAllowance));
+
+                        com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse detail = com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse
+                                        .builder()
+                                        .assignmentId(assignment.getId())
+                                        .baseSalary(baseSalary)
+                                        .workDays(workDays)
+                                        .expectedSalary(expectedSalary)
+                                        .build();
+
+                        result.add(detail);
+
+                        log.debug("[ASSIGNMENT-PAYROLL-DETAILS] Assignment {}: baseSalary={}, workDays={}, expectedSalary={}",
+                                        assignment.getId(), baseSalary, workDays, expectedSalary);
+                }
+
+                log.info("[ASSIGNMENT-PAYROLL-DETAILS] Returning {} details", result.size());
+                return result;
         }
 
 }
