@@ -13,31 +13,36 @@ import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 import jakarta.validation.Valid;
 
 public interface PayrollService {
-    // List<PayRollExportExcel> getAllPayRoll(Integer month, Integer year);
+        // List<PayRollExportExcel> getAllPayRoll(Integer month, Integer year);
 
-    List<PayRollAssignmentExportExcel> getAllPayRollByAssignment(Integer month, Integer year);
+        List<PayRollAssignmentExportExcel> getAllPayRollByAssignment(Integer month, Integer year);
 
-    // PayrollResponse calculatePayroll(PayrollRequest request);
-    PayrollResponse getPayrollById(Long id);
+        // PayrollResponse calculatePayroll(PayrollRequest request);
+        PayrollResponse getPayrollById(Long id);
 
-    List<PayrollResponse> getAllPayrolls();
+        List<PayrollResponse> getAllPayrolls();
 
-    PageResponse<PayrollResponse> getPayrollsWithFilter(String keyword, Integer month, Integer year, Boolean isPaid,
-            int page, int pageSize);
+        PageResponse<PayrollResponse> getPayrollsWithFilter(String keyword, Integer month, Integer year, Boolean isPaid,
+                        int page, int pageSize);
 
-    PayrollResponse updatePaymentStatus(Long id, BigDecimal paidAmount);
+        PayrollResponse updatePaymentStatus(Long id, BigDecimal paidAmount);
 
-    void deletePayroll(Long id);
+        void deletePayroll(Long id);
 
-    // Updated to return List for bulk calculation
-    List<PayrollAssignmentResponse> calculatePayroll(@Valid PayrollRequest request);
+        // Updated to return List for bulk calculation
+        List<PayrollAssignmentResponse> calculatePayroll(@Valid PayrollRequest request);
 
-    // New method for filtered assignments with pagination
-    PageResponse<PayrollAssignmentResponse> getPayrollAssignmentsWithFilter(
-            String keyword, Integer month, Integer year, int page, int pageSize);
+        // New method for filtered assignments with pagination
+        PageResponse<PayrollAssignmentResponse> getPayrollAssignmentsWithFilter(
+                        String keyword, Integer month, Integer year, int page, int pageSize);
 
-    PayrollResponse updatePayroll(Long id, com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest request);
+        PayrollResponse updatePayroll(Long id,
+                        com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest request);
 
-    // Payment history methods
-    List<PaymentHistoryResponse> getPaymentHistory(Long payrollId);
+        // Payment history methods
+        List<PaymentHistoryResponse> getPaymentHistory(Long payrollId);
+
+        // Assignment payroll details for employee view
+        List<com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse> getAssignmentPayrollDetails(
+                        Long employeeId, Integer month, Integer year);
 }
