@@ -12,6 +12,8 @@ public interface RatingService {
     RatingResponse getRating(Long id);
     List<RatingResponse> getRatingsByContract(Long contractId);
     List<RatingResponse> getRatingsByEmployee(Long employeeId);
+    List<RatingResponse> getRatingsByReviewer(Long reviewerId);
+    List<RatingResponse> getRatingsByCustomer(Long customerId);
     PageResponse<RatingResponse> getRatingsWithFilter(Long contractId, Long assignmentId, Long customerId, Long employeeId, int page, int pageSize);
     RatingResponse updateRating(Long id, UpdateRatingRequest request);
     void deleteRating(Long id);

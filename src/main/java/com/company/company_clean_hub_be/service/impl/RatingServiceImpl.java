@@ -40,31 +40,82 @@ public class RatingServiceImpl implements RatingService {
     @Transactional
     public RatingResponse createRating(CreateRatingRequest request) {
         Contract contract = contractRepository.findById(request.getContractId())
-            .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
-        ensureCustomerOwnsContract(contract);
         String username = userService.getCurrentUsername();
+        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
+        // Determine provided target: optional assignmentId or employeeId
         Assignment assignment = null;
-        Employee employee = null;
+        Employee targetEmployee = null;
         if (request.getAssignmentId() != null) {
             assignment = assignmentRepository.findById(request.getAssignmentId())
                     .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
             if (assignment.getEmployee() == null) throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
-            employee = assignment.getEmployee();
-        } else {
-            throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
+            targetEmployee = assignment.getEmployee();
+        } else if (request.getEmployeeId() != null) {
+            targetEmployee = employeeRepository.findById(request.getEmployeeId())
+                    .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
         }
 
+        // Create rating skeleton (employee may be cleared later for employee callers)
         Rating r = Rating.builder()
-                .contract(contract)
-                .employee(employee)
-                .customer(contract.getCustomer())
-                .assignment(assignment)
-                .rating(request.getRating())
-                .comment(request.getComment())
-                .createdBy(username != null ? username : request.getCreatedBy())
-                .createdAt(LocalDateTime.now())
-                .build();
+            .contract(contract)
+            .assignment(assignment)
+            .employee(targetEmployee)
+            .rating(request.getRating())
+            .comment(request.getComment())
+            .createdAt(LocalDateTime.now())
+            .build();
+
+        com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+        String roleCode = currentUser.getRole() != null ? currentUser.getRole().getCode() : null;
+
+        if ("CUSTOMER".equalsIgnoreCase(roleCode)) {
+            // preserve existing behavior: only customer owning contract can create
+            ensureCustomerOwnsContract(contract);
+            r.setCustomer(contract.getCustomer());
+            r.setCreatedBy(username != null ? username : request.getCreatedBy());
+
+            // keep original requirement: customer must provide assignment to rate an employee
+            if (assignment == null) {
+                throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
+            }
+        } else if ("EMPLOYEE".equalsIgnoreCase(roleCode)) {
+            // reviewer is the current employee
+            Employee reviewer = employeeRepository.findByUsername(username)
+                    .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+            // determine effective contract: prefer assignment's contract when assignment provided
+            Contract effectiveContract = contract;
+            if (assignment != null && assignment.getContract() != null) {
+                effectiveContract = assignment.getContract();
+                // update rating's contract/customer accordingly
+                r.setContract(effectiveContract);
+                r.setCustomer(effectiveContract.getCustomer());
+            }
+
+            // ensure reviewer had/has assignment with the effective contract (permission)
+            List<Assignment> reviewerAssignments = assignmentRepository.findActiveAssignmentByEmployeeAndContract(reviewer.getId(), effectiveContract.getId());
+            if (reviewerAssignments == null || reviewerAssignments.isEmpty()) {
+                throw new AppException(ErrorCode.NOT_PERMISSION_REVIEW);
+            }
+
+            r.setReviewer(reviewer);
+            r.setCreatedBy(username);
+
+            // If caller is employee and did NOT provide employeeId explicitly, do NOT set employee target
+            if (request.getEmployeeId() == null) {
+                r.setEmployee(null);
+            }
+
+            // if neither assignment nor employee target provided, treat as feedback for customer
+            if (assignment == null && targetEmployee == null) {
+                r.setCustomer(effectiveContract.getCustomer());
+            }
+        } else {
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
 
         Rating saved = ratingRepository.save(r);
         return toResponse(saved);
@@ -89,6 +140,16 @@ public class RatingServiceImpl implements RatingService {
     @Override
     public List<RatingResponse> getRatingsByEmployee(Long employeeId) {
         return ratingRepository.findByEmployeeId(employeeId).stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<RatingResponse> getRatingsByReviewer(Long reviewerId) {
+        return ratingRepository.findByReviewerId(reviewerId).stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<RatingResponse> getRatingsByCustomer(Long customerId) {
+        return ratingRepository.findByContractCustomerId(customerId).stream().map(this::toResponse).collect(Collectors.toList());
     }
 
     @Override
@@ -155,6 +216,8 @@ public class RatingServiceImpl implements RatingService {
                 .comment(r.getComment())
                 .createdBy(r.getCreatedBy())
                 .createdAt(r.getCreatedAt())
+                .reviewerId(r.getReviewer() != null ? r.getReviewer().getId() : null)
+                .reviewerName(r.getReviewer() != null ? r.getReviewer().getName() : null)
                 .build();
     }
 

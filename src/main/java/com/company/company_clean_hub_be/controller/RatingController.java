@@ -21,7 +21,7 @@ public class RatingController {
     private final RatingService ratingService;
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_CREATE')")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_CREATE') or @securityCheck.isAssignmentOwnedByCurrentUser(#req.assignmentId)")
     public ApiResponse<RatingResponse> create(@RequestBody CreateRatingRequest req) {
         RatingResponse resp = ratingService.createRating(req);
         return ApiResponse.success("Tạo đánh giá thành công", resp, HttpStatus.CREATED.value());
@@ -35,9 +35,24 @@ public class RatingController {
     }
 
     @GetMapping("/employee/{employeeId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_VIEW_ALL') or @securityCheck.isEmployeeSelf(#employeeId)")
     public ApiResponse<List<RatingResponse>> getByEmployee(@PathVariable Long employeeId) {
         List<RatingResponse> list = ratingService.getRatingsByEmployee(employeeId);
         return ApiResponse.success("Lấy đánh giá theo nhân viên thành công", list, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/customer/{customerId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_VIEW_ALL') or @securityCheck.isEmployeeAssignedToCustomer(#customerId) or @securityCheck.isCustomerSelf(#customerId)")
+    public ApiResponse<List<RatingResponse>> getByCustomer(@PathVariable Long customerId) {
+        List<RatingResponse> list = ratingService.getRatingsByCustomer(customerId);
+        return ApiResponse.success("Lấy đánh giá theo khách hàng thành công", list, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/reviewer/{reviewerId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_VIEW_ALL') or @securityCheck.isEmployeeSelf(#reviewerId)")
+    public ApiResponse<List<RatingResponse>> getByReviewer(@PathVariable Long reviewerId) {
+        List<RatingResponse> list = ratingService.getRatingsByReviewer(reviewerId);
+        return ApiResponse.success("Lấy đánh giá theo người tạo (reviewer) thành công", list, HttpStatus.OK.value());
     }
 
     @GetMapping
@@ -61,14 +76,14 @@ public class RatingController {
     }
 
     @PutMapping("/{id}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_UPDATE')")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_UPDATE') or @securityCheck.isRatingCreatedByCurrentUser(#id)")
     public ApiResponse<RatingResponse> update(@PathVariable Long id, @RequestBody UpdateRatingRequest req) {
         RatingResponse resp = ratingService.updateRating(id, req);
         return ApiResponse.success("Cập nhật đánh giá thành công", resp, HttpStatus.OK.value());
     }
 
     @DeleteMapping("/{id}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_DELETE')")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_DELETE') or @securityCheck.isRatingCreatedByCurrentUser(#id) or @securityCheck.isRatingOwnedByCustomer(#id)")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         ratingService.deleteRating(id);
         return ApiResponse.success("Xóa đánh giá thành công", null, HttpStatus.NO_CONTENT.value());
