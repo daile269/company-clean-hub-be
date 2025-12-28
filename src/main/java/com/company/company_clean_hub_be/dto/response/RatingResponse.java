@@ -21,4 +21,5 @@ public class RatingResponse {
     private LocalDateTime createdAt;
     private Long reviewerId;
     private String reviewerName;
+    private String reviewerRole;
 }
