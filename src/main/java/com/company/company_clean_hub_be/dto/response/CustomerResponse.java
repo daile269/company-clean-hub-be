@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class CustomerResponse {
     private Long id;
     private String customerCode;
+    private String code; // Alias for customerCode (for frontend compatibility)
     private String username;
     private String phone;
     private String email;
