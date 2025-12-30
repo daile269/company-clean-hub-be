@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import com.company.company_clean_hub_be.dto.request.PasswordChangeRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -204,5 +205,42 @@ public class UserServiceImpl implements UserService {
                 .roleName(role.getName())
                 .permissions(role.getPermissions())
                 .build();
+    }
+
+    @Override
+    public void changePasswordForCurrentUser(PasswordChangeRequest request) {
+        String username = getCurrentUsername();
+        log.info("changePasswordForCurrentUser requested by {}", username);
+        if (username == null) {
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
+
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_CONFIRM_NOT_MATCH);
+        }
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+        log.info("changePasswordForCurrentUser completed for user={}", username);
+    }
+
+    @Override
+    public void changePasswordForUser(Long id, PasswordChangeRequest request) {
+        log.info("changePasswordForUser requested by {}: targetUserId={}", getCurrentUsername(), id);
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_CONFIRM_NOT_MATCH);
+        }
+
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+        log.info("changePasswordForUser completed: id={}", id);
     }
 }
