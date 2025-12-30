@@ -93,6 +93,11 @@ public class CustomerAssignmentServiceImpl implements CustomerAssignmentService 
             return;
         }
 
+        if ("qlt1".equalsIgnoreCase(assignerRoleCode) && "qlv".equalsIgnoreCase(managerRoleCode)) {
+            log.debug("Cho phép: qlt1 phân công cho qlv");
+            return;
+        }
+
         // Nếu assigner là qlt2 và manager là qlv
         if ("qlt2".equalsIgnoreCase(assignerRoleCode) && "qlv".equalsIgnoreCase(managerRoleCode)) {
             // Kiểm tra xem qlt2 có được phân công customer này không
