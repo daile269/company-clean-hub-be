@@ -11,6 +11,7 @@ public enum ErrorCode {
     VERIFY_CODE_VALID(400, "Mã xác nhận không chính xác, vui lòng kiểm tra lại trong email!!"),
     LOGIN_VALID(400, "Tên đăng nhập hoặc mật khẩu không chính xác!"),
     PASS_NOT_MATCH(400, "Mật khẩu cũ không chính xác!"),
+    PASSWORD_CONFIRM_NOT_MATCH(400, "Mật khẩu xác nhận không khớp"),
     VALID_TOKEN(401, "Token không chính xác hoặc đã hết hạn sử dụng!"),
     EMPLOYEE_NOT_FOUND(404, "Nhân viên không tồn tại"),
     CUSTOMER_NOT_FOUND(404, "Khách hàng không tồn tại"),

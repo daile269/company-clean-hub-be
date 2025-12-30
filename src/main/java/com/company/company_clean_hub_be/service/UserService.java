@@ -1,6 +1,7 @@
 package com.company.company_clean_hub_be.service;
 
 import com.company.company_clean_hub_be.dto.request.UserRequest;
+import com.company.company_clean_hub_be.dto.request.PasswordChangeRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.UserPermissionsResponse;
 import com.company.company_clean_hub_be.dto.response.UserResponse;
@@ -14,6 +15,8 @@ public interface UserService {
     UserResponse createUser(UserRequest request);
     UserResponse updateUser(Long id, UserRequest request);
     void deleteUser(Long id);
+    void changePasswordForCurrentUser(PasswordChangeRequest request);
+    void changePasswordForUser(Long id, PasswordChangeRequest request);
     String getCurrentUsername();
     UserPermissionsResponse getCurrentUserPermissions();
 }
