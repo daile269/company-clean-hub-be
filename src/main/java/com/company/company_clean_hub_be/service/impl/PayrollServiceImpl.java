@@ -322,7 +322,6 @@ public class PayrollServiceImpl implements PayrollService {
                 BigDecimal totalAdvance = payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal()
                                 : BigDecimal.ZERO;
 
-                // Create assignment rows
                 for (Assignment assignment : assignments) {
                         int assignmentDays = calculateActualWorkDays(assignment);
                         BigDecimal assignmentBonus = defaultZero(
