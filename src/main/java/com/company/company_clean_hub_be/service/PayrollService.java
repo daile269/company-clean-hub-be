@@ -45,4 +45,7 @@ public interface PayrollService {
         // Assignment payroll details for employee view
         List<com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse> getAssignmentPayrollDetails(
                         Long employeeId, Integer month, Integer year);
+
+        // Get distinct years from payroll data
+        List<Integer> getDistinctYears();
 }
