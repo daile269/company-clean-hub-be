@@ -52,7 +52,7 @@ public enum ErrorCode {
     UNSUPPORTED_TOKEN(401, "Token không được hỗ trợ"),
     TOKEN_CLAIMS_EMPTY(401, "Token không chứa thông tin"),
 
-    FORBIDDEN(403, "Bạn không có quyền truy cập tài nguyên này"),
+    FORBIDDEN(403, "Bạn không có quyền thực hiện thao tác này"),
     NOT_PERMISSION_REVIEW(403,"Bạn không thuộc hợp đồng này" ),
     UNAUTHENTICATED(403,"Không có quyền truy cập" );
 
