@@ -150,4 +150,10 @@ public class PayrollController {
         return ApiResponse.success("Lấy chi tiết lương assignment thành công", details, HttpStatus.OK.value());
     }
 
+    @GetMapping("/years")
+    public ApiResponse<List<Integer>> getDistinctYears() {
+        List<Integer> years = payrollService.getDistinctYears();
+        return ApiResponse.success("Lấy danh sách năm thành công", years, HttpStatus.OK.value());
+    }
+
 }

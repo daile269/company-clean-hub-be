@@ -523,11 +523,8 @@ public class PayrollServiceImpl implements PayrollService {
                                                 : 0;
                         }
 
-                        // Calculate salary before advance
+                        // Calculate total monthly salary (without adding advance)
                         BigDecimal salaryBeforeAdvance = persistedPayroll.getFinalSalary();
-                        if (persistedPayroll.getAdvanceTotal() != null) {
-                                salaryBeforeAdvance = salaryBeforeAdvance.add(persistedPayroll.getAdvanceTotal());
-                        }
 
                         // Calculate remaining amount (final salary - paid amount)
                         BigDecimal paidAmount = persistedPayroll.getPaidAmount() != null
@@ -1641,6 +1638,14 @@ public class PayrollServiceImpl implements PayrollService {
 
                 log.info("[ASSIGNMENT-PAYROLL-DETAILS] Returning {} details", result.size());
                 return result;
+        }
+
+        @Override
+        public List<Integer> getDistinctYears() {
+                log.info("getDistinctYears requested");
+                List<Integer> years = payrollRepository.getDistinctYears();
+                log.info("getDistinctYears completed: found {} years", years.size());
+                return years;
         }
 
 }
