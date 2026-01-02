@@ -84,6 +84,13 @@ public class CustomerController {
         return ApiResponse.success("Xóa khách hàng thành công", null, HttpStatus.OK.value());
     }
 
+    @GetMapping("/generate-code")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CUSTOMER_CREATE')")
+    public ApiResponse<String> generateCustomerCode() {
+        String code = customerService.generateCustomerCode();
+        return ApiResponse.success("Tạo mã khách hàng thành công", code, HttpStatus.OK.value());
+    }
+
     @GetMapping("/export/excel")
     public ResponseEntity<ByteArrayResource> exportCustomersWithContracts() {
         log.info("Export customers with contracts requested");
