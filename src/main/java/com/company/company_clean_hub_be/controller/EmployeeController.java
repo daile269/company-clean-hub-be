@@ -92,6 +92,14 @@ public class EmployeeController {
         return ApiResponse.success("Xóa nhân viên thành công", null, HttpStatus.OK.value());
     }
 
+    @GetMapping("/generate-code")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_CREATE')")
+    public ApiResponse<String> generateEmployeeCode(
+            @RequestParam com.company.company_clean_hub_be.entity.EmploymentType employmentType) {
+        String code = employeeService.generateEmployeeCode(employmentType);
+        return ApiResponse.success("Tạo mã nhân viên thành công", code, HttpStatus.OK.value());
+    }
+
     @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<List<EmployeeImage>> uploadEmployeeImages(
             @PathVariable Long id,

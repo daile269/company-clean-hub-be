@@ -18,6 +18,7 @@ import com.company.company_clean_hub_be.dto.response.EmployeeExportDto;
 import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.Employee;
+import com.company.company_clean_hub_be.entity.EmploymentType;
 import com.company.company_clean_hub_be.entity.Role;
 import com.company.company_clean_hub_be.entity.User;
 import com.company.company_clean_hub_be.exception.AppException;
@@ -39,6 +40,29 @@ public class EmployeeServiceImpl implements EmployeeService {
         private final RoleRepository roleRepository;
         private final PasswordEncoder passwordEncoder;
         private final UserRepository userRepository;
+
+        @Override
+        public String generateEmployeeCode(EmploymentType employmentType) {
+                String prefix = employmentType == EmploymentType.COMPANY_STAFF ? "NVVP" : "NV";
+                
+                Pageable pageable = PageRequest.of(0, 1);
+                List<String> existingCodes = employeeRepository.findTopByEmployeeCodeStartingWith(prefix, pageable);
+                
+                int nextNumber = 1;
+                if (!existingCodes.isEmpty()) {
+                        String lastCode = existingCodes.get(0);
+                        try {
+                                String numberPart = lastCode.substring(prefix.length());
+                                nextNumber = Integer.parseInt(numberPart) + 1;
+                        } catch (Exception e) {
+                                log.warn("Cannot parse employee code: {}", lastCode);
+                        }
+                }
+                
+                String generatedCode = prefix + String.format("%06d", nextNumber);
+                log.info("Generated employee code: {} for type: {}", generatedCode, employmentType);
+                return generatedCode;
+        }
 
         @Override
         public List<EmployeeResponse> getAllEmployees() {
@@ -201,7 +225,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 employee.setRole(role);
                 employee.setStatus(request.getStatus());
                 employee.setCccd(request.getCccd());
-                employee.setEmployeeCode(request.getEmployeeCode());
+                // Không cho phép sửa employeeCode vì đã tự động sinh
                 employee.setAddress(request.getAddress());
                 employee.setName(request.getName());
                 employee.setBankAccount(request.getBankAccount());

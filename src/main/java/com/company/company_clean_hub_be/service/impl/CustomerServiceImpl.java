@@ -48,6 +48,27 @@ public class CustomerServiceImpl implements CustomerService {
     private final PasswordEncoder passwordEncoder;
 
     @Override
+    public String generateCustomerCode() {
+        Pageable pageable = PageRequest.of(0, 1);
+        List<String> existingCodes = customerRepository.findTopByCustomerCodeStartingWithKH(pageable);
+        
+        int nextNumber = 1;
+        if (!existingCodes.isEmpty()) {
+            String lastCode = existingCodes.get(0);
+            try {
+                String numberPart = lastCode.substring(2); // Bỏ "KH"
+                nextNumber = Integer.parseInt(numberPart) + 1;
+            } catch (Exception e) {
+                log.warn("Cannot parse customer code: {}", lastCode);
+            }
+        }
+        
+        String generatedCode = "KH" + String.format("%06d", nextNumber);
+        log.info("Generated customer code: {}", generatedCode);
+        return generatedCode;
+    }
+
+    @Override
     public List<CustomerContractGroupDto> getCustomersWithContractsForExport() {
         log.info("getCustomersWithContractsForExport requested");
         

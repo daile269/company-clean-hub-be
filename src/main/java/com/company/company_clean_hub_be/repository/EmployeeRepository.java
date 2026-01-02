@@ -81,4 +81,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
         Optional<Employee> findByUsername(String username);
 
+    // Phương thức để lấy mã nhân viên lớn nhất theo prefix
+    @Query("SELECT e.employeeCode FROM Employee e WHERE e.employeeCode LIKE CONCAT(:prefix, '%') ORDER BY e.employeeCode DESC")
+    List<String> findTopByEmployeeCodeStartingWith(@Param("prefix") String prefix, Pageable pageable);
+
 }

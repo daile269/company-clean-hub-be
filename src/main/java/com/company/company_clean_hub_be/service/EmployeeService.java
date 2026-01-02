@@ -16,4 +16,7 @@ public interface EmployeeService {
     void deleteEmployee(Long id);
     List<EmployeeExportDto> getAllEmployeesForExport();
     List<EmployeeExportDto> getEmployeesForExportByType(com.company.company_clean_hub_be.entity.EmploymentType employmentType);
+    
+    // Phương thức sinh mã nhân viên tự động
+    String generateEmployeeCode(com.company.company_clean_hub_be.entity.EmploymentType employmentType);
 }
