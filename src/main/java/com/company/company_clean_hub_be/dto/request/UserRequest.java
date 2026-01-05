@@ -15,6 +15,8 @@ public class UserRequest {
     @Size(min = 3, max = 50, message = "Tên đăng nhập phải có độ dài từ 3 đến 50 ký tự")
     private String username;
 
+    @Size(max = 100, message = "Họ tên không được vượt quá 100 ký tự")
+    private String name;
     @NotBlank(message = "Mật khẩu bắt buộc")
     @Size(min = 6, max = 255, message = "Mật khẩu phải có ít nhất 6 ký tự")
     private String password;
