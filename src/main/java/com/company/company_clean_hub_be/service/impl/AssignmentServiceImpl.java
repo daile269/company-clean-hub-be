@@ -82,9 +82,17 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 username, request.getEmployeeId(), request.getContractId(), request.getScope(),
                                 request.getStartDate());
 
-                // Lấy thông tin user đang thực hiện
-                User currentUser = userRepository.findByUsername(username)
-                                .orElse(null); // null nếu không tìm thấy (trường hợp system)
+
+                // Nếu người tạo là Quản lý vùng (code = 'QLV') thì chỉ được phân công từ hôm nay trở về sau
+                User creator = userRepository.findByUsername(username)
+                                .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+                if (creator.getRole() != null && "QLV".equalsIgnoreCase(creator.getRole().getCode())) {
+                        LocalDate today = LocalDate.now();
+                        if (request.getStartDate().isBefore(today)) {
+                                log.warn("QLV cannot create assignment with startDate in the past: {}", request.getStartDate());
+                                throw new AppException(ErrorCode.FORBIDDEN);
+                        }
+                }
 
                 Employee employee = employeeRepository.findById(request.getEmployeeId())
                                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
@@ -153,7 +161,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .additionalAllowance(request.getAdditionalAllowance())
                                 .description(request.getDescription())
                                 .assignmentType(assignmentTypeParsed)
-                                .assignedBy(currentUser)
+                                .assignedBy(creator)
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
                                 .build();
@@ -312,6 +320,26 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 log.debug("[ASSIGNMENT][UPDATE] Found assignment id={}, currentStatus={}",
                                 assignment.getId(), assignment.getStatus());
+
+                // Nếu người cập nhật là Quản lý vùng (code = 'QLV') thì chỉ được cập nhật assignment từ hôm nay trở về sau
+                String username = SecurityContextHolder.getContext().getAuthentication().getName();
+                User updater = userRepository.findByUsername(username)
+                                .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+                if (updater.getRole() != null && "QLV".equalsIgnoreCase(updater.getRole().getCode())) {
+                        LocalDate today = LocalDate.now();
+                        
+                        // Kiểm tra startDate của assignment hiện tại
+                        if (assignment.getStartDate().isBefore(today)) {
+                                log.warn("QLV cannot update assignment with startDate in the past: {}", assignment.getStartDate());
+                                throw new AppException(ErrorCode.FORBIDDEN);
+                        }
+                        
+                        // Kiểm tra startDate mới (nếu có thay đổi)
+                        if (request.getStartDate() != null && request.getStartDate().isBefore(today)) {
+                                log.warn("QLV cannot change startDate to past date: {}", request.getStartDate());
+                                throw new AppException(ErrorCode.FORBIDDEN);
+                        }
+                }
 
                 Employee employee = employeeRepository.findById(request.getEmployeeId())
                                 .orElseThrow(() -> {
@@ -482,6 +510,17 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 // Lấy thông tin user đang thực hiện
                 User currentUser = userRepository.findByUsername(username).orElse(null);
+
+                // Nếu người thực hiện là Quản lý vùng (code = 'QLV') thì chỉ được điều động thay thế từ hôm nay trở về sau
+                if (currentUser != null && currentUser.getRole() != null && "QLV".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        LocalDate today = LocalDate.now();
+                        for (LocalDate date : request.getDates()) {
+                                if (date.isBefore(today)) {
+                                        log.warn("QLV cannot perform temporary reassignment for past date: {}", date);
+                                        throw new AppException(ErrorCode.FORBIDDEN);
+                                }
+                        }
+                }
 
                 List<AttendanceResponse> createdAttendances = new ArrayList<>();
                 List<AttendanceResponse> deletedAttendances = new ArrayList<>();

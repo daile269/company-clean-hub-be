@@ -23,4 +23,8 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     );
 
     java.util.Optional<Customer> findByCustomerCode(String customerCode);
+    
+    // Phương thức để lấy mã khách hàng lớn nhất
+    @Query("SELECT c.customerCode FROM Customer c WHERE c.customerCode LIKE 'KH%' ORDER BY c.customerCode DESC")
+    java.util.List<String> findTopByCustomerCodeStartingWithKH(Pageable pageable);
 }

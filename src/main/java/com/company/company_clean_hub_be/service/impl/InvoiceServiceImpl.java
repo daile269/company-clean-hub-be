@@ -151,12 +151,34 @@ public class InvoiceServiceImpl implements InvoiceService {
             totalContractPrice = totalContractPrice.add(baseAmount);
         }
 
-        // Count number of assigned employees active for this contract in the month (exclude SUPPORT assignments)
-        Long numEmployeesLong = assignmentRepository.countDistinctActiveEmployeesByContractBeforeExcludingType(contract.getId(), lastDayOfMonth, com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT);
-        int numEmployees = numEmployeesLong != null ? numEmployeesLong.intValue() : 0;
         // Count attendances for this contract in the month (exclude attendances from SUPPORT assignments)
         Long attendancesCountLong = attendanceRepository.countAttendancesByContractAndMonthYearExcludingAssignmentType(contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT);
         int attendancesCount = attendancesCountLong != null ? attendancesCountLong.intValue() : 0;
+
+        // Compute number of primary assigned employees for the contract in the month.
+        // Exclude SUPPORT and TEMPORARY from primary count so short-term replacements don't increase the divisor.
+        List<Assignment> assignments = assignmentRepository.findByContractId(contract.getId());
+        java.util.Set<Long> primaryEmployeeIds = assignments.stream()
+            .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS)
+            .filter(a -> !a.getStartDate().isAfter(lastDayOfMonth))
+            .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
+            .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.TEMPORARY)
+            .map(a -> a.getEmployee() != null ? a.getEmployee().getId() : null)
+            .filter(id -> id != null)
+            .collect(Collectors.toSet());
+
+        int numEmployees = primaryEmployeeIds.size();
+        // Fallback: if no primary (e.g., only TEMPORARY assignments exist), include TEMPORARY as well (but still exclude SUPPORT)
+        if (numEmployees == 0) {
+            java.util.Set<Long> anyEmployeeIds = assignments.stream()
+                .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS)
+                .filter(a -> !a.getStartDate().isAfter(lastDayOfMonth))
+                .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
+                .map(a -> a.getEmployee() != null ? a.getEmployee().getId() : null)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+            numEmployees = anyEmployeeIds.size();
+        }
 
         if (totalContractPrice.compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("Contract {} totalContractPrice is zero for month {}/{}", contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear());

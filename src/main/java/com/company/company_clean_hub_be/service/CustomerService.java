@@ -15,4 +15,7 @@ public interface CustomerService {
     CustomerResponse updateCustomer(Long id, CustomerRequest request);
     void deleteCustomer(Long id);
     List<CustomerContractGroupDto> getCustomersWithContractsForExport();
+    
+    // Phương thức sinh mã khách hàng tự động
+    String generateCustomerCode();
 }
