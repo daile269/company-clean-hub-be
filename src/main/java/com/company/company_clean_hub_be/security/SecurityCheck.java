@@ -5,6 +5,7 @@ import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.RatingRepository;
+import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
 import com.company.company_clean_hub_be.entity.Rating;
 import com.company.company_clean_hub_be.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class SecurityCheck {
     private final CustomerRepository customerRepository;
     private final AssignmentRepository assignmentRepository;
     private final RatingRepository ratingRepository;
+    private final CustomerAssignmentRepository customerAssignmentRepository;
 
     public boolean isEmployeeSelf(Long employeeId) {
         if (employeeId == null) return false;
@@ -121,5 +123,62 @@ public class SecurityCheck {
         return ratingRepository.findById(ratingId)
                 .map(r -> r.getCustomer() != null && r.getCustomer().getUsername() != null && r.getCustomer().getUsername().equals(username))
                 .orElse(false);
+    }
+
+    /**
+     * Kiểm tra nhân viên có quyền đánh giá manager không
+     * Logic:
+     * 1. assignmentId là assignment của nhân viên đang đăng nhập
+     * 2. Kiểm tra assignment đó có thuộc về nhân viên đang đăng nhập không
+     * 3. Lấy customerId từ assignment đó
+     * 4. Kiểm tra employeeId (người bị đánh giá) có phải manager được phân công quản lý customer đó không
+     */
+    public boolean canEmployeeReviewManager(Long assignmentId, Long reviewedEmployeeId) {
+        if (assignmentId == null || reviewedEmployeeId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        
+        // Lấy thông tin employee hiện tại (người đang đánh giá)
+        Optional<Employee> empOpt = employeeRepository.findByUsername(username);
+        if (empOpt.isEmpty()) {
+            log.info("[SECURITY] canEmployeeReviewManager - user {} is not an employee", username);
+            return false;
+        }
+        Long currentEmpId = empOpt.get().getId();
+
+        log.info("[SECURITY] canEmployeeReviewManager start - assignmentId={} currentEmpId={} reviewedEmployeeId={}", 
+                assignmentId, currentEmpId, reviewedEmployeeId);
+
+        return assignmentRepository.findById(assignmentId)
+                .map(assignment -> {
+                    // 1. Kiểm tra assignment có thuộc về nhân viên đang đăng nhập không
+                    Long assignmentOwner = assignment.getEmployee() != null ? assignment.getEmployee().getId() : null;
+                    if (assignmentOwner == null || !assignmentOwner.equals(currentEmpId)) {
+                        log.info("[SECURITY] canEmployeeReviewManager - assignmentId={} does not belong to currentEmpId={}", 
+                                assignmentId, currentEmpId);
+                        return false;
+                    }
+
+                    // 2. Lấy customerId từ assignment
+                    Long customerId = assignment.getContract() != null && assignment.getContract().getCustomer() != null 
+                            ? assignment.getContract().getCustomer().getId() : null;
+                    if (customerId == null) {
+                        log.info("[SECURITY] canEmployeeReviewManager - assignmentId={} has no customer", assignmentId);
+                        return false;
+                    }
+
+                    // 3. Kiểm tra reviewedEmployeeId có phải manager được phân công quản lý customer đó không
+                    boolean isManagerOfCustomer = customerAssignmentRepository
+                            .existsByManagerIdAndCustomerId(reviewedEmployeeId, customerId);
+                    
+                    log.info("[SECURITY] canEmployeeReviewManager result - assignmentId={} customerId={} currentEmpId={} reviewedEmployeeId={} isManager={} → {}",
+                            assignmentId, customerId, currentEmpId, reviewedEmployeeId, isManagerOfCustomer,
+                            isManagerOfCustomer ? "ALLOWED" : "DENIED");
+                    
+                    return isManagerOfCustomer;
+                }).orElseGet(() -> {
+                    log.info("[SECURITY] canEmployeeReviewManager - assignmentId={} not found", assignmentId);
+                    return false;
+                });
     }
 }

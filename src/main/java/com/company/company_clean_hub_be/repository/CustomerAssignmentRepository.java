@@ -52,5 +52,19 @@ public interface CustomerAssignmentRepository extends JpaRepository<CustomerAssi
     @Query("SELECT ca.customer FROM CustomerAssignment ca WHERE ca.manager.id = :managerId")
     Page<Customer> findCustomersByManagerId(
             @Param("managerId") Long managerId,
-            Pageable pageable);
+            org.springframework.data.domain.Pageable pageable);
+
+        /**
+         * Native query to find assignments for a customer and optionally filter by manager role code/name
+         */
+        @Query(value = "SELECT ca.* FROM customer_assignments ca " +
+            "JOIN users m ON ca.manager_id = m.id " +
+            "JOIN roles r ON m.role_id = r.id " +
+            "WHERE ca.customer_id = :customerId " +
+            "AND (:role IS NULL OR LOWER(r.code) = LOWER(:role) OR LOWER(r.name) = LOWER(:role))",
+            nativeQuery = true)
+        List<CustomerAssignment> findByCustomerIdAndManagerRoleNative(@Param("customerId") Long customerId,
+                                      @Param("role") String role);
+
+
 }

@@ -217,10 +217,10 @@ public class CustomerAssignmentServiceImpl implements CustomerAssignmentService 
     }
 
     @Override
-    public List<CustomerAssignmentResponse> getAssignmentsByCustomer(Long customerId) {
-        log.info("Lấy danh sách manager được phân công cho customer: {}", customerId);
+    public List<CustomerAssignmentResponse> getAssignmentsByCustomer(Long customerId, String role) {
+        log.info("Lấy danh sách manager được phân công cho customer: {}, filter role: {}", customerId, role);
 
-        List<CustomerAssignment> assignments = customerAssignmentRepository.findByCustomerId(customerId);
+        List<CustomerAssignment> assignments = customerAssignmentRepository.findByCustomerIdAndManagerRoleNative(customerId, role);
 
         return assignments.stream()
                 .map(this::mapToResponse)

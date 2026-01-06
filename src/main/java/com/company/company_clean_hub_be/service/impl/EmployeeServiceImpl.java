@@ -60,6 +60,20 @@ public class EmployeeServiceImpl implements EmployeeService {
                 }
 
                 String generatedCode = prefix + String.format("%06d", nextNumber);
+
+                int attempts = 0;
+                final int MAX_ATTEMPTS = 1000;
+                while (employeeRepository.existsByEmployeeCode(generatedCode)) {
+                        nextNumber++;
+                        generatedCode = prefix + String.format("%06d", nextNumber);
+                        attempts++;
+                        if (attempts >= MAX_ATTEMPTS) {
+                                log.error("Failed to generate unique employee code for prefix {} after {} attempts", prefix,
+                                                MAX_ATTEMPTS);
+                                throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
+                        }
+                }
+
                 log.info("Generated employee code: {} for type: {}", generatedCode, employmentType);
                 return generatedCode;
         }

@@ -12,9 +12,10 @@ public class RatingResponse {
     private Long assignmentId;
     private Long employeeId;
     private String employeeName;
+    private String employeeCode;
+    private String employeeRole;
     private String customerName;
     private String contractDescription;
-    private String employeeCode;
     private Integer rating;
     private String comment;
     private String createdBy;
