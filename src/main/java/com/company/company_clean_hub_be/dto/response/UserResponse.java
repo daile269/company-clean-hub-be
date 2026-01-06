@@ -16,6 +16,7 @@ public class UserResponse {
     private String username;
     private String phone;
     private String email;
+    private String name;
     private Long roleId;
     private String roleName;
     private String status;

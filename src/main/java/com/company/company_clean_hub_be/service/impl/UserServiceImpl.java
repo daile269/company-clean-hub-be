@@ -4,6 +4,8 @@ import com.company.company_clean_hub_be.dto.request.UserRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.UserPermissionsResponse;
 import com.company.company_clean_hub_be.dto.response.UserResponse;
+import com.company.company_clean_hub_be.entity.Customer;
+import com.company.company_clean_hub_be.entity.Employee;
 import com.company.company_clean_hub_be.entity.Role;
 import com.company.company_clean_hub_be.entity.User;
 import com.company.company_clean_hub_be.exception.AppException;
@@ -40,7 +42,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public List<UserResponse> getAllUsers() {
-    log.info("getAllUsers requested by {}", getCurrentUsername());
+        log.info("getAllUsers requested by {}", getCurrentUsername());
         return userRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -48,7 +50,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public PageResponse<UserResponse> getUsersWithFilter(String keyword, Long roleId, int page, int pageSize) {
-        log.info("getUsersWithFilter requested by {}: keyword='{}', roleId={}, page={}, pageSize={}", getCurrentUsername(), keyword, roleId, page, pageSize);
+        log.info("getUsersWithFilter requested by {}: keyword='{}', roleId={}, page={}, pageSize={}",
+                getCurrentUsername(), keyword, roleId, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         Page<User> userPage = userRepository.findByFilters(keyword, roleId, pageable);
 
@@ -78,17 +81,18 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserResponse createUser(UserRequest request) {
         String actor = getCurrentUsername() != null ? getCurrentUsername() : "anonymous";
-        log.info("createUser requested by {}: username='{}', phone={}", actor, request.getUsername(), request.getPhone());
+        log.info("createUser requested by {}: username='{}', phone={}", actor, request.getUsername(),
+                request.getPhone());
         // Kiểm tra trùng username
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
-        
+
         // Kiểm tra trùng phone
         if (request.getPhone() != null && userRepository.existsByPhone(request.getPhone())) {
             throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
         }
-        
+
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
@@ -119,12 +123,12 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByUsernameAndIdNot(request.getUsername(), id)) {
             throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
-        
+
         // Kiểm tra trùng phone (ngoại trừ chính nó)
         if (request.getPhone() != null && userRepository.existsByPhoneAndIdNot(request.getPhone(), id)) {
             throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
         }
-        
+
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
@@ -137,6 +141,17 @@ public class UserServiceImpl implements UserService {
         user.setRole(role);
         user.setStatus(request.getStatus());
         user.setUpdatedAt(LocalDateTime.now());
+
+        // Update name based on user type
+        if (user instanceof Employee employee) {
+            if (request.getName() != null) {
+                employee.setName(request.getName());
+            }
+        } else if (user instanceof Customer customer) {
+            if (request.getName() != null) {
+                customer.setName(request.getName());
+            }
+        }
 
         User updatedUser = userRepository.save(user);
         log.info("updateUser completed by {}: id={}", actor, updatedUser.getId());
@@ -155,10 +170,17 @@ public class UserServiceImpl implements UserService {
     }
 
     private UserResponse mapToResponse(User user) {
+        String name = null;
+        if (user instanceof Employee employee) {
+            name = employee.getName();
+        } else if (user instanceof Customer customer) {
+            name = customer.getName();
+        }
         return UserResponse.builder()
                 .id(user.getId())
                 .username(user.getUsername())
                 .phone(user.getPhone())
+                .name(name)
                 .email(user.getEmail())
                 .roleId(user.getRole() != null ? user.getRole().getId() : null)
                 .roleName(user.getRole() != null ? user.getRole().getName() : null)
@@ -167,6 +189,7 @@ public class UserServiceImpl implements UserService {
                 .updatedAt(user.getUpdatedAt())
                 .build();
     }
+
     @Override
     public String getCurrentUsername() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -188,7 +211,7 @@ public class UserServiceImpl implements UserService {
     public UserPermissionsResponse getCurrentUserPermissions() {
         String username = getCurrentUsername();
         log.info("getCurrentUserPermissions requested by: {}", username);
-        
+
         if (username == null) {
             throw new AppException(ErrorCode.UNAUTHENTICATED);
         }
@@ -197,7 +220,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
 
         Role role = user.getRole();
-        
+
         return UserPermissionsResponse.builder()
                 .userId(user.getId())
                 .username(user.getUsername())

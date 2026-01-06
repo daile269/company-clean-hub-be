@@ -1,6 +1,9 @@
 package com.company.company_clean_hub_be.repository;
 
+import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.CustomerAssignment;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -47,7 +50,7 @@ public interface CustomerAssignmentRepository extends JpaRepository<CustomerAssi
      * Lấy danh sách customers được phân công cho một manager (có phân trang)
      */
     @Query("SELECT ca.customer FROM CustomerAssignment ca WHERE ca.manager.id = :managerId")
-    org.springframework.data.domain.Page<com.company.company_clean_hub_be.entity.Customer> findCustomersByManagerId(
+    Page<Customer> findCustomersByManagerId(
             @Param("managerId") Long managerId,
-            org.springframework.data.domain.Pageable pageable);
+            Pageable pageable);
 }

@@ -9,14 +9,26 @@ import com.company.company_clean_hub_be.dto.response.PageResponse;
 
 public interface EmployeeService {
     List<EmployeeResponse> getAllEmployees();
-    PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword, com.company.company_clean_hub_be.entity.EmploymentType employmentType, int page, int pageSize);
+
+    PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword,
+            com.company.company_clean_hub_be.entity.EmploymentType employmentType, int page, int pageSize);
+
     EmployeeResponse getEmployeeById(Long id);
+
     EmployeeResponse createEmployee(EmployeeRequest request);
+
     EmployeeResponse updateEmployee(Long id, EmployeeRequest request);
+
     void deleteEmployee(Long id);
+
     List<EmployeeExportDto> getAllEmployeesForExport();
-    List<EmployeeExportDto> getEmployeesForExportByType(com.company.company_clean_hub_be.entity.EmploymentType employmentType);
-    
+
+    List<EmployeeExportDto> getEmployeesForExportByType(
+            com.company.company_clean_hub_be.entity.EmploymentType employmentType);
+
     // Phương thức sinh mã nhân viên tự động
     String generateEmployeeCode(com.company.company_clean_hub_be.entity.EmploymentType employmentType);
+
+    // Cập nhật chỉ tiền ứng lương cho nhân viên văn phòng
+    EmployeeResponse updateAdvanceSalary(Long id, java.math.BigDecimal monthlyAdvanceLimit);
 }

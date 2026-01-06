@@ -92,6 +92,18 @@ public class EmployeeController {
         return ApiResponse.success("Xóa nhân viên thành công", null, HttpStatus.OK.value());
     }
 
+    @PutMapping("/{id}/advance-salary")
+    public ApiResponse<EmployeeResponse> updateAdvanceSalary(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Object> requestBody) {
+        java.math.BigDecimal monthlyAdvanceLimit = null;
+        if (requestBody.containsKey("monthlyAdvanceLimit") && requestBody.get("monthlyAdvanceLimit") != null) {
+            monthlyAdvanceLimit = new java.math.BigDecimal(requestBody.get("monthlyAdvanceLimit").toString());
+        }
+        EmployeeResponse response = employeeService.updateAdvanceSalary(id, monthlyAdvanceLimit);
+        return ApiResponse.success("Cập nhật tiền ứng lương thành công", response, HttpStatus.OK.value());
+    }
+
     @GetMapping("/generate-code")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_CREATE')")
     public ApiResponse<String> generateEmployeeCode(
