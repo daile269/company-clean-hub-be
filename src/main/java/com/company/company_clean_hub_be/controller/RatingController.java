@@ -21,7 +21,7 @@ public class RatingController {
     private final RatingService ratingService;
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_CREATE') or @securityCheck.isAssignmentOwnedByCurrentUser(#req.assignmentId) or @securityCheck.isEmployeeAssignedToAssignment(#req.assignmentId)")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_CREATE') or @securityCheck.isAssignmentOwnedByCurrentUser(#req.assignmentId) or @securityCheck.isEmployeeAssignedToAssignment(#req.assignmentId) or @securityCheck.canEmployeeReviewManager(#req.assignmentId, #req.employeeId)")
     public ApiResponse<RatingResponse> create(@RequestBody CreateRatingRequest req) {
         RatingResponse resp = ratingService.createRating(req);
         return ApiResponse.success("Tạo đánh giá thành công", resp, HttpStatus.CREATED.value());

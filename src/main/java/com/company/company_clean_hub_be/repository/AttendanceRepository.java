@@ -113,6 +113,13 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                         @Param("startDate") java.time.LocalDate startDate,
                         @Param("endDate") java.time.LocalDate endDate);
 
+        @org.springframework.data.jpa.repository.Modifying
+        @org.springframework.data.jpa.repository.Query("DELETE FROM Attendance a WHERE a.assignment.id = :assignmentId")
+        void deleteByAssignmentId(@Param("assignmentId") Long assignmentId);
+
+        @Query("SELECT a FROM Attendance a WHERE a.assignment.id = :assignmentId")
+        List<Attendance> findByAssignmentId(@Param("assignmentId") Long assignmentId);
+
         @Query("SELECT COUNT(a) FROM Attendance a WHERE a.assignment.id = :assignmentId AND a.date >= :date AND (a.deleted IS NULL OR a.deleted = false)")
         Long countAttendancesOnOrAfter(@Param("assignmentId") Long assignmentId, @Param("date") java.time.LocalDate date);
 

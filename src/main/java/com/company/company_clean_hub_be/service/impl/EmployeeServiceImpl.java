@@ -44,10 +44,10 @@ public class EmployeeServiceImpl implements EmployeeService {
         @Override
         public String generateEmployeeCode(EmploymentType employmentType) {
                 String prefix = employmentType == EmploymentType.COMPANY_STAFF ? "NVVP" : "NV";
-                
+
                 Pageable pageable = PageRequest.of(0, 1);
                 List<String> existingCodes = employeeRepository.findTopByEmployeeCodeStartingWith(prefix, pageable);
-                
+
                 int nextNumber = 1;
                 if (!existingCodes.isEmpty()) {
                         String lastCode = existingCodes.get(0);
@@ -58,8 +58,22 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 log.warn("Cannot parse employee code: {}", lastCode);
                         }
                 }
-                
+
                 String generatedCode = prefix + String.format("%06d", nextNumber);
+
+                int attempts = 0;
+                final int MAX_ATTEMPTS = 1000;
+                while (employeeRepository.existsByEmployeeCode(generatedCode)) {
+                        nextNumber++;
+                        generatedCode = prefix + String.format("%06d", nextNumber);
+                        attempts++;
+                        if (attempts >= MAX_ATTEMPTS) {
+                                log.error("Failed to generate unique employee code for prefix {} after {} attempts", prefix,
+                                                MAX_ATTEMPTS);
+                                throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
+                        }
+                }
+
                 log.info("Generated employee code: {} for type: {}", generatedCode, employmentType);
                 return generatedCode;
         }

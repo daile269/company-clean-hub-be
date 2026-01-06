@@ -23,107 +23,111 @@ import java.util.List;
 @RequestMapping("/api/customer-assignments")
 public class CustomerAssignmentController {
 
-    private final CustomerAssignmentService customerAssignmentService;
+        private final CustomerAssignmentService customerAssignmentService;
 
-    /**
-     * Phân công khách hàng cho quản lý
-     */
-    @PostMapping
-    @PreAuthorize("hasAuthority('CUSTOMER_ASSIGN')")
-    public ApiResponse<CustomerAssignmentResponse> assignCustomer(
-            @Valid @RequestBody CustomerAssignmentRequest request,
-            Authentication authentication) {
+        /**
+         * Phân công khách hàng cho quản lý
+         */
+        @PostMapping
+        @PreAuthorize("hasAuthority('CUSTOMER_ASSIGN')")
+        public ApiResponse<CustomerAssignmentResponse> assignCustomer(
+                        @Valid @RequestBody CustomerAssignmentRequest request,
+                        Authentication authentication) {
 
-        Long assignerId = ((UserPrincipal) authentication.getPrincipal()).getId();
-        CustomerAssignmentResponse response = customerAssignmentService.assignCustomer(request, assignerId);
+                Long assignerId = ((UserPrincipal) authentication.getPrincipal()).getId();
+                CustomerAssignmentResponse response = customerAssignmentService.assignCustomer(request, assignerId);
 
-        return ApiResponse.success(
-                "Phân công khách hàng thành công",
-                response,
-                HttpStatus.CREATED.value());
-    }
+                return ApiResponse.success(
+                                "Phân công khách hàng thành công",
+                                response,
+                                HttpStatus.CREATED.value());
+        }
 
-    /**
-     * Hủy phân công khách hàng
-     */
-    @DeleteMapping
-    @PreAuthorize("hasAuthority('CUSTOMER_ASSIGN')")
-    public ApiResponse<Void> revokeAssignment(
-            @RequestParam Long managerId,
-            @RequestParam Long customerId,
-            Authentication authentication) {
+        /**
+         * Hủy phân công khách hàng
+         */
+        @DeleteMapping
+        @PreAuthorize("hasAuthority('CUSTOMER_ASSIGN')")
+        public ApiResponse<Void> revokeAssignment(
+                        @RequestParam Long managerId,
+                        @RequestParam Long customerId,
+                        Authentication authentication) {
 
-        Long requesterId = ((UserPrincipal) authentication.getPrincipal()).getId();
-        customerAssignmentService.revokeAssignment(managerId, customerId, requesterId);
+                Long requesterId = ((UserPrincipal) authentication.getPrincipal()).getId();
+                customerAssignmentService.revokeAssignment(managerId, customerId, requesterId);
 
-        return ApiResponse.success(
-                "Hủy phân công thành công",
-                null,
-                HttpStatus.OK.value());
-    }
+                return ApiResponse.success(
+                                "Hủy phân công thành công",
+                                null,
+                                HttpStatus.OK.value());
+        }
 
-    /**
-     * Lấy danh sách khách hàng được phân công cho một manager
-     */
-    @GetMapping("/manager/{managerId}/customers")
-    @PreAuthorize("hasAuthority('CUSTOMER_VIEW')")
-    public ApiResponse<PageResponse<CustomerResponse>> getAssignedCustomers(
-            @PathVariable Long managerId,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
-        PageResponse<CustomerResponse> customers = customerAssignmentService.getAssignedCustomers(
-                managerId, keyword, page, pageSize);
+        /**
+         * Lấy danh sách khách hàng được phân công cho một manager
+         */
+        @GetMapping("/manager/{managerId}/customers")
+        @PreAuthorize("hasAuthority('CUSTOMER_VIEW')")
+        public ApiResponse<PageResponse<CustomerResponse>> getAssignedCustomers(
+                        @PathVariable Long managerId,
+                        @RequestParam(required = false) String keyword,
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "10") int pageSize) {
+                PageResponse<CustomerResponse> customers = customerAssignmentService.getAssignedCustomers(
+                                managerId, keyword, page, pageSize);
 
-        return ApiResponse.success(
-                "Lấy danh sách khách hàng thành công",
-                customers,
-                HttpStatus.OK.value());
-    }
+                return ApiResponse.success(
+                                "Lấy danh sách khách hàng thành công",
+                                customers,
+                                HttpStatus.OK.value());
+        }
 
-    /**
-     * Lấy danh sách khách hàng của user hiện tại
-     */
-    @GetMapping("/my-customers")
-    @PreAuthorize("isAuthenticated()")
-    public ApiResponse<PageResponse<CustomerResponse>> getMyAssignedCustomers(
-            @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
-        PageResponse<CustomerResponse> customers = customerAssignmentService.getMyAssignedCustomers(
-                keyword, page, pageSize);
+        /**
+         * Lấy danh sách khách hàng của user hiện tại
+         */
+        @GetMapping("/my-customers")
+        @PreAuthorize("isAuthenticated()")
+        public ApiResponse<PageResponse<CustomerResponse>> getMyAssignedCustomers(
+                        @RequestParam(required = false) String keyword,
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "10") int pageSize) {
+                PageResponse<CustomerResponse> customers = customerAssignmentService.getMyAssignedCustomers(
+                                keyword, page, pageSize);
 
-        return ApiResponse.success(
-                "Lấy danh sách khách hàng của tôi thành công",
-                customers,
-                HttpStatus.OK.value());
-    }
+                return ApiResponse.success(
+                                "Lấy danh sách khách hàng của tôi thành công",
+                                customers,
+                                HttpStatus.OK.value());
+        }
 
-    /**
-     * Lấy danh sách phân công của một manager
-     */
-    @GetMapping("/manager/{managerId}")
-    @PreAuthorize("hasAuthority('CUSTOMER_VIEW')")
-    public ApiResponse<List<CustomerAssignmentResponse>> getAssignmentsByManager(@PathVariable Long managerId) {
-        List<CustomerAssignmentResponse> assignments = customerAssignmentService.getAssignmentsByManager(managerId);
+        /**
+         * Lấy danh sách phân công của một manager
+         */
+        @GetMapping("/manager/{managerId}")
+        @PreAuthorize("hasAuthority('CUSTOMER_VIEW')")
+        public ApiResponse<List<CustomerAssignmentResponse>> getAssignmentsByManager(@PathVariable Long managerId) {
+                List<CustomerAssignmentResponse> assignments = customerAssignmentService
+                                .getAssignmentsByManager(managerId);
 
-        return ApiResponse.success(
-                "Lấy danh sách phân công thành công",
-                assignments,
-                HttpStatus.OK.value());
-    }
+                return ApiResponse.success(
+                                "Lấy danh sách phân công thành công",
+                                assignments,
+                                HttpStatus.OK.value());
+        }
 
-    /**
-     * Lấy danh sách manager được phân công cho một customer
-     */
-    @GetMapping("/customer/{customerId}")
-    @PreAuthorize("hasAuthority('CUSTOMER_VIEW')")
-    public ApiResponse<List<CustomerAssignmentResponse>> getAssignmentsByCustomer(@PathVariable Long customerId) {
-        List<CustomerAssignmentResponse> assignments = customerAssignmentService.getAssignmentsByCustomer(customerId);
+        /**
+         * Lấy danh sách manager được phân công cho một customer
+         */
+        @GetMapping("/customer/{customerId}")
+        public ApiResponse<List<CustomerAssignmentResponse>> getAssignmentsByCustomer(
+                        @PathVariable Long customerId,
+                        @RequestParam(required = false) String role) {
 
-        return ApiResponse.success(
-                "Lấy danh sách quản lý của khách hàng thành công",
-                assignments,
-                HttpStatus.OK.value());
-    }
+                List<CustomerAssignmentResponse> assignments = customerAssignmentService
+                                .getAssignmentsByCustomer(customerId, role);
+
+                return ApiResponse.success(
+                                "Lấy danh sách quản lý của khách hàng thành công",
+                                assignments,
+                                HttpStatus.OK.value());
+        }
 }

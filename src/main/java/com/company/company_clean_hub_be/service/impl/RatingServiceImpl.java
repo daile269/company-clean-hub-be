@@ -48,17 +48,29 @@ public class RatingServiceImpl implements RatingService {
         if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
         log.info("[RATING][CREATE] start - user={}, contractId={}, assignmentId={}, employeeId={}, rating={}",
             username, request.getContractId(), request.getAssignmentId(), request.getEmployeeId(), request.getRating());
-        // Determine provided target: optional assignmentId or employeeId
+        
+        // Determine provided target: ưu tiên employeeId từ request
         Assignment assignment = null;
         Employee targetEmployee = null;
+        
+        // Nếu có employeeId trong request → dùng employeeId đó
+        if (request.getEmployeeId() != null) {
+            targetEmployee = employeeRepository.findById(request.getEmployeeId())
+                    .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+            log.info("[RATING][CREATE] using explicit employeeId={}", request.getEmployeeId());
+        }
+        
+        // Nếu có assignmentId → lấy assignment (và nếu chưa có targetEmployee thì lấy từ assignment)
         if (request.getAssignmentId() != null) {
             assignment = assignmentRepository.findById(request.getAssignmentId())
                     .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
             if (assignment.getEmployee() == null) throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
-            targetEmployee = assignment.getEmployee();
-        } else if (request.getEmployeeId() != null) {
-            targetEmployee = employeeRepository.findById(request.getEmployeeId())
-                    .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+            
+            // Chỉ lấy employee từ assignment nếu chưa có targetEmployee
+            if (targetEmployee == null) {
+                targetEmployee = assignment.getEmployee();
+                log.info("[RATING][CREATE] using employee from assignmentId={}", request.getAssignmentId());
+            }
         }
 
         // Create rating skeleton (employee may be cleared later for employee callers)
@@ -114,9 +126,11 @@ public class RatingServiceImpl implements RatingService {
                     reviewer.getId(), assignment != null ? assignment.getId() : null,
                     targetEmployee != null ? targetEmployee.getId() : null, effectiveContract.getId());
 
-            // If caller is employee and did NOT provide employeeId explicitly, do NOT set employee target
-            if (request.getEmployeeId() == null) {
+            // Nếu request có employeeId → giữ nguyên targetEmployee (đã được set ở trên từ employeeId hoặc assignmentId)
+            // Nếu không có employeeId và không có assignment → xóa employee (đánh giá customer)
+            if (request.getEmployeeId() == null && request.getAssignmentId() == null) {
                 r.setEmployee(null);
+                log.info("[RATING][CREATE][EMPLOYEE] no employeeId/assignmentId provided → treating as customer review");
             }
 
             // if neither assignment nor employee target provided, treat as feedback for customer
@@ -214,6 +228,11 @@ public class RatingServiceImpl implements RatingService {
     }
 
     private RatingResponse toResponse(Rating r) {
+        String reviewerRoleCode = resolveReviewerRole(r);
+        String reviewerNameStr = resolveReviewerName(r);
+        String employeeRoleCode = r.getEmployee() != null && r.getEmployee().getRole() != null 
+                ? r.getEmployee().getRole().getCode() : null;
+
         return RatingResponse.builder()
                 .id(r.getId())
                 .contractId(r.getContract() != null ? r.getContract().getId() : null)
@@ -221,6 +240,7 @@ public class RatingServiceImpl implements RatingService {
                 .employeeId(r.getEmployee() != null ? r.getEmployee().getId() : null)
                 .employeeName(r.getEmployee() != null ? r.getEmployee().getName() : null)
                 .employeeCode(r.getEmployee() != null ? r.getEmployee().getEmployeeCode() : null)
+                .employeeRole(employeeRoleCode)
                 .customerName(r.getContract() != null && r.getContract().getCustomer() != null ? r.getContract().getCustomer().getName() : null)
                 .contractDescription(r.getContract() != null ? r.getContract().getDescription() : null)
                 .rating(r.getRating())
@@ -228,9 +248,33 @@ public class RatingServiceImpl implements RatingService {
                 .createdBy(r.getCreatedBy())
                 .createdAt(r.getCreatedAt())
                 .reviewerId(r.getReviewer() != null ? r.getReviewer().getId() : null)
-                .reviewerName(r.getReviewer() != null ? r.getReviewer().getName() : null)
-                .reviewerRole(r.getReviewer() != null && r.getReviewer().getRole() != null ? r.getReviewer().getRole().getCode() : null)
+                .reviewerName(reviewerNameStr)
+                .reviewerRole(reviewerRoleCode)
                 .build();
+    }
+
+    private String resolveReviewerRole(Rating r) {
+        if (r == null) return null;
+        if (r.getReviewer() != null && r.getReviewer().getRole() != null) {
+            return r.getReviewer().getRole().getCode();
+        }
+        if (r.getCreatedBy() != null) {
+            com.company.company_clean_hub_be.entity.User u = userRepository.findByUsername(r.getCreatedBy()).orElse(null);
+            if (u != null && u.getRole() != null) return u.getRole().getCode();
+        }
+        return null;
+    }
+
+    private String resolveReviewerName(Rating r) {
+        if (r == null) return null;
+        if (r.getReviewer() != null && r.getReviewer().getName() != null) {
+            return r.getReviewer().getName();
+        }
+        if (r.getCreatedBy() != null) {
+            com.company.company_clean_hub_be.entity.User u = userRepository.findByUsername(r.getCreatedBy()).orElse(null);
+            return u != null ? u.getUsername() : r.getCreatedBy();
+        }
+        return null;
     }
 
     private void ensureCustomerOwnsContract(Contract contract) {

@@ -60,7 +60,8 @@ public interface CustomerAssignmentService {
      * Lấy danh sách manager được phân công cho một customer
      * 
      * @param customerId ID customer
+     * @param role       Mã role để lọc manager (optional)
      * @return Danh sách phân công
      */
-    List<CustomerAssignmentResponse> getAssignmentsByCustomer(Long customerId);
+    List<CustomerAssignmentResponse> getAssignmentsByCustomer(Long customerId, String role);
 }

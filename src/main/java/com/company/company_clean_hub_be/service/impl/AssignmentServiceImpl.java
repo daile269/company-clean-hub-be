@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.Duration;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
@@ -90,6 +92,14 @@ public class AssignmentServiceImpl implements AssignmentService {
                         if (request.getStartDate().isBefore(today)) {
                                 log.warn("QLV cannot create assignment with startDate in the past: {}", request.getStartDate());
                                 throw new AppException(ErrorCode.FORBIDDEN);
+                        }
+                        // Nếu tạo cho ngày hôm nay nhưng đã qua 08:00 sáng thì QLV không được tạo
+                        if (request.getStartDate().isEqual(today)) {
+                                LocalTime now = LocalTime.now();
+                                if (now.isAfter(LocalTime.of(8, 0))) {
+                                        log.warn("QLV cannot create assignment for today after 08:00: now={}", now);
+                                        throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME);
+                                }
                         }
                 }
 
@@ -327,6 +337,15 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 log.warn("QLV cannot change startDate to past date: {}", request.getStartDate());
                                 throw new AppException(ErrorCode.FORBIDDEN);
                         }
+                        // Chỉ cho QLV sửa trong vòng 1 giờ kể từ khi tạo
+                        if (assignment.getCreatedAt() != null) {
+                                Duration age = Duration.between(assignment.getCreatedAt(), LocalDateTime.now());
+                                if (age.toMinutes() > 60) {
+                                        log.warn("QLV cannot update assignment after 1 hour since creation: assignmentId={}, ageMinutes={}",
+                                                        assignment.getId(), age.toMinutes());
+                                        throw new AppException(ErrorCode.QLV_ACTION_WINDOW_EXPIRED);
+                                }
+                        }
                 }
 
                 Employee employee = employeeRepository.findById(request.getEmployeeId())
@@ -423,25 +442,48 @@ public class AssignmentServiceImpl implements AssignmentService {
                 Assignment assignment = assignmentRepository.findById(id)
                                 .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
+                User currentUser = userRepository.findByUsername(username).orElse(null);
                 log.info("deleteAssignment by {}: assignmentId={}", username, id);
 
-                // 1) Delete related ratings and attendances for the assignment's month before removing the assignment
+                // Nếu user là Quản lý vùng (QLV) thì chỉ được xóa assignment bắt đầu từ hôm nay trở đi
+                if (currentUser != null && currentUser.getRole() != null
+                                && "QLV".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        java.time.LocalDate today = java.time.LocalDate.now();
+                        if (assignment.getStartDate() != null && assignment.getStartDate().isBefore(today)) {
+                                log.warn("QLV cannot delete assignment that starts before today: assignmentId={}, startDate={}",
+                                                id, assignment.getStartDate());
+                                throw new AppException(ErrorCode.FORBIDDEN);
+                        }
+
+                        // Chỉ cho QLV xóa trong vòng 1 giờ sau khi tạo
+                        if (assignment.getCreatedAt() != null) {
+                                Duration age = Duration.between(assignment.getCreatedAt(), LocalDateTime.now());
+                                if (age.toMinutes() > 60) {
+                                        log.warn("QLV cannot delete assignment after 1 hour since creation: assignmentId={}, ageMinutes={}",
+                                                        assignment.getId(), age.toMinutes());
+                                        throw new AppException(ErrorCode.QLV_ACTION_WINDOW_EXPIRED);
+                                }
+                        }
+                }
+
+                // 1) Delete related ratings and all attendances for the assignment before removing the assignment
                 try {
                         try {
                                 ratingRepository.deleteByAssignmentId(assignment.getId());
                         } catch (Exception ignored) {}
-                        YearMonth ym = YearMonth.from(assignment.getStartDate());
-                        LocalDate monthStart = ym.atDay(1);
-                        LocalDate monthEnd = ym.atEndOfMonth();
 
-                        List<Attendance> related = attendanceRepository.findByAssignmentAndDateBetween(
-                                        assignment.getId(), monthStart, monthEnd);
-                        if (related != null && !related.isEmpty()) {
-                                log.info("Deleting {} attendances for assignmentId={}", related.size(), assignment.getId());
-                                attendanceRepository.deleteAll(related);
+                        // delete all attendances linked to this assignment via entity delete (avoids FK issues)
+                        try {
+                                List<Attendance> toDelete = attendanceRepository.findByAssignmentId(assignment.getId());
+                                if (toDelete != null && !toDelete.isEmpty()) {
+                                        attendanceRepository.deleteAll(toDelete);
+                                        log.info("Deleted {} attendances for assignmentId={}", toDelete.size(), assignment.getId());
+                                }
+                        } catch (Exception ex) {
+                                log.warn("Failed to delete attendances for assignmentId={}: {}", assignment.getId(), ex.getMessage());
                         }
                 } catch (Exception ex) {
-                        log.warn("Failed to delete attendances for assignmentId={}: {}", assignment.getId(), ex.getMessage());
+                        log.warn("Failed to delete ratings/attendances for assignmentId={}: {}", assignment.getId(), ex.getMessage());
                 }
 
                 // 2) Delete assignment history entries that reference this assignment (old or new)
@@ -1397,6 +1439,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
                 User currentUser = userRepository.findByUsername(username).orElse(null);
                 log.info("rollbackReassignment requested by {}: historyId={}", username, historyId);
+
+                // Nếu user là Quản lý vùng (QLV) thì chỉ cho rollback các ngày hôm nay trở đi
+                if (currentUser != null && currentUser.getRole() != null
+                                && "QLV".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        java.time.LocalDate today = java.time.LocalDate.now();
+                        for (LocalDate d : history.getReassignmentDates()) {
+                                if (d.isBefore(today)) {
+                                        log.warn("QLV cannot rollback reassignment that includes past dates: historyId={}, date={}",
+                                                        historyId, d);
+                                        throw new AppException(ErrorCode.FORBIDDEN);
+                                }
+                        }
+                }
 
                 int restoredCount = 0;
                 int removedCount = 0;
