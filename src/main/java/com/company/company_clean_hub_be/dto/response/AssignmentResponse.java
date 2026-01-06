@@ -1,6 +1,5 @@
 package com.company.company_clean_hub_be.dto.response;
 
-
 import com.company.company_clean_hub_be.entity.AssignmentStatus;
 import com.company.company_clean_hub_be.entity.ContractType;
 import lombok.AllArgsConstructor;
@@ -12,7 +11,6 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-
 
 @Data
 @NoArgsConstructor
@@ -43,5 +41,7 @@ public class AssignmentResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String assignmentType;
-    private String scope;  // CONTRACT or COMPANY
+    private String scope; // CONTRACT or COMPANY
+    private Long assignedById; // ID người phân công
+    private String assignedByUsername; // Username người phân công
 }

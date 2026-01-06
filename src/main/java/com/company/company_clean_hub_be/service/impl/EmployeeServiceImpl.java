@@ -211,21 +211,54 @@ public class EmployeeServiceImpl implements EmployeeService {
                 User updater = userRepository.findByUsername(username)
                                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
                 if (updater.getRole() != null && "QLV".equalsIgnoreCase(updater.getRole().getCode())) {
-                        // Lấy ngày tạo nhân viên
-                        java.time.LocalDate today = java.time.LocalDate.now();
-                        java.time.LocalDate employeeCreatedDate = employee.getCreatedAt().toLocalDate();
-                        
-                        // Nếu nhân viên được tạo trước hôm nay (quá khứ) thì không được sửa
+                        LocalDateTime createdAt = employee.getCreatedAt();
+                        LocalDateTime now = LocalDateTime.now();
+                        java.time.LocalDate today = now.toLocalDate();
+                        java.time.LocalDate employeeCreatedDate = createdAt.toLocalDate();
+
+                        // Kiểm tra 1: Nếu nhân viên được tạo trước hôm nay thì không được sửa
                         if (employeeCreatedDate.isBefore(today)) {
-                                log.warn("QLV cannot update employee created before today: employeeId={}, createdDate={}", 
-                                        id, employeeCreatedDate);
+                                log.warn("QLV cannot update employee created before today: employeeId={}, createdDate={}",
+                                                id, employeeCreatedDate);
                                 throw new AppException(ErrorCode.FORBIDDEN);
                         }
-                        
-                        // // Không được tạo/chuyển thành nhân viên văn phòng
-                        // if (request.getEmploymentType() == com.company.company_clean_hub_be.entity.EmploymentType.COMPANY_STAFF) {
-                        //         throw new AppException(ErrorCode.FORBIDDEN);
-                        // }
+
+                        // Kiểm tra 2: Nếu tạo trong hôm nay nhưng quá 1 tiếng
+                        long hoursSinceCreation = java.time.Duration.between(createdAt, now).toHours();
+                        if (hoursSinceCreation >= 1) {
+                                // Quá 1 giờ
+                                if (employee.getEmploymentType() == EmploymentType.CONTRACT_STAFF) {
+                                        // Nhân viên hợp đồng: không được sửa gì cả (advance update qua payroll API)
+                                        log.warn("QLV cannot update contract employee after 1 hour: employeeId={}, createdAt={}, hoursSince={}",
+                                                        id, createdAt, hoursSinceCreation);
+                                        throw new AppException(ErrorCode.EMPLOYEE_UPDATE_TIME_EXPIRED);
+                                }
+
+                                // Nhân viên văn phòng: chỉ cho phép update monthlyAdvanceLimit
+                                // Kiểm tra xem có thay đổi field nào khác không
+                                boolean hasOtherChanges = !request.getName().equals(employee.getName()) ||
+                                                !request.getPhone().equals(employee.getPhone()) ||
+                                                !request.getCccd().equals(employee.getCccd()) ||
+                                                !request.getAddress().equals(employee.getAddress()) ||
+                                                !request.getBankAccount().equals(employee.getBankAccount()) ||
+                                                !request.getBankName().equals(employee.getBankName()) ||
+                                                !request.getEmploymentType().equals(employee.getEmploymentType()) ||
+                                                !request.getStatus().equals(employee.getStatus()) ||
+                                                (request.getMonthlySalary() != null && !request
+                                                                .getMonthlySalary().equals(employee.getMonthlySalary()))
+                                                ||
+                                                (request.getAllowance() != null && !request.getAllowance()
+                                                                .equals(employee.getAllowance()))
+                                                ||
+                                                (request.getInsuranceSalary() != null && !request.getInsuranceSalary()
+                                                                .equals(employee.getInsuranceSalary()));
+
+                                if (hasOtherChanges) {
+                                        log.warn("QLV can only update advance limit after 1 hour for company staff: employeeId={}, hoursSince={}",
+                                                        id, hoursSinceCreation);
+                                        throw new AppException(ErrorCode.EMPLOYEE_UPDATE_TIME_EXPIRED_EXCEPT_ADVANCE);
+                                }
+                        }
                 }
 
                 Role role = roleRepository.findById(request.getRoleId())
@@ -348,6 +381,31 @@ public class EmployeeServiceImpl implements EmployeeService {
                                                                 : "")
                                                 .build())
                                 .collect(Collectors.toList());
+        }
+
+        @Override
+        public EmployeeResponse updateAdvanceSalary(Long id, java.math.BigDecimal monthlyAdvanceLimit) {
+                String username = org.springframework.security.core.context.SecurityContextHolder
+                                .getContext().getAuthentication().getName();
+                log.info("updateAdvanceSalary by {}: id={}, monthlyAdvanceLimit={}", username, id, monthlyAdvanceLimit);
+
+                Employee employee = employeeRepository.findById(id)
+                                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+                // Kiểm tra loại nhân viên phải là COMPANY_STAFF
+                if (employee.getEmploymentType() != EmploymentType.COMPANY_STAFF) {
+                        log.warn("Cannot update advance salary for non-company staff: employeeId={}, type={}",
+                                        id, employee.getEmploymentType());
+                        throw new AppException(ErrorCode.FORBIDDEN);
+                }
+
+                // Cập nhật chỉ trường monthlyAdvanceLimit
+                employee.setMonthlyAdvanceLimit(monthlyAdvanceLimit);
+                employee.setUpdatedAt(LocalDateTime.now());
+
+                Employee updatedEmployee = employeeRepository.save(employee);
+                log.info("updateAdvanceSalary completed by {}: id={}", username, updatedEmployee.getId());
+                return mapToResponse(updatedEmployee);
         }
 
 }

@@ -84,13 +84,15 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 username, request.getEmployeeId(), request.getContractId(), request.getScope(),
                                 request.getStartDate());
 
-                // Nếu người tạo là Quản lý vùng (code = 'QLV') thì chỉ được phân công từ hôm nay trở về sau
+                // Nếu người tạo là Quản lý vùng (code = 'QLV') thì chỉ được phân công từ hôm
+                // nay trở về sau
                 User creator = userRepository.findByUsername(username)
                                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
                 if (creator.getRole() != null && "QLV".equalsIgnoreCase(creator.getRole().getCode())) {
                         LocalDate today = LocalDate.now();
                         if (request.getStartDate().isBefore(today)) {
-                                log.warn("QLV cannot create assignment with startDate in the past: {}", request.getStartDate());
+                                log.warn("QLV cannot create assignment with startDate in the past: {}",
+                                                request.getStartDate());
                                 throw new AppException(ErrorCode.FORBIDDEN);
                         }
                         // Nếu tạo cho ngày hôm nay nhưng đã qua 08:00 sáng thì QLV không được tạo
@@ -170,6 +172,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .additionalAllowance(request.getAdditionalAllowance())
                                 .description(request.getDescription())
                                 .assignmentType(assignmentTypeParsed)
+                                .assignedBy(creator)
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
                                 .build();
@@ -185,8 +188,10 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         List<Attendance> toSave = new ArrayList<>();
                                         for (java.time.LocalDate d : requestedDates) {
                                                 boolean alreadyExists = attendanceRepository
-                                                                .findByAssignmentAndEmployeeAndDate(savedAssignment.getId(),
-                                                                                savedAssignment.getEmployee().getId(), d)
+                                                                .findByAssignmentAndEmployeeAndDate(
+                                                                                savedAssignment.getId(),
+                                                                                savedAssignment.getEmployee().getId(),
+                                                                                d)
                                                                 .isPresent();
                                                 if (!alreadyExists) {
                                                         Attendance att = Attendance.builder()
@@ -213,10 +218,15 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         if (!toSave.isEmpty()) {
                                                 attendanceRepository.saveAll(toSave);
                                                 int created = toSave.size();
-                                                savedAssignment.setWorkDays((savedAssignment.getWorkDays() == null ? 0 : savedAssignment.getWorkDays()) + created);
-                                                savedAssignment.setPlannedDays((savedAssignment.getPlannedDays() == null ? 0 : savedAssignment.getPlannedDays()) + created);
+                                                savedAssignment.setWorkDays((savedAssignment.getWorkDays() == null ? 0
+                                                                : savedAssignment.getWorkDays()) + created);
+                                                savedAssignment.setPlannedDays(
+                                                                (savedAssignment.getPlannedDays() == null ? 0
+                                                                                : savedAssignment.getPlannedDays())
+                                                                                + created);
                                                 assignmentRepository.save(savedAssignment);
-                                                log.info("Created {} support attendances for assignmentId={}", created, savedAssignment.getId());
+                                                log.info("Created {} support attendances for assignmentId={}", created,
+                                                                savedAssignment.getId());
                                         }
                                 }
                         } else if (workingDays != null && !workingDays.isEmpty()) {
@@ -259,9 +269,11 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                         .workingDaysPerWeek(workingDays != null
                                                                                         ? new ArrayList<>(workingDays)
                                                                                         : null)
-                                                                        .additionalAllowance(request.getAdditionalAllowance())
+                                                                        .additionalAllowance(request
+                                                                                        .getAdditionalAllowance())
                                                                         .description(request.getDescription())
                                                                         .assignmentType(assignmentTypeParsed)
+                                                                        .assignedBy(savedAssignment.getAssignedBy())
                                                                         .createdAt(LocalDateTime.now())
                                                                         .updatedAt(LocalDateTime.now())
                                                                         .build();
@@ -277,7 +289,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                         monthStartDate);
                                                 } else {
                                                         log.info("Assignment already exists for employee={}, contract={}, month={}/{}",
-                                                                        request.getEmployeeId(), request.getContractId(),
+                                                                        request.getEmployeeId(),
+                                                                        request.getContractId(),
                                                                         nextMonth.getMonthValue(), nextMonth.getYear());
                                                 }
 
@@ -319,19 +332,21 @@ public class AssignmentServiceImpl implements AssignmentService {
                 log.debug("[ASSIGNMENT][UPDATE] Found assignment id={}, currentStatus={}",
                                 assignment.getId(), assignment.getStatus());
 
-                // Nếu người cập nhật là Quản lý vùng (code = 'QLV') thì chỉ được cập nhật assignment từ hôm nay trở về sau
+                // Nếu người cập nhật là Quản lý vùng (code = 'QLV') thì chỉ được cập nhật
+                // assignment từ hôm nay trở về sau
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
                 User updater = userRepository.findByUsername(username)
                                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
                 if (updater.getRole() != null && "QLV".equalsIgnoreCase(updater.getRole().getCode())) {
                         LocalDate today = LocalDate.now();
-                        
+
                         // Kiểm tra startDate của assignment hiện tại
                         if (assignment.getStartDate().isBefore(today)) {
-                                log.warn("QLV cannot update assignment with startDate in the past: {}", assignment.getStartDate());
+                                log.warn("QLV cannot update assignment with startDate in the past: {}",
+                                                assignment.getStartDate());
                                 throw new AppException(ErrorCode.FORBIDDEN);
                         }
-                        
+
                         // Kiểm tra startDate mới (nếu có thay đổi)
                         if (request.getStartDate() != null && request.getStartDate().isBefore(today)) {
                                 log.warn("QLV cannot change startDate to past date: {}", request.getStartDate());
@@ -414,27 +429,27 @@ public class AssignmentServiceImpl implements AssignmentService {
                 return mapToResponse(updatedAssignment);
         }
 
-    @Override
-    public AssignmentResponse updateAllowanceAssignment(Long id, BigDecimal allowance) {
-        log.info("[ASSIGNMENT][UPDATE] Start update assignment, id={}, allowance={}", id, allowance);
+        @Override
+        public AssignmentResponse updateAllowanceAssignment(Long id, BigDecimal allowance) {
+                log.info("[ASSIGNMENT][UPDATE] Start update assignment, id={}, allowance={}", id, allowance);
 
-        if (id == null) {
-            log.error("[ASSIGNMENT][UPDATE] Assignment id is null");
-            throw new IllegalArgumentException("Assignment id must not be null");
+                if (id == null) {
+                        log.error("[ASSIGNMENT][UPDATE] Assignment id is null");
+                        throw new IllegalArgumentException("Assignment id must not be null");
+                }
+
+                Assignment assignment = assignmentRepository.findById(id)
+                                .orElseThrow(() -> {
+                                        log.error("[ASSIGNMENT][UPDATE] Assignment not found, id={}", id);
+                                        return new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND);
+                                });
+                assignment.setAdditionalAllowance(allowance);
+                Assignment updatedAssignment = assignmentRepository.save(assignment);
+
+                log.info("[ASSIGNMENT][UPDATE] Assignment updated successfully, id={}", updatedAssignment.getId());
+
+                return mapToResponse(updatedAssignment);
         }
-
-        Assignment assignment = assignmentRepository.findById(id)
-                .orElseThrow(() -> {
-                    log.error("[ASSIGNMENT][UPDATE] Assignment not found, id={}", id);
-                    return new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND);
-                });
-        assignment.setAdditionalAllowance(allowance);
-        Assignment updatedAssignment = assignmentRepository.save(assignment);
-
-        log.info("[ASSIGNMENT][UPDATE] Assignment updated successfully, id={}", updatedAssignment.getId());
-
-        return mapToResponse(updatedAssignment);
-    }
 
         @Override
         @Transactional
@@ -445,7 +460,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                 User currentUser = userRepository.findByUsername(username).orElse(null);
                 log.info("deleteAssignment by {}: assignmentId={}", username, id);
 
-                // Nếu user là Quản lý vùng (QLV) thì chỉ được xóa assignment bắt đầu từ hôm nay trở đi
+                // Nếu user là Quản lý vùng (QLV) thì chỉ được xóa assignment bắt đầu từ hôm nay
+                // trở đi
                 if (currentUser != null && currentUser.getRole() != null
                                 && "QLV".equalsIgnoreCase(currentUser.getRole().getCode())) {
                         java.time.LocalDate today = java.time.LocalDate.now();
@@ -466,41 +482,54 @@ public class AssignmentServiceImpl implements AssignmentService {
                         }
                 }
 
-                // 1) Delete related ratings and all attendances for the assignment before removing the assignment
+                // 1) Delete related ratings and all attendances for the assignment before
+                // removing the assignment
                 try {
                         try {
                                 ratingRepository.deleteByAssignmentId(assignment.getId());
-                        } catch (Exception ignored) {}
+                        } catch (Exception ignored) {
+                        }
 
-                        // delete all attendances linked to this assignment via entity delete (avoids FK issues)
+                        // delete all attendances linked to this assignment via entity delete (avoids FK
+                        // issues)
                         try {
                                 List<Attendance> toDelete = attendanceRepository.findByAssignmentId(assignment.getId());
                                 if (toDelete != null && !toDelete.isEmpty()) {
                                         attendanceRepository.deleteAll(toDelete);
-                                        log.info("Deleted {} attendances for assignmentId={}", toDelete.size(), assignment.getId());
+                                        log.info("Deleted {} attendances for assignmentId={}", toDelete.size(),
+                                                        assignment.getId());
                                 }
                         } catch (Exception ex) {
-                                log.warn("Failed to delete attendances for assignmentId={}: {}", assignment.getId(), ex.getMessage());
+                                log.warn("Failed to delete attendances for assignmentId={}: {}", assignment.getId(),
+                                                ex.getMessage());
                         }
                 } catch (Exception ex) {
-                        log.warn("Failed to delete ratings/attendances for assignmentId={}: {}", assignment.getId(), ex.getMessage());
+                        log.warn("Failed to delete ratings/attendances for assignmentId={}: {}", assignment.getId(),
+                                        ex.getMessage());
                 }
 
-                // 2) Delete assignment history entries that reference this assignment (old or new)
+                // 2) Delete assignment history entries that reference this assignment (old or
+                // new)
                 try {
-                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> oldHist = assignmentHistoryRepository.findByOldAssignmentId(assignment.getId());
-                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> newHist = assignmentHistoryRepository.findByNewAssignmentId(assignment.getId());
+                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> oldHist = assignmentHistoryRepository
+                                        .findByOldAssignmentId(assignment.getId());
+                        List<com.company.company_clean_hub_be.entity.AssignmentHistory> newHist = assignmentHistoryRepository
+                                        .findByNewAssignmentId(assignment.getId());
 
                         List<com.company.company_clean_hub_be.entity.AssignmentHistory> relatedHistories = new ArrayList<>();
-                        if (oldHist != null && !oldHist.isEmpty()) relatedHistories.addAll(oldHist);
-                        if (newHist != null && !newHist.isEmpty()) relatedHistories.addAll(newHist);
+                        if (oldHist != null && !oldHist.isEmpty())
+                                relatedHistories.addAll(oldHist);
+                        if (newHist != null && !newHist.isEmpty())
+                                relatedHistories.addAll(newHist);
 
                         if (!relatedHistories.isEmpty()) {
-                                log.info("Deleting {} assignment history records referencing assignmentId={}", relatedHistories.size(), assignment.getId());
+                                log.info("Deleting {} assignment history records referencing assignmentId={}",
+                                                relatedHistories.size(), assignment.getId());
                                 assignmentHistoryRepository.deleteAll(relatedHistories);
                         }
                 } catch (Exception ex) {
-                        log.warn("Failed to delete assignment history for assignmentId={}: {}", assignment.getId(), ex.getMessage());
+                        log.warn("Failed to delete assignment history for assignmentId={}: {}", assignment.getId(),
+                                        ex.getMessage());
                 }
 
                 // 3) Delete the assignment itself
@@ -530,8 +559,10 @@ public class AssignmentServiceImpl implements AssignmentService {
                 // Lấy thông tin user đang thực hiện
                 User currentUser = userRepository.findByUsername(username).orElse(null);
 
-                // Nếu người thực hiện là Quản lý vùng (code = 'QLV') thì chỉ được điều động thay thế từ hôm nay trở về sau
-                if (currentUser != null && currentUser.getRole() != null && "QLV".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                // Nếu người thực hiện là Quản lý vùng (code = 'QLV') thì chỉ được điều động
+                // thay thế từ hôm nay trở về sau
+                if (currentUser != null && currentUser.getRole() != null
+                                && "QLV".equalsIgnoreCase(currentUser.getRole().getCode())) {
                         LocalDate today = LocalDate.now();
                         for (LocalDate date : request.getDates()) {
                                 if (date.isBefore(today)) {
@@ -994,8 +1025,9 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
 
         @Override
-        public PageResponse<AssignmentResponse> getAssignmentsByContract(Long contractId, com.company.company_clean_hub_be.entity.AssignmentStatus status, Integer month, Integer year,
-                                                int page, int pageSize) {
+        public PageResponse<AssignmentResponse> getAssignmentsByContract(Long contractId,
+                        com.company.company_clean_hub_be.entity.AssignmentStatus status, Integer month, Integer year,
+                        int page, int pageSize) {
                 contractRepository.findById(contractId)
                                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
@@ -1003,8 +1035,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                 int safePageSize = Math.max(1, pageSize);
                 Pageable pageable = PageRequest.of(safePage, safePageSize, Sort.by("startDate").descending());
 
-                Page<Assignment> assignmentPage = assignmentRepository.findByContractIdWithFilters(contractId, status, month,
-                                        year, pageable);
+                Page<Assignment> assignmentPage = assignmentRepository.findByContractIdWithFilters(contractId, status,
+                                month,
+                                year, pageable);
 
                 List<AssignmentResponse> items = assignmentPage.getContent().stream()
                                 .map(this::mapToResponse)
@@ -1205,6 +1238,12 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .description(assignment.getDescription())
                                 .createdAt(assignment.getCreatedAt())
                                 .updatedAt(assignment.getUpdatedAt())
+                                .assignedById(assignment.getAssignedBy() != null
+                                                ? assignment.getAssignedBy().getId()
+                                                : null)
+                                .assignedByUsername(assignment.getAssignedBy() != null
+                                                ? assignment.getAssignedBy().getUsername()
+                                                : null)
                                 .build();
         }
 
@@ -1235,7 +1274,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 .employee(assignment.getEmployee())
                                                 .assignment(assignment)
                                                 .date(startDate)
-                                        .deleted(false)
+                                                .deleted(false)
                                                 .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định 8 giờ
                                                 .bonus(java.math.BigDecimal.ZERO)
                                                 .penalty(java.math.BigDecimal.ZERO)
@@ -1287,7 +1326,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                 .assignment(assignment)
                                                                 .date(currentDate)
                                                                 .workHours(java.math.BigDecimal.valueOf(8)) // Mặc định
-                                                        .deleted(false)                                // 8 giờ
+                                                                .deleted(false) // 8 giờ
                                                                 .bonus(java.math.BigDecimal.ZERO)
                                                                 .penalty(java.math.BigDecimal.ZERO)
                                                                 .supportCost(java.math.BigDecimal.ZERO)
