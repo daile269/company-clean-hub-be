@@ -157,28 +157,64 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         // Compute number of primary assigned employees for the contract in the month.
         // Exclude SUPPORT and TEMPORARY from primary count so short-term replacements don't increase the divisor.
+        YearMonth invoiceYearMonth = YearMonth.of(request.getInvoiceYear(), request.getInvoiceMonth());
         List<Assignment> assignments = assignmentRepository.findByContractId(contract.getId());
+        log.info("Contract {} - Total assignments found: {}", contract.getId(), assignments.size());
+        
+        // Log assignment details for debugging
+        for (Assignment a : assignments) {
+            log.info("  Assignment {}: employee={}, type={}, status={}, startDate={}",
+                a.getId(),
+                a.getEmployee() != null ? a.getEmployee().getId() : "null",
+                a.getAssignmentType(),
+                a.getStatus(),
+                a.getStartDate());
+        }
+        
         java.util.Set<Long> primaryEmployeeIds = assignments.stream()
             .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS)
-            .filter(a -> !a.getStartDate().isAfter(lastDayOfMonth))
+            .filter(a -> {
+                if (a.getStartDate() == null) return false;
+                YearMonth assignmentYearMonth = YearMonth.from(a.getStartDate());
+                boolean passes = assignmentYearMonth.equals(invoiceYearMonth);
+                log.debug("Assignment {} startDate={} ({}) vs invoiceYearMonth={}: {}",
+                    a.getId(), a.getStartDate(), assignmentYearMonth, invoiceYearMonth, passes ? "PASS" : "SKIP");
+                return passes;
+            })
             .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
             .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.TEMPORARY)
             .map(a -> a.getEmployee() != null ? a.getEmployee().getId() : null)
             .filter(id -> id != null)
             .collect(Collectors.toSet());
 
+        log.info("Contract {} - Primary employee IDs (excluding SUPPORT/TEMPORARY): {}", contract.getId(), primaryEmployeeIds);
+
+        log.info("Contract {} - Primary employee IDs (excluding SUPPORT/TEMPORARY): {}", contract.getId(), primaryEmployeeIds);
+
         int numEmployees = primaryEmployeeIds.size();
+        log.info("Contract {} - Primary employee count: {}", contract.getId(), numEmployees);
+        
         // Fallback: if no primary (e.g., only TEMPORARY assignments exist), include TEMPORARY as well (but still exclude SUPPORT)
         if (numEmployees == 0) {
+            log.info("Contract {} - No primary employees found, applying fallback to include TEMPORARY assignments", contract.getId());
             java.util.Set<Long> anyEmployeeIds = assignments.stream()
                 .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS)
-                .filter(a -> !a.getStartDate().isAfter(lastDayOfMonth))
+                .filter(a -> {
+                    if (a.getStartDate() == null) return false;
+                    YearMonth assignmentYearMonth = YearMonth.from(a.getStartDate());
+                    return assignmentYearMonth.equals(invoiceYearMonth);
+                })
                 .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
                 .map(a -> a.getEmployee() != null ? a.getEmployee().getId() : null)
                 .filter(id -> id != null)
                 .collect(Collectors.toSet());
             numEmployees = anyEmployeeIds.size();
+            log.info("Contract {} - Fallback employee IDs (excluding only SUPPORT): {}", contract.getId(), anyEmployeeIds);
+            log.info("Contract {} - Fallback employee count: {}", contract.getId(), numEmployees);
         }
+        
+        log.info("Contract {} - Final employee count for invoice {}/{}: {} (attendances: {}, contractDays: {})",
+            contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), numEmployees, attendancesCount, contractDays);
 
         if (totalContractPrice.compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("Contract {} totalContractPrice is zero for month {}/{}", contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear());

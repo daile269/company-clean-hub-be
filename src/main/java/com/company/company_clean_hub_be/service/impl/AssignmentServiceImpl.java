@@ -560,14 +560,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                 User currentUser = userRepository.findByUsername(username).orElse(null);
 
                 // Nếu người thực hiện là Quản lý vùng (code = 'QLV') thì chỉ được điều động
-                // thay thế từ hôm nay trở về sau
+                // thay thế từ hôm nay trở về sau; nếu là hôm nay thì chỉ được trước 08:00
                 if (currentUser != null && currentUser.getRole() != null
                                 && "QLV".equalsIgnoreCase(currentUser.getRole().getCode())) {
                         LocalDate today = LocalDate.now();
+                        LocalTime now = LocalTime.now();
                         for (LocalDate date : request.getDates()) {
                                 if (date.isBefore(today)) {
                                         log.warn("QLV cannot perform temporary reassignment for past date: {}", date);
                                         throw new AppException(ErrorCode.FORBIDDEN);
+                                }
+                                if (date.isEqual(today) && !now.isBefore(LocalTime.of(8, 0))) {
+                                        log.warn("QLV cannot perform temporary reassignment for today after 08:00: now={}", now);
+                                        throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME);
                                 }
                         }
                 }
