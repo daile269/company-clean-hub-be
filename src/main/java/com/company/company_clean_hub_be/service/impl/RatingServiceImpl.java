@@ -159,7 +159,9 @@ public class RatingServiceImpl implements RatingService {
 
         ensureCustomerOwnsContract(contract);
 
-        return ratingRepository.findByContractId(contractId).stream().map(this::toResponse).collect(Collectors.toList());
+        // Trả về các rating cho contract này mà có employee và chưa có reviewer
+        return ratingRepository.findByContractIdAndReviewerIsNullAndEmployeeIsNotNull(contractId)
+            .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
     @Override
@@ -174,7 +176,7 @@ public class RatingServiceImpl implements RatingService {
 
     @Override
     public List<RatingResponse> getRatingsByCustomer(Long customerId) {
-        return ratingRepository.findByContractCustomerIdAndEmployeeIsNotNullAndReviewerIsNull(customerId).stream().map(this::toResponse).collect(Collectors.toList());
+        return ratingRepository.findByContractCustomerIdAndReviewerIsNullAndEmployeeIsNotNull(customerId).stream().map(this::toResponse).collect(Collectors.toList());
     }
     
     @Override
