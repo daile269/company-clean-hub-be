@@ -121,7 +121,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
             "WHERE a.employee.id = :employeeId " +
             "AND FUNCTION('MONTH', att.date) = :month " +
             "AND FUNCTION('YEAR', att.date) = :year " +
-            "AND a.status <> com.company.company_clean_hub_be.entity.AssignmentStatus.CANCELED")
+            "AND a.status <> com.company.company_clean_hub_be.entity.AssignmentStatus.CANCELLED")
     List<Assignment> findDistinctAssignmentsByAttendanceMonthAndEmployee(
             @Param("month") Integer month,
             @Param("year") Integer year,
@@ -192,5 +192,17 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
                     @Param("month") Integer month,
                     @Param("year") Integer year,
                     Pageable pageable
+            );
+
+            @Query("SELECT a FROM Assignment a WHERE a.status = :status AND a.startDate = :startDate")
+            List<Assignment> findByStatusAndStartDate(
+                    @Param("status") AssignmentStatus status,
+                    @Param("startDate") LocalDate startDate
+            );
+
+            @Query("SELECT a FROM Assignment a WHERE a.endDate = :endDate AND a.status = :status")
+            List<Assignment> findAllByEndDateAndStatus(
+                    @Param("endDate") LocalDate endDate,
+                    @Param("status") AssignmentStatus status
             );
 }

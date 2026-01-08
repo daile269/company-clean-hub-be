@@ -40,6 +40,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         private final com.company.company_clean_hub_be.repository.RatingRepository ratingRepository;
         private final AssignmentHistoryRepository assignmentHistoryRepository;
         private final UserRepository userRepository;
+        private final com.company.company_clean_hub_be.repository.DeletedAttendanceBackupRepository deletedAttendanceBackupRepository;
 
         @Override
         public List<AssignmentResponse> getAllAssignments() {
@@ -84,12 +85,14 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 username, request.getEmployeeId(), request.getContractId(), request.getScope(),
                                 request.getStartDate());
 
+                // Khai báo today một lần để reuse
+                LocalDate today = LocalDate.now();
+
                 // Nếu người tạo là Quản lý vùng (code = 'QLV') thì chỉ được phân công từ hôm
                 // nay trở về sau
                 User creator = userRepository.findByUsername(username)
                                 .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
                 if (creator.getRole() != null && "QLV".equalsIgnoreCase(creator.getRole().getCode())) {
-                        LocalDate today = LocalDate.now();
                         if (request.getStartDate().isBefore(today)) {
                                 log.warn("QLV cannot create assignment with startDate in the past: {}",
                                                 request.getStartDate());
@@ -126,17 +129,6 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
                         }
 
-                        // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (status
-                        // IN_PROGRESS)
-                        if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
-                                List<Assignment> existingAssignments = assignmentRepository
-                                                .findActiveAssignmentByEmployeeAndContract(request.getEmployeeId(),
-                                                                request.getContractId());
-                                if (!existingAssignments.isEmpty()) {
-                                        throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
-                                }
-                        }
-
                         workingDays = contract.getWorkingDaysPerWeek() != null
                                         ? new ArrayList<>(contract.getWorkingDaysPerWeek())
                                         : null;
@@ -145,6 +137,28 @@ public class AssignmentServiceImpl implements AssignmentService {
                         workingDays = request.getWorkingDaysPerWeek() != null
                                         ? new ArrayList<>(request.getWorkingDaysPerWeek())
                                         : null;
+                }
+
+                // Tự động xác định status dựa vào startDate
+                AssignmentStatus finalStatus;
+
+                if (request.getStartDate().isAfter(today)) {
+                        // Phân công trong tương lai -> SCHEDULED (không tạo attendance ngay)
+                        finalStatus = AssignmentStatus.SCHEDULED;
+                        log.info("Assignment startDate {} is in future, set status to SCHEDULED", request.getStartDate());
+                } else {
+                        // Phân công từ hôm nay trở về trước -> lấy từ request hoặc mặc định IN_PROGRESS
+                        finalStatus = request.getStatus() != null ? request.getStatus() : AssignmentStatus.IN_PROGRESS;
+                }
+
+                // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (CHỈ check nếu finalStatus là IN_PROGRESS và scope là CONTRACT)
+                if (scope == AssignmentScope.CONTRACT && AssignmentStatus.IN_PROGRESS.equals(finalStatus)) {
+                        List<Assignment> existingAssignments = assignmentRepository
+                                        .findActiveAssignmentByEmployeeAndContract(request.getEmployeeId(),
+                                                        request.getContractId());
+                        if (!existingAssignments.isEmpty()) {
+                                throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
+                        }
                 }
 
                 // Parse assignmentType safely (default to FIXED_BY_CONTRACT)
@@ -166,7 +180,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .contract(contract)
                                 .scope(scope)
                                 .startDate(request.getStartDate())
-                                .status(request.getStatus())
+                                .status(finalStatus) 
                                 .salaryAtTime(request.getSalaryAtTime())
                                 .workingDaysPerWeek(workingDays)
                                 .additionalAllowance(request.getAdditionalAllowance())
@@ -179,8 +193,9 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 Assignment savedAssignment = assignmentRepository.save(assignment);
 
-                // Tự động tạo chấm công nếu status là IN_PROGRESS
-                if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
+                // Tự động tạo chấm công cho cả SCHEDULED và IN_PROGRESS
+                // Cron sau này chỉ chuyển status, không tạo attendance nữa
+                if (AssignmentStatus.IN_PROGRESS.equals(finalStatus) || AssignmentStatus.SCHEDULED.equals(finalStatus)) {
                         // Nếu là SUPPORT: tạo chấm công theo danh sách ngày được gửi trong request
                         if (assignmentTypeParsed == AssignmentType.SUPPORT) {
                                 List<java.time.LocalDate> requestedDates = request.getDates();
@@ -232,7 +247,6 @@ public class AssignmentServiceImpl implements AssignmentService {
                         } else if (workingDays != null && !workingDays.isEmpty()) {
                                 // Nếu startDate trong quá khứ, tạo assignment và attendance cho các tháng từ
                                 // startDate đến hiện tại
-                                LocalDate today = LocalDate.now();
                                 YearMonth startMonth = YearMonth.from(request.getStartDate());
                                 YearMonth currentMonth = YearMonth.from(today);
 
@@ -264,7 +278,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                         .contract(contract)
                                                                         .scope(scope)
                                                                         .startDate(monthStartDate)
-                                                                        .status(request.getStatus())
+                                                                        .status(AssignmentStatus.IN_PROGRESS)  // Các tháng trong quá khứ luôn là IN_PROGRESS
                                                                         .salaryAtTime(request.getSalaryAtTime())
                                                                         .workingDaysPerWeek(workingDays != null
                                                                                         ? new ArrayList<>(workingDays)
@@ -676,6 +690,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                         }
 
                         // Tạo temporary assignment
+                        LocalDate today = LocalDate.now();
+                        AssignmentStatus tempStatus = date.isAfter(today) ? AssignmentStatus.SCHEDULED : AssignmentStatus.IN_PROGRESS;
+                        
                         Assignment temporaryAssignment = Assignment.builder()
                                         .employee(replacementEmployee)
                                         .contract(replacedAssignmentEntity.getContract())
@@ -684,7 +701,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         .plannedDays(1)
                                         .salaryAtTime(request.getSalaryAtTime())
                                         .startDate(date)
-                                        .status(AssignmentStatus.IN_PROGRESS)
+                                        .status(tempStatus)  
                                         .description(request.getDescription() != null
                                                         ? request.getDescription()
                                                         : "Điều động tạm thời")
@@ -700,6 +717,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 newAssignment = savedTemporaryAssignment;
                         }
 
+                        // Xóa attendance cũ của người bị thay và tạo mới cho người thay
+                        // Tạo attendance luôn cho cả SCHEDULED (cron sau chỉ chuyển status)
+                        
                         // Kiểm tra người thay đã có attendance cùng assignment vào ngày này không (nếu
                         // có thì xóa để thay thế)
                         List<Attendance> replacementExisting = attendanceRepository.findAllByEmployeeAndDate(
@@ -1234,6 +1254,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .contractEndDate(contract != null ? contract.getEndDate() : null)
                                 .contractType(contract != null ? contract.getContractType() : null)
                                 .startDate(assignment.getStartDate())
+                                .endDate(assignment.getEndDate())
                                 .status(assignment.getStatus())
                                 .salaryAtTime(assignment.getSalaryAtTime())
                                 .workDays(assignment.getWorkDays())
@@ -1540,10 +1561,10 @@ public class AssignmentServiceImpl implements AssignmentService {
                 // Cập nhật workDays cho assignment cũ (người bị thay)
                 updateAssignmentWorkDays(history.getOldAssignment(), history.getReassignmentDates().get(0));
 
-                // Chuyển trạng thái temporary assignment sang CANCELED thay vì xóa
+                // Chuyển trạng thái temporary assignment sang CANCELLED thay vì xóa
                 Assignment newAssignment = history.getNewAssignment();
                 if (newAssignment != null && newAssignment.getAssignmentType() == AssignmentType.TEMPORARY) {
-                        newAssignment.setStatus(AssignmentStatus.CANCELED);
+                        newAssignment.setStatus(AssignmentStatus.CANCELLED);
                         assignmentRepository.save(newAssignment);
                         System.out.println(
                                         "Canceled temporary assignment " + newAssignment.getId() + " during rollback");
@@ -1608,5 +1629,213 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                 : null)
                                 .rollbackAt(history.getRollbackAt())
                                 .build();
+        }
+
+        @Override
+        @Transactional
+        public AssignmentResponse terminateAssignment(Long assignmentId, com.company.company_clean_hub_be.dto.request.TerminateAssignmentRequest request) {
+                String username = SecurityContextHolder.getContext().getAuthentication().getName();
+                log.info("[TERMINATE_ASSIGNMENT] Requested by {}: assignmentId={}, endDate={}, reason={}", 
+                        username, assignmentId, request.getEndDate(), request.getReason());
+
+                // Kiểm tra assignment tồn tại
+                Assignment assignment = assignmentRepository.findById(assignmentId)
+                        .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+
+                // Validate: assignment phải đang IN_PROGRESS hoặc SCHEDULED
+                if (assignment.getStatus() != AssignmentStatus.IN_PROGRESS && 
+                    assignment.getStatus() != AssignmentStatus.SCHEDULED) {
+                        log.error("Cannot terminate assignment with status {}", assignment.getStatus());
+                        throw new AppException(ErrorCode.INVALID_ASSIGNMENT_STATUS);
+                }
+
+                // Validate: endDate phải >= startDate
+                if (request.getEndDate().isBefore(assignment.getStartDate())) {
+                        log.error("End date {} is before start date {}", request.getEndDate(), assignment.getStartDate());
+                        throw new AppException(ErrorCode.INVALID_REQUEST);
+                }
+
+                LocalDate endDate = request.getEndDate();
+                LocalDate today = LocalDate.now();
+                LocalDateTime now = LocalDateTime.now();
+
+                // Luôn luôn xóa attendance sau endDate (backup trước khi xóa)
+                List<Attendance> futureAttendances = attendanceRepository.findByAssignmentAndDateAfter(
+                        assignment.getId(), endDate);
+
+                log.info("[TERMINATE_ASSIGNMENT] Assignment {}: Found {} future attendances after {}", 
+                        assignmentId, futureAttendances.size(), endDate);
+
+                // Backup và xóa các attendance trong tương lai
+                for (Attendance att : futureAttendances) {
+                        com.company.company_clean_hub_be.entity.DeletedAttendanceBackup backup = 
+                                com.company.company_clean_hub_be.entity.DeletedAttendanceBackup.builder()
+                                .originalAttendanceId(att.getId())
+                                .assignmentId(assignment.getId())
+                                .employeeId(att.getEmployee() != null ? att.getEmployee().getId() : null)
+                                .date(att.getDate())
+                                .workHours(att.getWorkHours())
+                                .bonus(att.getBonus())
+                                .penalty(att.getPenalty())
+                                .supportCost(att.getSupportCost())
+                                .isOvertime(att.getIsOvertime())
+                                .overtimeAmount(att.getOvertimeAmount())
+                                .description(att.getDescription())
+                                .deletedBy(username)
+                                .deletedAt(now)
+                                .payload(null)
+                                .build();
+                        deletedAttendanceBackupRepository.save(backup);
+                        attendanceRepository.delete(att);
+                }
+
+                // Lưu endDate và reason
+                assignment.setEndDate(endDate);
+                
+                if (request.getReason() != null && !request.getReason().isBlank()) {
+                        String currentDesc = assignment.getDescription() != null ? assignment.getDescription() : "";
+                        String prefix = endDate.isAfter(today) ? "Kết thúc (lên lịch)" : "Kết thúc";
+                        assignment.setDescription(currentDesc + (currentDesc.isEmpty() ? "" : " | ") + 
+                                prefix + ": " + request.getReason());
+                }
+                
+                assignment.setUpdatedAt(now);
+
+                // Tính lại workDays dựa trên attendance còn lại (sau khi đã xóa attendance tương lai)
+                YearMonth ym = YearMonth.from(today);
+                LocalDate monthStart = ym.atDay(1);
+                LocalDate monthEnd = ym.atEndOfMonth();
+                
+                // Đếm attendance còn lại từ đầu tháng đến min(endDate, today, monthEnd)
+                LocalDate countUntil = endDate.isBefore(today) ? endDate : today;
+                countUntil = countUntil.isBefore(monthEnd) ? countUntil : monthEnd;
+                
+                int currentWorkDays = attendanceRepository
+                        .findByAssignmentAndDateBetween(assignment.getId(), monthStart, countUntil)
+                        .size();
+                assignment.setWorkDays(currentWorkDays);
+                
+                log.info("[TERMINATE_ASSIGNMENT] Recalculated workDays: assignmentId={}, workDays={} (counted from {} to {})", 
+                        assignmentId, currentWorkDays, monthStart, countUntil);
+
+                // Nếu endDate là hôm nay hoặc quá khứ -> chuyển sang TERMINATED ngay
+                // Nếu endDate là tương lai -> giữ IN_PROGRESS, scheduler sẽ xử lý sau
+                if (endDate.isEqual(today) || endDate.isBefore(today)) {
+                        assignment.setStatus(AssignmentStatus.TERMINATED);
+                        log.info("[TERMINATE_ASSIGNMENT] Terminated immediately (endDate <= today): assignmentId={}, endDate={}", 
+                                assignmentId, endDate);
+                } else {
+                        // endDate trong tương lai - giữ status hiện tại (IN_PROGRESS)
+                        log.info("[TERMINATE_ASSIGNMENT] Scheduled termination (endDate in future): assignmentId={}, endDate={}, status stays IN_PROGRESS", 
+                                assignmentId, endDate);
+                }
+                
+                Assignment savedAssignment = assignmentRepository.save(assignment);
+
+                log.info("[TERMINATE_ASSIGNMENT] Completed: assignmentId={}, employee={}, endDate={}, deletedAttendances={}, status={}", 
+                        assignmentId, 
+                        assignment.getEmployee().getName(), 
+                        endDate, 
+                        futureAttendances.size(),
+                        savedAssignment.getStatus());
+
+                return mapToResponse(savedAssignment);
+        }
+
+        @Override
+        @Transactional
+        public com.company.company_clean_hub_be.dto.response.RollbackTerminationResponse rollbackTermination(Long assignmentId) {
+                String username = SecurityContextHolder.getContext().getAuthentication().getName();
+                log.info("[ROLLBACK_TERMINATION] Requested by {}: assignmentId={}", username, assignmentId);
+
+                // Kiểm tra assignment tồn tại
+                Assignment assignment = assignmentRepository.findById(assignmentId)
+                        .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+
+                // Validate: assignment phải đang TERMINATED
+                if (assignment.getStatus() != AssignmentStatus.TERMINATED) {
+                        log.error("Cannot rollback assignment with status {}", assignment.getStatus());
+                        throw new AppException(ErrorCode.INVALID_ASSIGNMENT_STATUS);
+                }
+
+                // Tìm các backup attendance
+                List<com.company.company_clean_hub_be.entity.DeletedAttendanceBackup> backups = 
+                        deletedAttendanceBackupRepository.findByAssignmentId(assignmentId);
+                
+                if (backups == null || backups.isEmpty()) {
+                        log.warn("[ROLLBACK_TERMINATION] No backups found for assignmentId={}", assignmentId);
+                        return com.company.company_clean_hub_be.dto.response.RollbackTerminationResponse.builder()
+                                .success(false)
+                                .restoredCount(0)
+                                .assignmentId(assignmentId)
+                                .employeeName(assignment.getEmployee().getName())
+                                .message("Không tìm thấy backup attendance để khôi phục")
+                                .build();
+                }
+
+                log.info("[ROLLBACK_TERMINATION] Found {} backups to restore for assignmentId={}", 
+                        backups.size(), assignmentId);
+
+                int restored = 0;
+                for (com.company.company_clean_hub_be.entity.DeletedAttendanceBackup backup : backups) {
+                        Attendance att = Attendance.builder()
+                                .employee(backup.getEmployeeId() != null ? 
+                                        employeeRepository.findById(backup.getEmployeeId()).orElse(null) : null)
+                                .assignment(assignment)
+                                .date(backup.getDate())
+                                .workHours(backup.getWorkHours())
+                                .bonus(backup.getBonus() != null ? backup.getBonus() : BigDecimal.ZERO)
+                                .penalty(backup.getPenalty() != null ? backup.getPenalty() : BigDecimal.ZERO)
+                                .supportCost(backup.getSupportCost() != null ? backup.getSupportCost() : BigDecimal.ZERO)
+                                .deleted(false)
+                                .isOvertime(backup.getIsOvertime() != null ? backup.getIsOvertime() : false)
+                                .overtimeAmount(backup.getOvertimeAmount() != null ? backup.getOvertimeAmount() : BigDecimal.ZERO)
+                                .description(backup.getDescription())
+                                .createdAt(LocalDateTime.now())
+                                .updatedAt(LocalDateTime.now())
+                                .build();
+                        attendanceRepository.save(att);
+                        deletedAttendanceBackupRepository.delete(backup);
+                        restored++;
+                }
+
+                // Khôi phục assignment về IN_PROGRESS
+                assignment.setStatus(AssignmentStatus.IN_PROGRESS);
+                assignment.setEndDate(null);
+                
+                // Xóa phần description về lý do kết thúc (nếu có)
+                String desc = assignment.getDescription();
+                if (desc != null && desc.contains("Kết thúc:")) {
+                        int idx = desc.lastIndexOf(" | Kết thúc:");
+                        if (idx > 0) {
+                                assignment.setDescription(desc.substring(0, idx));
+                        } else if (desc.startsWith("Kết thúc:")) {
+                                assignment.setDescription("");
+                        }
+                }
+                
+                assignment.setUpdatedAt(LocalDateTime.now());
+
+                // Cập nhật lại workDays
+                YearMonth ym = YearMonth.from(LocalDate.now());
+                LocalDate monthStart = ym.atDay(1);
+                LocalDate monthEnd = ym.atEndOfMonth();
+                int totalWorkDays = attendanceRepository
+                        .findByAssignmentAndDateBetween(assignment.getId(), monthStart, monthEnd)
+                        .size();
+                assignment.setWorkDays(totalWorkDays);
+                
+                assignmentRepository.save(assignment);
+
+                log.info("[ROLLBACK_TERMINATION] Completed: assignmentId={}, employee={}, restoredCount={}", 
+                        assignmentId, assignment.getEmployee().getName(), restored);
+
+                return com.company.company_clean_hub_be.dto.response.RollbackTerminationResponse.builder()
+                        .success(true)
+                        .restoredCount(restored)
+                        .assignmentId(assignmentId)
+                        .employeeName(assignment.getEmployee().getName())
+                        .message(String.format("Đã khôi phục %d attendance và trả assignment về trạng thái IN_PROGRESS", restored))
+                        .build();
         }
 }

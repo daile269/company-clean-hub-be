@@ -61,7 +61,10 @@ public enum ErrorCode {
     EMPLOYEE_UPDATE_TIME_EXPIRED_EXCEPT_ADVANCE(403,
             "Quá thời gian cho phép chỉnh sửa. Chỉ có thể cập nhật tiền ứng lương"),
     NOT_PERMISSION_REVIEW(403, "Bạn không thuộc hợp đồng này"),
-    UNAUTHENTICATED(403, "Không có quyền truy cập");
+    UNAUTHENTICATED(403, "Không có quyền truy cập"),
+    
+    INVALID_ASSIGNMENT_STATUS(400, "Trạng thái phân công không hợp lệ cho thao tác này, hoặc phân công đã được hủy trước đó"),
+    INVALID_REQUEST(400, "Yêu cầu không hợp lệ");
 
     private final int code;
     private final String message;

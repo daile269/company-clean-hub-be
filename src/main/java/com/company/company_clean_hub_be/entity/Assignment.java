@@ -55,6 +55,9 @@ public class Assignment {
     @NotNull
     private LocalDate startDate;
 
+    @Column(name = "end_date")
+    private LocalDate endDate;
+
     @Enumerated(EnumType.STRING)
     private AssignmentStatus status;
 
