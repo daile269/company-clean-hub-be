@@ -348,4 +348,30 @@ public class AssignmentController {
                 response,
                 HttpStatus.OK.value());
     }
+
+    @PutMapping("/{id}/terminate")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_UPDATE')")
+    public ApiResponse<AssignmentResponse> terminateAssignment(
+            @PathVariable Long id,
+            @Valid @RequestBody com.company.company_clean_hub_be.dto.request.TerminateAssignmentRequest request) {
+        log.info("[ASSIGNMENT][API][TERMINATE] Terminate assignment id={}, endDate={}", id, request.getEndDate());
+        AssignmentResponse response = assignmentService.terminateAssignment(id, request);
+        return ApiResponse.success(
+                "Kết thúc assignment thành công",
+                response,
+                HttpStatus.OK.value());
+    }
+
+    @PostMapping("/{id}/terminate/rollback")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_UPDATE')")
+    public ApiResponse<com.company.company_clean_hub_be.dto.response.RollbackTerminationResponse> rollbackTermination(
+            @PathVariable Long id) {
+        log.info("[ASSIGNMENT][API][ROLLBACK_TERMINATION] Rollback termination for assignment id={}", id);
+        com.company.company_clean_hub_be.dto.response.RollbackTerminationResponse response = 
+                assignmentService.rollbackTermination(id);
+        return ApiResponse.success(
+                "Hoàn tác kết thúc assignment thành công",
+                response,
+                HttpStatus.OK.value());
+    }
 }

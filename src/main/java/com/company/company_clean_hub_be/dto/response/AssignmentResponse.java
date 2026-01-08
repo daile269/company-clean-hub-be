@@ -31,6 +31,7 @@ public class AssignmentResponse {
     private java.time.LocalDate contractEndDate;
     private ContractType contractType;
     private LocalDate startDate;
+    private LocalDate endDate;
     private AssignmentStatus status;
     private BigDecimal salaryAtTime;
     private Integer workDays;

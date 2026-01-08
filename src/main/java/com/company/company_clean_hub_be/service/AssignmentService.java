@@ -66,4 +66,8 @@ public interface AssignmentService {
             );
     AssignmentHistoryResponse getHistoryDetail(Long historyId);
     RollbackResponse rollbackReassignment(Long historyId);
+    
+    // Kết thúc assignment và hoàn tác
+    AssignmentResponse terminateAssignment(Long assignmentId, com.company.company_clean_hub_be.dto.request.TerminateAssignmentRequest request);
+    com.company.company_clean_hub_be.dto.response.RollbackTerminationResponse rollbackTermination(Long assignmentId);
 }
