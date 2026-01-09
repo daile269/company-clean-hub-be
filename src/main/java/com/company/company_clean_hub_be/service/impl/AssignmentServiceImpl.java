@@ -1694,7 +1694,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 
                 if (request.getReason() != null && !request.getReason().isBlank()) {
                         String currentDesc = assignment.getDescription() != null ? assignment.getDescription() : "";
-                        String prefix = endDate.isAfter(today) ? "Kết thúc (lên lịch)" : "Kết thúc";
+                        String prefix = (endDate.isAfter(today) || endDate.isEqual(today)) ? "Kết thúc (lên lịch)" : "Kết thúc";
                         assignment.setDescription(currentDesc + (currentDesc.isEmpty() ? "" : " | ") + 
                                 prefix + ": " + request.getReason());
                 }
@@ -1718,15 +1718,15 @@ public class AssignmentServiceImpl implements AssignmentService {
                 log.info("[TERMINATE_ASSIGNMENT] Recalculated workDays: assignmentId={}, workDays={} (counted from {} to {})", 
                         assignmentId, currentWorkDays, monthStart, countUntil);
 
-                // Nếu endDate là hôm nay hoặc quá khứ -> chuyển sang TERMINATED ngay
-                // Nếu endDate là tương lai -> giữ IN_PROGRESS, scheduler sẽ xử lý sau
-                if (endDate.isEqual(today) || endDate.isBefore(today)) {
+                // Nếu endDate là quá khứ -> chuyển sang TERMINATED ngay
+                // Nếu endDate là hôm nay hoặc tương lai -> giữ IN_PROGRESS, scheduler sẽ xử lý vào cuối ngày
+                if (endDate.isBefore(today)) {
                         assignment.setStatus(AssignmentStatus.TERMINATED);
-                        log.info("[TERMINATE_ASSIGNMENT] Terminated immediately (endDate <= today): assignmentId={}, endDate={}", 
+                        log.info("[TERMINATE_ASSIGNMENT] Terminated immediately (endDate < today): assignmentId={}, endDate={}", 
                                 assignmentId, endDate);
                 } else {
-                        // endDate trong tương lai - giữ status hiện tại (IN_PROGRESS)
-                        log.info("[TERMINATE_ASSIGNMENT] Scheduled termination (endDate in future): assignmentId={}, endDate={}, status stays IN_PROGRESS", 
+                        // endDate hôm nay hoặc trong tương lai - giữ status hiện tại (IN_PROGRESS)
+                        log.info("[TERMINATE_ASSIGNMENT] Scheduled termination (endDate today or in future): assignmentId={}, endDate={}, status stays IN_PROGRESS", 
                                 assignmentId, endDate);
                 }
                 
