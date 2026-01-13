@@ -38,4 +38,6 @@ public class AssignmentRequest {
     // Required for COMPANY scope (days per week employee works)
     private List<java.time.DayOfWeek> workingDaysPerWeek;
     private String description;
+    @PositiveOrZero(message = "Planned days phải lớn hơn hoặc bằng 0")
+    private Integer plannedDays;
 }
