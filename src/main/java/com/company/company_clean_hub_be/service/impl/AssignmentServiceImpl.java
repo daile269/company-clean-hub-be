@@ -1385,28 +1385,27 @@ public class AssignmentServiceImpl implements AssignmentService {
                         // Cập nhật workDays dựa vào số attendance vừa tạo cho assignment này
                         assignment.setWorkDays(attendances.size());
 
-                        // Tính plannedDays dựa trên lịch làm việc của cả tháng (period = tháng của startDate,
-                        // giới hạn trong phạm vi hợp đồng nếu có)
+                        // Tính plannedDays:
+                        // - Nếu hợp đồng là ONE_TIME -> plannedDays = 1
+                        // - Ngược lại -> plannedDays tính theo lịch làm việc của cả tháng (1..endOfMonth)
                         YearMonth ym = YearMonth.from(startDate);
                         LocalDate monthStart = ym.atDay(1);
                         LocalDate monthEnd = ym.atEndOfMonth();
 
-                        LocalDate periodStart = monthStart;
-                        LocalDate periodEnd = monthEnd;
-                        if (contract != null && contract.getStartDate() != null && contract.getStartDate().isAfter(periodStart)) {
-                                periodStart = contract.getStartDate();
-                        }
-                        if (contract != null && contract.getEndDate() != null && contract.getEndDate().isBefore(periodEnd)) {
-                                periodEnd = contract.getEndDate();
-                        }
+                        if (contract != null && contract.getContractType() == ContractType.ONE_TIME) {
+                                assignment.setPlannedDays(1);
+                        } else {
+                                LocalDate periodStart = monthStart;
+                                LocalDate periodEnd = monthEnd; // plannedDays covers the full month
 
-                        // Chuyển danh sách ngày làm việc sang java.time.DayOfWeek
-                        List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek().stream()
-                                        .map(day -> java.time.DayOfWeek.valueOf(day.name()))
-                                        .collect(Collectors.toList());
+                                // Chuyển danh sách ngày làm việc sang java.time.DayOfWeek
+                                List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek().stream()
+                                                .map(day -> java.time.DayOfWeek.valueOf(day.name()))
+                                                .collect(Collectors.toList());
 
-                        int planned = countWorkingDaysBetween(workingDays, periodStart, periodEnd);
-                        assignment.setPlannedDays(planned);
+                                int planned = countWorkingDaysBetween(workingDays, periodStart, periodEnd);
+                                assignment.setPlannedDays(planned);
+                        }
                         // Không cần save lại assignment nếu nó đang trong transaction với
                         // createAssignment
                         // JPA sẽ tự động save khi transaction commit
