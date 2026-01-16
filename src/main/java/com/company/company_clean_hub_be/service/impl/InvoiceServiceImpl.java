@@ -418,12 +418,9 @@ public class InvoiceServiceImpl implements InvoiceService {
         LocalDate firstDayOfMonth = yearMonth.atDay(1);
         LocalDate lastDayOfMonth = yearMonth.atEndOfMonth();
 
-        // Determine effective period for this contract within the invoice month
-        LocalDate periodStart = contract.getStartDate() != null && contract.getStartDate().isAfter(firstDayOfMonth)
-                ? contract.getStartDate() : firstDayOfMonth;
-
-        LocalDate periodEnd = (contract.getEndDate() != null && contract.getEndDate().isBefore(lastDayOfMonth))
-                ? contract.getEndDate() : lastDayOfMonth;
+        // Per requirement: planned days on invoice should cover the full month
+        LocalDate periodStart = firstDayOfMonth;
+        LocalDate periodEnd = lastDayOfMonth;
 
         if (periodStart.isAfter(periodEnd)) {
             log.info("Contract {} has no overlap with {}/{}", contract.getId(), month, year);
