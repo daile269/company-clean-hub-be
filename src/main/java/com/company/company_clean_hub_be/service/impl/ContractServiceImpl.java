@@ -12,6 +12,12 @@ import com.company.company_clean_hub_be.entity.ServiceEntity;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
+import com.company.company_clean_hub_be.repository.InvoiceRepository;
+import com.company.company_clean_hub_be.repository.RatingRepository;
+import com.company.company_clean_hub_be.repository.AssignmentHistoryRepository;
+import com.company.company_clean_hub_be.repository.AttendanceRepository;
+import com.company.company_clean_hub_be.entity.ContractDocument;
+import com.company.company_clean_hub_be.service.ContractDocumentService;
 import com.company.company_clean_hub_be.repository.ContractRepository;
 import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.ServiceEntityRepository;
@@ -40,6 +46,11 @@ public class ContractServiceImpl implements ContractService {
         private final CustomerRepository customerRepository;
         private final ServiceEntityRepository serviceEntityRepository;
         private final AssignmentRepository assignmentRepository;
+        private final AssignmentHistoryRepository assignmentHistoryRepository;
+        private final AttendanceRepository attendanceRepository;
+        private final ContractDocumentService contractDocumentService;
+        private final InvoiceRepository invoiceRepository;
+        private final RatingRepository ratingRepository;
 
         @Override
         public List<ContractResponse> getAllContracts() {
@@ -154,6 +165,75 @@ public class ContractServiceImpl implements ContractService {
                 log.info("deleteContract requested by {}: id={}", username, id);
                 Contract contract = contractRepository.findById(id)
                                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+
+                // Delete attendances for assignments under this contract,
+                // delete related assignment history rows, then delete assignments
+                List<Assignment> assignments = assignmentRepository.findByContractId(id);
+                for (Assignment a : assignments) {
+                        attendanceRepository.deleteByAssignmentId(a.getId());
+
+                        // Remove histories referencing this assignment (old or new)
+                        try {
+                                List<com.company.company_clean_hub_be.entity.AssignmentHistory> oldHist = assignmentHistoryRepository.findByOldAssignmentId(a.getId());
+                                if (!oldHist.isEmpty()) {
+                                        assignmentHistoryRepository.deleteAll(oldHist);
+                                }
+                        } catch (Exception ex) {
+                                log.warn("Failed to delete old assignment histories for assignment {}: {}", a.getId(), ex.getMessage());
+                        }
+
+                        try {
+                                List<com.company.company_clean_hub_be.entity.AssignmentHistory> newHist = assignmentHistoryRepository.findByNewAssignmentId(a.getId());
+                                if (!newHist.isEmpty()) {
+                                        assignmentHistoryRepository.deleteAll(newHist);
+                                }
+                        } catch (Exception ex) {
+                                log.warn("Failed to delete new assignment histories for assignment {}: {}", a.getId(), ex.getMessage());
+                        }
+                }
+                if (!assignments.isEmpty()) {
+                        assignmentRepository.deleteAll(assignments);
+                }
+
+                // Delete contract documents (also removes files via service)
+                try {
+                        List<ContractDocument> documents = contractDocumentService.getContractDocuments(id);
+                        for (ContractDocument doc : documents) {
+                                try {
+                                        contractDocumentService.deleteDocument(id, doc.getId());
+                                } catch (Exception ex) {
+                                        log.error("Failed to delete contract document {}: {}", doc.getId(), ex.getMessage(), ex);
+                                }
+                        }
+                } catch (Exception ex) {
+                        log.warn("No contract documents or failed to fetch for contract {}: {}", id, ex.getMessage());
+                }
+
+                // Delete invoices linked to this contract (invoice lines cascade)
+                try {
+                        List<com.company.company_clean_hub_be.entity.Invoice> invoices = invoiceRepository.findByContractId(id);
+                        for (com.company.company_clean_hub_be.entity.Invoice inv : invoices) {
+                                try {
+                                        invoiceRepository.delete(inv);
+                                } catch (Exception ex) {
+                                        log.error("Failed to delete invoice {}: {}", inv.getId(), ex.getMessage(), ex);
+                                }
+                        }
+                } catch (Exception ex) {
+                        log.warn("No invoices or failed to fetch for contract {}: {}", id, ex.getMessage());
+                }
+
+                // Delete ratings related to this contract
+                try {
+                        ratingRepository.deleteByContractId(id);
+                } catch (Exception ex) {
+                        log.warn("Failed to delete ratings for contract {}: {}", id, ex.getMessage());
+                }
+
+                // Clear service associations (remove join table entries)
+                contract.getServices().clear();
+                contractRepository.save(contract);
+
                 contractRepository.delete(contract);
                 log.info("deleteContract completed: id={}", id);
         }
