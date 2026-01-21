@@ -228,9 +228,15 @@ public class PayrollServiceImpl implements PayrollService {
                                         assignment.getId(), assignmentAmount, amountTotal);
                 }
 
-                if (hasCompanyScope && employee.getInsuranceSalary() != null) {
+                if (hasCompanyScope) {
+                    if (employee.getAllowance() != null){
+                        totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
+                    }
+                    if ( employee.getInsuranceSalary() != null){
                         insuranceTotal = employee.getInsuranceSalary();
-                        log.debug("[SINGLE-CALC][INSURANCE] Using employee insurance salary={}", insuranceTotal);
+                        log.debug("[PAYROLL-EXPORT][DEBUG] Using employee.insuranceSalary for insuranceTotal = {}",
+                                insuranceTotal);
+                    }
                 } else {
                         insuranceTotal = request.getInsuranceAmount() != null ? request.getInsuranceAmount()
                                         : BigDecimal.ZERO;
@@ -850,11 +856,16 @@ public class PayrollServiceImpl implements PayrollService {
                         log.debug("[PAYROLL-EXPORT][DEBUG] Existing payroll - advanceTotal (kept) = {}", advanceTotal);
                 }
 
-                BigDecimal insuranceTotal;
-                if (hasCompanyScope && employee.getInsuranceSalary() != null) {
-                        insuranceTotal = employee.getInsuranceSalary();
-                        log.debug("[PAYROLL-EXPORT][DEBUG] Using employee.insuranceSalary for insuranceTotal = {}",
-                                        insuranceTotal);
+                BigDecimal insuranceTotal = BigDecimal.ZERO;
+                if (hasCompanyScope) {
+                        if (employee.getAllowance() != null){
+                            totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
+                        }
+                        if ( employee.getInsuranceSalary() != null){
+                            insuranceTotal = employee.getInsuranceSalary();
+                            log.debug("[PAYROLL-EXPORT][DEBUG] Using employee.insuranceSalary for insuranceTotal = {}",
+                                    insuranceTotal);
+                        }
                 } else {
                         insuranceTotal = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal()
                                         : BigDecimal.ZERO;
@@ -864,7 +875,9 @@ public class PayrollServiceImpl implements PayrollService {
 
                 // Calculate deductions: penalties + insurance (advanceTotal is now only a note,
                 // not deducted)
-                BigDecimal deductions = totalPenalties.add(insuranceTotal);
+            BigDecimal deductions =
+                    totalPenalties != null ? totalPenalties : BigDecimal.ZERO;
+            if (insuranceTotal != null)   totalPenalties.add(insuranceTotal);
                 log.debug(
                                 "[PAYROLL-EXPORT][DEBUG] Deductions calculated -> totalPenalties={}, insuranceTotal={}, deductions={} (note: advanceTotal={} is NOT deducted)",
                                 totalPenalties, insuranceTotal, deductions, advanceTotal);
@@ -1401,10 +1414,16 @@ public class PayrollServiceImpl implements PayrollService {
                         finalRow += assignmentAmount + " +";
                 }
 
-                BigDecimal insuranceTotal;
-                if (hasCompanyScope && payroll.getEmployee().getInsuranceSalary() != null) {
+                BigDecimal insuranceTotal=  BigDecimal.ZERO;
+                if (hasCompanyScope) {
+                    if (payroll.getEmployee().getAllowance() != null){
+                        totalSupportCosts = totalSupportCosts.add(payroll.getEmployee().getAllowance());
+                    }
+                    if ( payroll.getEmployee().getInsuranceSalary() != null){
                         insuranceTotal = payroll.getEmployee().getInsuranceSalary();
-                        log.info("[PAYROLL-CALC] Insurance taken from Employee Profile: {}", insuranceTotal);
+                        log.debug("[PAYROLL-EXPORT][DEBUG] Using employee.insuranceSalary for insuranceTotal = {}",
+                                insuranceTotal);
+                    }
                 } else {
                         insuranceTotal = request.getInsuranceTotal() != null ? request.getInsuranceTotal()
                                         : (payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal()
@@ -1434,7 +1453,10 @@ public class PayrollServiceImpl implements PayrollService {
 
                 // Calculate total deductions: penalties + insurance (advanceTotal is now only a
                 // note, not deducted)
-                BigDecimal totalDeductions = totalPenalties.add(insuranceTotal);
+
+            BigDecimal totalDeductions =
+                    totalPenalties != null ? totalPenalties : BigDecimal.ZERO;
+                if (insuranceTotal != null)   totalPenalties.add(insuranceTotal);
 
                 log.debug(
                                 "[PAYROLL-UPDATE] Calculating deductions -> totalPenalties={}, insuranceTotal={}, totalDeductions={} (note: advanceTotal={} is NOT deducted)",
