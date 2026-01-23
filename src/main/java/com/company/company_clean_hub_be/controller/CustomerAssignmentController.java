@@ -89,9 +89,11 @@ public class CustomerAssignmentController {
         public ApiResponse<PageResponse<CustomerResponse>> getMyAssignedCustomers(
                         @RequestParam(required = false) String keyword,
                         @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "10") int pageSize) {
+                        @RequestParam(defaultValue = "10") int pageSize,
+                        @RequestParam(defaultValue = "false") boolean all) {
+
                 PageResponse<CustomerResponse> customers = customerAssignmentService.getMyAssignedCustomers(
-                                keyword, page, pageSize);
+                                keyword, page, pageSize, all);
 
                 return ApiResponse.success(
                                 "Lấy danh sách khách hàng của tôi thành công",
