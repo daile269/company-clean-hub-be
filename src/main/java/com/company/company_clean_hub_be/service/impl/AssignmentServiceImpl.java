@@ -41,6 +41,8 @@ public class AssignmentServiceImpl implements AssignmentService {
         private final AssignmentHistoryRepository assignmentHistoryRepository;
         private final UserRepository userRepository;
         private final com.company.company_clean_hub_be.repository.DeletedAttendanceBackupRepository deletedAttendanceBackupRepository;
+        private final com.company.company_clean_hub_be.repository.PayrollRepository payrollRepository;
+        private final com.company.company_clean_hub_be.repository.PaymentHistoryRepository paymentHistoryRepository;
 
         @Override
         public List<AssignmentResponse> getAllAssignments() {
@@ -499,6 +501,22 @@ public class AssignmentServiceImpl implements AssignmentService {
                         }
                 }
 
+                // 0) Lấy thông tin employee và các tháng/năm có attendances trước khi xóa
+                // (để kiểm tra và xóa payroll sau này)
+                Long employeeId = assignment.getEmployee() != null ? assignment.getEmployee().getId() : null;
+                List<Attendance> attendancesBeforeDelete = new ArrayList<>();
+                if (employeeId != null) {
+                        try {
+                                attendancesBeforeDelete = attendanceRepository.findByAssignmentId(assignment.getId());
+                                log.debug("Found {} attendances for assignmentId={} before deletion", 
+                                                attendancesBeforeDelete != null ? attendancesBeforeDelete.size() : 0, 
+                                                assignment.getId());
+                        } catch (Exception ex) {
+                                log.warn("Failed to get attendances before deletion for assignmentId={}: {}", 
+                                                assignment.getId(), ex.getMessage());
+                        }
+                }
+
                 // 1) Delete related ratings and all attendances for the assignment before
                 // removing the assignment
                 try {
@@ -552,6 +570,99 @@ public class AssignmentServiceImpl implements AssignmentService {
                 // 3) Delete the assignment itself
                 assignmentRepository.delete(assignment);
                 log.info("deleteAssignment completed: assignmentId={}", id);
+
+                // 4) Kiểm tra và xóa payroll nếu không còn assignment/attendance nào trong tháng/năm đó
+                if (employeeId != null && attendancesBeforeDelete != null && !attendancesBeforeDelete.isEmpty()) {
+                        try {
+                                // Lấy tất cả các tháng/năm duy nhất từ attendances đã xóa
+                                Map<YearMonth, Boolean> monthYearMap = attendancesBeforeDelete.stream()
+                                                .filter(att -> att.getDate() != null)
+                                                .map(att -> YearMonth.from(att.getDate()))
+                                                .distinct()
+                                                .collect(Collectors.toMap(
+                                                                ym -> ym,
+                                                                ym -> false)); // false = chưa kiểm tra
+
+                                log.debug("Checking payroll deletion for {} unique month/year combinations for employeeId={}", 
+                                                monthYearMap.size(), employeeId);
+
+                                for (YearMonth yearMonth : monthYearMap.keySet()) {
+                                        Integer month = yearMonth.getMonthValue();
+                                        Integer year = yearMonth.getYear();
+
+                                        try {
+                                                // Kiểm tra xem còn assignment nào trong tháng/năm này không
+                                                List<Assignment> remainingAssignments = assignmentRepository
+                                                                .findDistinctAssignmentsByAttendanceMonthAndEmployee(
+                                                                                month, year, employeeId);
+
+                                                // Kiểm tra xem còn attendance nào trong tháng/năm này không
+                                                List<Attendance> remainingAttendances = attendanceRepository
+                                                                .findAttendancesByMonthYearAndEmployee(month, year,
+                                                                                employeeId);
+
+                                                boolean hasRemainingData = (remainingAssignments != null
+                                                                && !remainingAssignments.isEmpty())
+                                                                || (remainingAttendances != null
+                                                                                && !remainingAttendances.isEmpty());
+
+                                                log.debug("Month/Year {}/{} for employeeId={}: remainingAssignments={}, remainingAttendances={}, hasRemainingData={}",
+                                                                month, year, employeeId,
+                                                                remainingAssignments != null ? remainingAssignments.size()
+                                                                                : 0,
+                                                                remainingAttendances != null ? remainingAttendances.size()
+                                                                                : 0,
+                                                                hasRemainingData);
+
+                                                // Nếu không còn assignment hoặc attendance nào, xóa payroll
+                                                if (!hasRemainingData) {
+                                                        Optional<com.company.company_clean_hub_be.entity.Payroll> payrollOpt = payrollRepository
+                                                                        .findByEmployeeAndMonthAndYear(employeeId, month,
+                                                                                        year);
+
+                                                        if (payrollOpt.isPresent()) {
+                                                                com.company.company_clean_hub_be.entity.Payroll payroll = payrollOpt
+                                                                                .get();
+                                                                Long payrollId = payroll.getId();
+                                                                
+                                                                // Xóa payment history trước khi xóa payroll
+                                                                try {
+                                                                        List<com.company.company_clean_hub_be.entity.PaymentHistory> paymentHistories = paymentHistoryRepository
+                                                                                        .findByPayrollIdOrderByCreatedAtAsc(payrollId);
+                                                                        if (paymentHistories != null && !paymentHistories.isEmpty()) {
+                                                                                paymentHistoryRepository.deleteAll(paymentHistories);
+                                                                                log.info("Deleted {} payment history records for payrollId={}", 
+                                                                                                paymentHistories.size(), payrollId);
+                                                                        }
+                                                                } catch (Exception ex) {
+                                                                        log.warn("Failed to delete payment history for payrollId={}: {}", 
+                                                                                        payrollId, ex.getMessage());
+                                                                }
+                                                                
+                                                                payrollRepository.delete(payroll);
+                                                                log.info("Deleted payroll payrollId={} for employeeId={}, month={}, year={} (no remaining assignments/attendances)",
+                                                                                payrollId, employeeId, month, year);
+                                                        } else {
+                                                                log.debug("No payroll found for employeeId={}, month={}, year={}",
+                                                                                employeeId, month, year);
+                                                        }
+                                                } else {
+                                                        log.debug("Keeping payroll for employeeId={}, month={}, year={} (still has assignments/attendances)",
+                                                                        employeeId, month, year);
+                                                }
+                                        } catch (Exception ex) {
+                                                log.warn("Failed to check/delete payroll for employeeId={}, month={}, year={}: {}",
+                                                                employeeId, month, year, ex.getMessage());
+                                        }
+                                }
+                        } catch (Exception ex) {
+                                log.warn("Failed to process payroll deletion check after deleting assignmentId={}: {}",
+                                                id, ex.getMessage());
+                        }
+                } else {
+                        log.debug("Skipping payroll deletion check: employeeId={}, attendancesCount={}",
+                                        employeeId, attendancesBeforeDelete != null ? attendancesBeforeDelete.size() : 0);
+                }
         }
 
         @Override

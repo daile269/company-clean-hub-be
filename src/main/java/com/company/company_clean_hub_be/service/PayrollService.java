@@ -7,6 +7,7 @@ import com.company.company_clean_hub_be.dto.request.PayrollRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
+import com.company.company_clean_hub_be.dto.response.PayrollOverviewResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
 import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 
@@ -23,7 +24,9 @@ public interface PayrollService {
         List<PayrollResponse> getAllPayrolls();
 
         PageResponse<PayrollResponse> getPayrollsWithFilter(String keyword, Integer month, Integer year, Boolean isPaid,
-                        int page, int pageSize);
+                        String sortBy, String sortDirection, int page, int pageSize);
+
+        PayrollOverviewResponse getPayrollOverview(String keyword, Integer month, Integer year, Boolean isPaid);
 
         PayrollResponse updatePaymentStatus(Long id, BigDecimal paidAmount);
 

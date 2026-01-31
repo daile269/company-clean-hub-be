@@ -7,7 +7,7 @@ import java.util.List;
 @Data
 @Builder
 public class PayRollExportExcel {
-    private Long employeeId;
+    private String employeeId;
     private String employeeName;
     private String bankName;
     private String bankAccount;
