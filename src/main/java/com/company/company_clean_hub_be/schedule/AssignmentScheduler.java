@@ -207,10 +207,11 @@ public class AssignmentScheduler {
         int month = currentMonth.getMonthValue();
         
         try {
-            // Tìm tất cả các phân công đang IN_PROGRESS của tháng trước
+            // Tìm tất cả các phân công IN_PROGRESS hoặc COMPLETED của tháng trước
             YearMonth lastMonth = currentMonth.minusMonths(1);
             List<Assignment> lastMonthAssignments = assignmentRepository.findAll().stream()
-                    .filter(a -> a.getStatus() == AssignmentStatus.IN_PROGRESS)
+                    .filter(a -> a.getStatus() == AssignmentStatus.IN_PROGRESS 
+                            || a.getStatus() == AssignmentStatus.COMPLETED)
                     .filter(a -> {
                         YearMonth assignmentMonth = YearMonth.from(a.getStartDate());
                         return assignmentMonth.equals(lastMonth);
