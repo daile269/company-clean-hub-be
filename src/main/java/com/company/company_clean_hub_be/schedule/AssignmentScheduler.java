@@ -284,9 +284,11 @@ public class AssignmentScheduler {
                     }
                 }
 
-                // Skip automatic generation for SUPPORT assignments
-                if (oldAssignment.getAssignmentType() == AssignmentType.SUPPORT) {
-                    log.info("Bỏ qua tự động sinh cho Assignment SUPPORT ID={} (sinh thủ công theo dates)", oldAssignment.getId());
+                // Skip automatic generation for SUPPORT and TEMPORARY assignments
+                if (oldAssignment.getAssignmentType() == AssignmentType.SUPPORT 
+                        || oldAssignment.getAssignmentType() == AssignmentType.TEMPORARY) {
+                    log.info("Bỏ qua tự động sinh cho Assignment {} ID={} (sinh thủ công theo dates)", 
+                            oldAssignment.getAssignmentType(), oldAssignment.getId());
                     skippedCount++;
                     continue;
                 }
