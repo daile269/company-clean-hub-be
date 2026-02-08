@@ -382,7 +382,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
         List<PayRollAssignmentExportExcel> result = new ArrayList<>();
         for (PayRollExportExcel old : oldData) {
             PayRollAssignmentExportExcel newData = PayRollAssignmentExportExcel.builder()
-                    .employeeId(old.getEmployeeId())
+                    .employeeId(old.getEmployeeId() )
                     .employeeName(old.getEmployeeName())
                     .bankName(old.getBankName())
                     .bankAccount(old.getBankAccount())

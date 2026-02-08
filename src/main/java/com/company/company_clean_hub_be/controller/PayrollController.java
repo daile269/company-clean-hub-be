@@ -25,6 +25,7 @@ import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
 import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
+import com.company.company_clean_hub_be.dto.response.PayrollOverviewResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
 import com.company.company_clean_hub_be.service.ExcelExportService;
 import com.company.company_clean_hub_be.service.PayrollService;
@@ -60,11 +61,23 @@ public class PayrollController {
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Boolean isPaid,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDirection,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         PageResponse<PayrollResponse> payrolls = payrollService.getPayrollsWithFilter(
-                keyword, month, year, isPaid, page, pageSize);
+                keyword, month, year, isPaid, sortBy, sortDirection, page, pageSize);
         return ApiResponse.success("Lấy danh sách bảng lương thành công", payrolls, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/overview")
+    public ApiResponse<PayrollOverviewResponse> getPayrollOverview(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Boolean isPaid) {
+        PayrollOverviewResponse overview = payrollService.getPayrollOverview(keyword, month, year, isPaid);
+        return ApiResponse.success("Lấy tổng quan bảng lương thành công", overview, HttpStatus.OK.value());
     }
 
     @GetMapping("/{id}")

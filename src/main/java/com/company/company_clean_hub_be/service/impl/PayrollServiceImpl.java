@@ -21,6 +21,7 @@ import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExcel;
 import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
+import com.company.company_clean_hub_be.dto.response.PayrollOverviewResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
 import com.company.company_clean_hub_be.entity.Assignment;
 import com.company.company_clean_hub_be.entity.AssignmentScope;
@@ -208,17 +209,23 @@ public class PayrollServiceImpl implements PayrollService {
 
                         totalBonus = totalBonus.add(bonus);
                         totalPenalties = totalPenalties.add(penalty);
-                        totalSupportCosts = totalSupportCosts.add(support).add(additionalAllowance);
+                        // Chỉ tính additionalAllowance vào totalSupportCosts (phụ cấp tháng)
+                        // support (phụ cấp attendance) sẽ được cộng trực tiếp vào tiền lương, không tính vào totalSupportCosts
+                        totalSupportCosts = totalSupportCosts.add(additionalAllowance);
 
                         BigDecimal assignmentBaseSalary = calculateBaseSalaryForAssignment(assignment);
                         baseSalaryTotal = baseSalaryTotal.add(assignmentBaseSalary);
                         log.debug("[SINGLE-CALC][BASE-SALARY] assignmentId={}, baseSalary={}, baseSalaryTotal={}",
                                         assignment.getId(), assignmentBaseSalary, baseSalaryTotal);
 
+                        // Tách support và additionalAllowance: 
+                        // - additionalAllowance: chia đều (phụ cấp tháng)
+                        // - support: cộng trực tiếp vào tiền lương (phụ cấp attendance)
                         BigDecimal assignmentAmount = calculateAssignmentAmount(
                                         assignment,
                                         bonus,
-                                        support.add(additionalAllowance),
+                                        additionalAllowance,  // Phụ cấp assignment (chia đều)
+                                        support,              // Phụ cấp attendance (cộng trực tiếp)
                                         note);
 
                         amountTotal = amountTotal.add(assignmentAmount);
@@ -228,9 +235,32 @@ public class PayrollServiceImpl implements PayrollService {
                                         assignment.getId(), assignmentAmount, amountTotal);
                 }
 
-                if (hasCompanyScope && employee.getInsuranceSalary() != null) {
+                if (hasCompanyScope) {
+                    // Nếu có assignment COMPANY, thì không cộng employee.getAllowance() nữa
+                    // vì đã sử dụng additionalAllowance từ assignment COMPANY đó (đã được cộng trong vòng lặp)
+                    // Chỉ cộng employee.getAllowance() nếu KHÔNG có assignment COMPANY
+                    // (trường hợp này không nên xảy ra vì hasCompanyScope = true, nhưng để an toàn)
+                    Optional<Assignment> companyAssignment = assignments.stream()
+                                    .filter(a -> a.getScope() != null && a.getScope() == AssignmentScope.COMPANY)
+                                    .findFirst();
+                    if (companyAssignment.isEmpty()) {
+                            // Không có assignment COMPANY (không nên xảy ra), fallback về employee.getAllowance()
+                            if (employee.getAllowance() != null) {
+                                    totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
+                                    log.debug("[SINGLE-CALC][ALLOWANCE] No COMPANY assignment found, using employee.getAllowance() = {}", 
+                                                    employee.getAllowance());
+                            }
+                    } else {
+                            // Có assignment COMPANY, đã sử dụng additionalAllowance từ assignment đó
+                            BigDecimal companyAllowance = defaultZero(companyAssignment.get().getAdditionalAllowance());
+                            log.debug("[SINGLE-CALC][ALLOWANCE] Using COMPANY assignment additionalAllowance = {} (instead of employee.getAllowance())", 
+                                            companyAllowance);
+                    }
+                    if ( employee.getInsuranceSalary() != null){
                         insuranceTotal = employee.getInsuranceSalary();
-                        log.debug("[SINGLE-CALC][INSURANCE] Using employee insurance salary={}", insuranceTotal);
+                        log.debug("[PAYROLL-EXPORT][DEBUG] Using employee.insuranceSalary for insuranceTotal = {}",
+                                insuranceTotal);
+                    }
                 } else {
                         insuranceTotal = request.getInsuranceAmount() != null ? request.getInsuranceAmount()
                                         : BigDecimal.ZERO;
@@ -334,7 +364,6 @@ public class PayrollServiceImpl implements PayrollService {
 
                         AssignmentScope scope = assignment.getScope() != null ? assignment.getScope()
                                         : AssignmentScope.CONTRACT;
-                        BigDecimal assignmentAllowance = assignmentSupport.add(additionalAllowance);
 
                         BigDecimal baseSalary = assignment.getSalaryAtTime();
 
@@ -348,8 +377,9 @@ public class PayrollServiceImpl implements PayrollService {
                         }
 
                         String assignmentTypeVN = mapAssignmentTypeToVietnamese(assignment.getAssignmentType());
+                        // Tách support và additionalAllowance: support cộng trực tiếp, additionalAllowance chia đều
                         BigDecimal assignmentSalary = calculateAssignmentAmount(assignment, assignmentBonus,
-                                        assignmentSupport);
+                                        additionalAllowance, assignmentSupport);
 
                         PayrollAssignmentResponse dto = PayrollAssignmentResponse.builder()
                                         .payrollId(payroll.getId())
@@ -365,7 +395,7 @@ public class PayrollServiceImpl implements PayrollService {
                                         .assignmentPlanedDays(assignment.getPlannedDays())
                                         .assignmentBonus(assignmentBonus)
                                         .assignmentPenalty(assignmentPenalty)
-                                        .assignmentAllowance(assignmentAllowance)
+                                        .assignmentAllowance(additionalAllowance)  // Phụ cấp assignment (chia đều)
                                         .assignmentInsurance(BigDecimal.ZERO)
                                         .assignmentAdvance(BigDecimal.ZERO)
                                         .assignmentSalary(assignmentSalary)
@@ -473,11 +503,11 @@ public class PayrollServiceImpl implements PayrollService {
                 List<PayRollAssignmentExportExcel> result = new ArrayList<>();
 
                 for (Employee employee : employees) {
-                        Long employeeId = employee.getId();
+                        String employeeId = employee.getEmployeeCode();
                         log.info("[PAYROLL-EXPORT] Processing employee id={}, name={}", employeeId, employee.getName());
 
                         List<Assignment> assignments = assignmentRepository
-                                        .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId);
+                                        .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employee.getId());
 
                         if (assignments == null || assignments.isEmpty()) {
                                 log.info("[PAYROLL-EXPORT] Employee {} has NO assignments. Skip.", employeeId);
@@ -800,10 +830,9 @@ public class PayrollServiceImpl implements PayrollService {
 
                         totalBonus = totalBonus.add(safeBonus);
                         totalPenalties = totalPenalties.add(safePenalty);
-                        totalSupportCosts = totalSupportCosts
-                                        .add(safeSupport)
-                                        .add(additionalAllowance);
-                        BigDecimal suportAssignment = safeSupport.add(additionalAllowance);
+                        // Chỉ tính additionalAllowance vào totalSupportCosts (phụ cấp tháng)
+                        // support (phụ cấp attendance) sẽ được cộng trực tiếp vào tiền lương, không tính vào totalSupportCosts
+                        totalSupportCosts = totalSupportCosts.add(additionalAllowance);
 
                         // Calculate base salary (without bonuses/allowances)
                         BigDecimal assignmentBaseSalary = calculateBaseSalaryForAssignment(assignment);
@@ -814,8 +843,12 @@ public class PayrollServiceImpl implements PayrollService {
                                         assignment.getId(), totalBonus, totalPenalties, totalSupportCosts,
                                         baseSalaryTotal);
 
+                        // Tách support và additionalAllowance: 
+                        // - additionalAllowance: chia đều (phụ cấp tháng)
+                        // - support: cộng trực tiếp vào tiền lương (phụ cấp attendance)
                         BigDecimal calculatedAssignmentAmount = calculateAssignmentAmount(assignment, safeBonus,
-                                        suportAssignment,
+                                        additionalAllowance,  // Phụ cấp assignment (chia đều)
+                                        safeSupport,          // Phụ cấp attendance (cộng trực tiếp)
                                         note);
                         log.debug("[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount returned {} for assignmentId={}",
                                         calculatedAssignmentAmount, assignment.getId());
@@ -830,8 +863,9 @@ public class PayrollServiceImpl implements PayrollService {
                 if (!isExist) {
                         payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID);
                         payroll.setPaidAmount(BigDecimal.ZERO);
+                        payroll.setPaymentDate(null);
                 }
-                payroll.setPaymentDate(null);
+                // Note: For existing payroll, don't reset paymentDate here - it will be updated below based on status
 
                 // Advance Total handling:
                 // - If creating new payroll: read from employee's monthlyAdvanceLimit
@@ -850,11 +884,31 @@ public class PayrollServiceImpl implements PayrollService {
                         log.debug("[PAYROLL-EXPORT][DEBUG] Existing payroll - advanceTotal (kept) = {}", advanceTotal);
                 }
 
-                BigDecimal insuranceTotal;
-                if (hasCompanyScope && employee.getInsuranceSalary() != null) {
-                        insuranceTotal = employee.getInsuranceSalary();
-                        log.debug("[PAYROLL-EXPORT][DEBUG] Using employee.insuranceSalary for insuranceTotal = {}",
-                                        insuranceTotal);
+                BigDecimal insuranceTotal = BigDecimal.ZERO;
+                if (hasCompanyScope) {
+                        // Nếu có assignment COMPANY, thì không cộng employee.getAllowance() nữa
+                        // vì đã sử dụng additionalAllowance từ assignment COMPANY đó (đã được cộng trong vòng lặp)
+                        Optional<Assignment> companyAssignment = assignments.stream()
+                                        .filter(a -> a.getScope() != null && a.getScope() == AssignmentScope.COMPANY)
+                                        .findFirst();
+                        if (companyAssignment.isEmpty()) {
+                                // Không có assignment COMPANY (không nên xảy ra), fallback về employee.getAllowance()
+                                if (employee.getAllowance() != null) {
+                                        totalSupportCosts = totalSupportCosts.add(employee.getAllowance());
+                                        log.debug("[PAYROLL-EXPORT][ALLOWANCE] No COMPANY assignment found, using employee.getAllowance() = {}", 
+                                                        employee.getAllowance());
+                                }
+                        } else {
+                                // Có assignment COMPANY, đã sử dụng additionalAllowance từ assignment đó
+                                BigDecimal companyAllowance = defaultZero(companyAssignment.get().getAdditionalAllowance());
+                                log.debug("[PAYROLL-EXPORT][ALLOWANCE] Using COMPANY assignment additionalAllowance = {} (instead of employee.getAllowance())", 
+                                                companyAllowance);
+                        }
+                        if ( employee.getInsuranceSalary() != null){
+                            insuranceTotal = employee.getInsuranceSalary();
+                            log.debug("[PAYROLL-EXPORT][DEBUG] Using employee.insuranceSalary for insuranceTotal = {}",
+                                    insuranceTotal);
+                        }
                 } else {
                         insuranceTotal = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal()
                                         : BigDecimal.ZERO;
@@ -864,7 +918,9 @@ public class PayrollServiceImpl implements PayrollService {
 
                 // Calculate deductions: penalties + insurance (advanceTotal is now only a note,
                 // not deducted)
-                BigDecimal deductions = totalPenalties.add(insuranceTotal);
+            BigDecimal deductions =
+                    totalPenalties != null ? totalPenalties : BigDecimal.ZERO;
+            if (insuranceTotal != null)   totalPenalties.add(insuranceTotal);
                 log.debug(
                                 "[PAYROLL-EXPORT][DEBUG] Deductions calculated -> totalPenalties={}, insuranceTotal={}, deductions={} (note: advanceTotal={} is NOT deducted)",
                                 totalPenalties, insuranceTotal, deductions, advanceTotal);
@@ -903,6 +959,41 @@ public class PayrollServiceImpl implements PayrollService {
                 payroll.setBaseSalary(baseSalaryTotal);
                 payroll.setEmployee(employee);
 
+                // ===== AUTO-UPDATE PAYMENT STATUS (for existing payroll) =====
+                // Nếu là payroll đã tồn tại, cần tự động cập nhật lại trạng thái thanh toán
+                // dựa trên paidAmount hiện tại và finalSalary mới
+                if (isExist) {
+                        BigDecimal currentPaid = payroll.getPaidAmount() != null ? payroll.getPaidAmount() : BigDecimal.ZERO;
+                        
+                        // Use epsilon for floating-point comparison (0.01 VND tolerance)
+                        BigDecimal epsilon = new BigDecimal("0.01");
+                        BigDecimal difference = finalAmount.subtract(currentPaid);
+                        
+                        // Lưu trạng thái cũ để log
+                        com.company.company_clean_hub_be.entity.PayrollStatus oldStatus = payroll.getStatus();
+                        
+                        if (currentPaid.compareTo(BigDecimal.ZERO) == 0) {
+                                // Chưa trả gì
+                                payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID);
+                                payroll.setPaymentDate(null);
+                                log.info("[PAYROLL-EXPORT-STATUS] Status changed: {} -> UNPAID (no payment)", oldStatus);
+                        } else if (difference.compareTo(epsilon) <= 0) {
+                                // Đã trả đủ hoặc hơn (difference <= 0.01)
+                                payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PAID);
+                                // Chỉ cập nhật paymentDate nếu chưa có (giữ nguyên nếu đã có)
+                                if (payroll.getPaymentDate() == null) {
+                                        payroll.setPaymentDate(LocalDateTime.now());
+                                }
+                                log.info("[PAYROLL-EXPORT-STATUS] Status changed: {} -> PAID (fully paid)", oldStatus);
+                        } else {
+                                // Đã trả một phần (difference > 0.01)
+                                payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PARTIAL_PAID);
+                                // Giữ nguyên paymentDate nếu đã có (đã có lịch sử thanh toán)
+                                log.info("[PAYROLL-EXPORT-STATUS] Status changed: {} -> PARTIAL_PAID (finalSalary increased, remaining: {})", 
+                                                oldStatus, difference);
+                        }
+                }
+
                 log.debug("[PAYROLL-EXPORT][DEBUG] Payroll entity before save: {}", payroll);
 
                 Payroll savedPayroll = payrollRepository.save(payroll);
@@ -937,10 +1028,10 @@ public class PayrollServiceImpl implements PayrollService {
                 return (int) count;
         }
 
-        private BigDecimal calculateAssignmentAmount(Assignment assignment, BigDecimal bonus, BigDecimal supportCosts) {
+        private BigDecimal calculateAssignmentAmount(Assignment assignment, BigDecimal bonus, BigDecimal additionalAllowance, BigDecimal support) {
                 log.debug(
-                                "[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount start - assignmentId={}, bonus={}, supportCosts={}",
-                                assignment != null ? assignment.getId() : null, bonus, supportCosts);
+                                "[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount start - assignmentId={}, bonus={}, additionalAllowance={}, support={}",
+                                assignment != null ? assignment.getId() : null, bonus, additionalAllowance, support);
 
                 if (assignment == null || assignment.getAssignmentType() == null) {
                         log.debug("[PAYROLL-EXPORT][DEBUG] assignment or assignmentType is null -> return ZERO");
@@ -959,20 +1050,28 @@ public class PayrollServiceImpl implements PayrollService {
                 salaryBase = assignment.getSalaryAtTime() != null ? assignment.getSalaryAtTime() : BigDecimal.ZERO;
                 log.debug("[PAYROLL-EXPORT][DEBUG] Scope CONTRACT -> salaryBase (assignment.salaryAtTime) = {}",
                                 salaryBase);
+                
+                BigDecimal safeAdditionalAllowance = defaultZero(additionalAllowance);
+                BigDecimal safeSupport = defaultZero(support);
+                BigDecimal safeBonus = defaultZero(bonus);
+                
                 if (type == AssignmentType.FIXED_BY_CONTRACT || type == AssignmentType.FIXED_BY_COMPANY) {
                         log.debug(
-                                        "[PAYROLL-EXPORT][DEBUG] Fixed type branch. plannedDays={}, salaryBase={}, bonus={}, supportCosts={}, workDaysField={}",
-                                        assignment.getPlannedDays(), salaryBase, bonus, supportCosts,
+                                        "[PAYROLL-EXPORT][DEBUG] Fixed type branch. plannedDays={}, salaryBase={}, bonus={}, additionalAllowance={}, support={}, workDaysField={}",
+                                        assignment.getPlannedDays(), salaryBase, bonus, additionalAllowance, support,
                                         assignment.getWorkDays());
 
                         if (assignment.getPlannedDays() != null && assignment.getPlannedDays() > 0
                                         && salaryBase.compareTo(BigDecimal.ZERO) > 0
                                         && assignment.getWorkDays() != null) {
-                                BigDecimal dailyRate = (salaryBase.add(defaultZero(bonus))
-                                                .add(defaultZero(supportCosts)))
+                                // additionalAllowance: chia đều (phụ cấp tháng)
+                                BigDecimal dailyRate = (salaryBase.add(safeBonus)
+                                                .add(safeAdditionalAllowance))
                                                 .divide(BigDecimal.valueOf(assignment.getPlannedDays()), 2,
                                                                 RoundingMode.HALF_UP);
                                 amount = dailyRate.multiply(BigDecimal.valueOf(realWorksDay));
+                                // support: cộng trực tiếp (phụ cấp attendance)
+                                amount = amount.add(safeSupport);
                                 log.debug("[PAYROLL-EXPORT][DEBUG] Fixed amount computed: dailyRate={}, amount={}",
                                                 dailyRate, amount);
                         } else {
@@ -980,8 +1079,8 @@ public class PayrollServiceImpl implements PayrollService {
                         }
                 } else {
                         log.debug(
-                                        "[PAYROLL-EXPORT][DEBUG] Day/Temporary type branch. plannedDays={}, salaryBase={}, bonus={}, supportCosts={}, workDaysField={}",
-                                        assignment.getPlannedDays(), salaryBase, bonus, supportCosts,
+                                        "[PAYROLL-EXPORT][DEBUG] Day/Temporary type branch. plannedDays={}, salaryBase={}, bonus={}, additionalAllowance={}, support={}, workDaysField={}",
+                                        assignment.getPlannedDays(), salaryBase, bonus, additionalAllowance, support,
                                         assignment.getWorkDays());
 
                         if (assignment.getPlannedDays() != null && assignment.getPlannedDays() > 0
@@ -989,7 +1088,8 @@ public class PayrollServiceImpl implements PayrollService {
                                         && assignment.getWorkDays() != null) {
 
                                 BigDecimal salary = (salaryBase.multiply(BigDecimal.valueOf(realWorksDay)));
-                                amount = amount.add(salary.add(defaultZero(supportCosts)).add(defaultZero(bonus)));
+                                // additionalAllowance và support: cộng trực tiếp
+                                amount = amount.add(salary).add(safeAdditionalAllowance).add(safeBonus).add(safeSupport);
                                 log.debug("[PAYROLL-EXPORT][DEBUG] Daily/Temporary amount computed: salary={}, amount={}",
                                                 salary,
                                                 amount);
@@ -1004,14 +1104,16 @@ public class PayrollServiceImpl implements PayrollService {
         private BigDecimal calculateAssignmentAmount(
                         Assignment assignment,
                         BigDecimal bonus,
-                        BigDecimal supportCosts,
+                        BigDecimal additionalAllowance,  // Phụ cấp assignment (chia đều)
+                        BigDecimal support,              // Phụ cấp attendance (cộng trực tiếp)
                         Map<String, String> note) {
 
                 log.debug("[PAYROLL-EXPORT][START] calculateAssignmentAmount");
-                log.debug("[PAYROLL-EXPORT][INPUT] assignmentId={}, bonus={}, supportCosts={}, noteNull={}",
+                log.debug("[PAYROLL-EXPORT][INPUT] assignmentId={}, bonus={}, additionalAllowance={}, support={}, noteNull={}",
                                 assignment != null ? assignment.getId() : null,
                                 bonus,
-                                supportCosts,
+                                additionalAllowance,
+                                support,
                                 note == null);
 
                 if (assignment == null) {
@@ -1050,12 +1152,16 @@ public class PayrollServiceImpl implements PayrollService {
                 log.debug("[PAYROLL-EXPORT][SALARY] salaryAtTime={}, salaryBase(after default)={}",
                                 assignment.getSalaryAtTime(), salaryBase);
 
-                log.debug("[PAYROLL-EXPORT][BONUS] bonus={}, supportCosts={}",
-                                bonus, supportCosts);
+                log.debug("[PAYROLL-EXPORT][BONUS] bonus={}, additionalAllowance={}, support={}",
+                                bonus, additionalAllowance, support);
 
                 log.debug("[PAYROLL-EXPORT][WORK-DAYS] plannedDays={}, workDaysField={}",
                                 assignment.getPlannedDays(),
                                 assignment.getWorkDays());
+
+                BigDecimal safeAdditionalAllowance = defaultZero(additionalAllowance);
+                BigDecimal safeSupport = defaultZero(support);
+                BigDecimal safeBonus = defaultZero(bonus);
 
                 // ================= FIXED TYPE =================
                 if (type == AssignmentType.FIXED_BY_CONTRACT || type == AssignmentType.FIXED_BY_COMPANY) {
@@ -1072,11 +1178,12 @@ public class PayrollServiceImpl implements PayrollService {
 
                         if (validPlannedDays && validSalaryBase && validWorkDays) {
 
+                                // additionalAllowance: chia đều (phụ cấp tháng)
                                 BigDecimal totalBeforeDivide = salaryBase
-                                                .add(defaultZero(bonus))
-                                                .add(defaultZero(supportCosts));
+                                                .add(safeBonus)
+                                                .add(safeAdditionalAllowance);
 
-                                log.debug("[PAYROLL-EXPORT][FIXED][STEP] totalBeforeDivide = salaryBase + bonus + supportCosts = {}",
+                                log.debug("[PAYROLL-EXPORT][FIXED][STEP] totalBeforeDivide = salaryBase + bonus + additionalAllowance = {}",
                                                 totalBeforeDivide);
 
                                 BigDecimal dailyRate = totalBeforeDivide.divide(
@@ -1089,16 +1196,20 @@ public class PayrollServiceImpl implements PayrollService {
 
                                 amount = dailyRate.multiply(BigDecimal.valueOf(realWorksDay));
 
-                                log.debug("[PAYROLL-EXPORT][FIXED][RESULT] amount = dailyRate * realWorksDay = {}",
+                                // support: cộng trực tiếp (phụ cấp attendance)
+                                amount = amount.add(safeSupport);
+
+                                log.debug("[PAYROLL-EXPORT][FIXED][RESULT] amount = (dailyRate * realWorksDay) + support = {}",
                                                 amount);
 
                                 value += String.format(
-                                                " (%s + %s + %s) / %d * %d = %s; ",
+                                                " ((%s + %s + %s) / %d * %d) + %s = %s; ",
                                                 salaryBase,
-                                                defaultZero(bonus),
-                                                defaultZero(supportCosts),
+                                                safeBonus,
+                                                safeAdditionalAllowance,
                                                 assignment.getPlannedDays(),
                                                 realWorksDay,
+                                                safeSupport,
                                                 amount);
                         } else {
                                 log.debug("[PAYROLL-EXPORT][FIXED][SKIP] Condition failed -> amount remains ZERO");
@@ -1123,20 +1234,24 @@ public class PayrollServiceImpl implements PayrollService {
                                 log.debug("[PAYROLL-EXPORT][DAY][STEP] salary = salaryBase * realWorksDay = {}",
                                                 salary);
 
+                                // additionalAllowance: chia đều (phụ cấp tháng) - với DAY/TEMP thì cộng trực tiếp
+                                // support: cộng trực tiếp (phụ cấp attendance)
                                 amount = amount
                                                 .add(salary)
-                                                .add(defaultZero(supportCosts))
-                                                .add(defaultZero(bonus));
+                                                .add(safeAdditionalAllowance)
+                                                .add(safeBonus)
+                                                .add(safeSupport);
 
-                                log.debug("[PAYROLL-EXPORT][DAY][RESULT] amount = salary + supportCosts + bonus = {}",
+                                log.debug("[PAYROLL-EXPORT][DAY][RESULT] amount = salary + additionalAllowance + bonus + support = {}",
                                                 amount);
 
                                 value += String.format(
-                                                " %s * %d + %s + %s = %s; ",
+                                                " %s * %d + %s + %s + %s = %s; ",
                                                 salaryBase,
                                                 realWorksDay,
-                                                defaultZero(supportCosts),
-                                                defaultZero(bonus),
+                                                safeAdditionalAllowance,
+                                                safeBonus,
+                                                safeSupport,
                                                 amount);
                         } else {
                                 log.debug("[PAYROLL-EXPORT][DAY][SKIP] Condition failed -> amount remains ZERO");
@@ -1227,10 +1342,26 @@ public class PayrollServiceImpl implements PayrollService {
 
         @Override
         public PageResponse<PayrollResponse> getPayrollsWithFilter(String keyword, Integer month, Integer year,
-                        Boolean isPaid, int page, int pageSize) {
-                log.info("getPayrollsWithFilter requested: keyword='{}', month={}, year={}, isPaid={}, page={}, pageSize={}",
-                                keyword, month, year, isPaid, page, pageSize);
-                Pageable pageable = PageRequest.of(page, pageSize, Sort.by("employee.employeeCode").descending());
+                        Boolean isPaid, String sortBy, String sortDirection, int page, int pageSize) {
+                log.info("getPayrollsWithFilter requested: keyword='{}', month={}, year={}, isPaid={}, sortBy={}, sortDirection={}, page={}, pageSize={}",
+                                keyword, month, year, isPaid, sortBy, sortDirection, page, pageSize);
+
+                Sort sort = Sort.by("createdAt").descending();
+                if (sortBy != null && !sortBy.isBlank()) {
+                        Sort.Direction direction = "desc".equalsIgnoreCase(sortDirection)
+                                        ? Sort.Direction.DESC
+                                        : Sort.Direction.ASC;
+
+                        if ("employeeName".equals(sortBy)) {
+                                sort = Sort.by(direction, "employee.name");
+                        } else if ("employeeCode".equals(sortBy)) {
+                                sort = Sort.by(direction, "employee.employeeCode");
+                        } else if ("createdAt".equals(sortBy)) {
+                                sort = Sort.by(direction, "createdAt");
+                        }
+                }
+
+                Pageable pageable = PageRequest.of(page, pageSize, sort);
                 Page<Payroll> payrollPage = payrollRepository.findByFilters(keyword, month, year, isPaid, pageable);
 
                 List<PayrollResponse> payrolls = payrollPage.getContent().stream()
@@ -1251,6 +1382,63 @@ public class PayrollServiceImpl implements PayrollService {
                                 .totalPages(payrollPage.getTotalPages())
                                 .first(payrollPage.isFirst())
                                 .last(payrollPage.isLast())
+                                .build();
+        }
+
+        @Override
+        public PayrollOverviewResponse getPayrollOverview(String keyword, Integer month, Integer year,
+                        Boolean isPaid) {
+                log.info("getPayrollOverview requested: keyword='{}', month={}, year={}, isPaid={}",
+                                keyword, month, year, isPaid);
+
+                // Lấy toàn bộ payroll theo cùng filter như danh sách, không phân trang
+                Page<Payroll> payrollPage = payrollRepository.findByFilters(
+                                keyword, month, year, isPaid, Pageable.unpaged());
+
+                List<Payroll> payrolls = payrollPage.getContent();
+
+                if (payrolls == null || payrolls.isEmpty()) {
+                        log.info("getPayrollOverview: no payrolls found for given filter");
+                        return PayrollOverviewResponse.builder()
+                                        .totalPayrolls(0L)
+                                        .paidPayrolls(0L)
+                                        .unpaidPayrolls(0L)
+                                        .partialPaidPayrolls(0L)
+                                        .totalFinalSalary(BigDecimal.ZERO)
+                                        .totalPaidAmount(BigDecimal.ZERO)
+                                        .totalRemainingAmount(BigDecimal.ZERO)
+                                        .build();
+                }
+
+                long totalPayrolls = payrollPage.getTotalElements();
+                long paidPayrolls = payrolls.stream()
+                                .filter(p -> p.getStatus() == com.company.company_clean_hub_be.entity.PayrollStatus.PAID)
+                                .count();
+                long unpaidPayrolls = payrolls.stream()
+                                .filter(p -> p.getStatus() == com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID)
+                                .count();
+                long partialPaidPayrolls = payrolls.stream()
+                                .filter(p -> p.getStatus() == com.company.company_clean_hub_be.entity.PayrollStatus.PARTIAL_PAID)
+                                .count();
+
+                BigDecimal totalFinalSalary = payrolls.stream()
+                                .map(p -> p.getFinalSalary() != null ? p.getFinalSalary() : BigDecimal.ZERO)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                BigDecimal totalPaidAmount = payrolls.stream()
+                                .map(p -> p.getPaidAmount() != null ? p.getPaidAmount() : BigDecimal.ZERO)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                BigDecimal totalRemainingAmount = totalFinalSalary.subtract(totalPaidAmount);
+
+                return PayrollOverviewResponse.builder()
+                                .totalPayrolls(totalPayrolls)
+                                .paidPayrolls(paidPayrolls)
+                                .unpaidPayrolls(unpaidPayrolls)
+                                .partialPaidPayrolls(partialPaidPayrolls)
+                                .totalFinalSalary(totalFinalSalary)
+                                .totalPaidAmount(totalPaidAmount)
+                                .totalRemainingAmount(totalRemainingAmount)
                                 .build();
         }
 
@@ -1379,8 +1567,12 @@ public class PayrollServiceImpl implements PayrollService {
                                         attendanceRepository.sumSupportCostByAssignment(assignment.getId()));
                         BigDecimal additionalAllowance = defaultZero(assignment.getAdditionalAllowance());
 
-                        BigDecimal supportForCalc = support.add(additionalAllowance);
-                        BigDecimal assignmentAmount = calculateAssignmentAmount(assignment, bonus, supportForCalc,
+                        // Tách support và additionalAllowance: 
+                        // - additionalAllowance: chia đều (phụ cấp tháng)
+                        // - support: cộng trực tiếp vào tiền lương (phụ cấp attendance)
+                        BigDecimal assignmentAmount = calculateAssignmentAmount(assignment, bonus,
+                                        additionalAllowance,  // Phụ cấp assignment (chia đều)
+                                        support,              // Phụ cấp attendance (cộng trực tiếp)
                                         note);
 
                         // Calculate base salary (without bonuses/allowances)
@@ -1388,23 +1580,45 @@ public class PayrollServiceImpl implements PayrollService {
                         baseSalaryTotal = baseSalaryTotal.add(assignmentBaseSalary);
 
                         log.debug(
-                                        "[ASSIGNMENT-DETAIL] ID: {}, Days: {}, SalaryAtTime: {}, Amount: {}, Bonus: {}, Penalty: {}, Support+Allowance: {}",
+                                        "[ASSIGNMENT-DETAIL] ID: {}, Days: {}, SalaryAtTime: {}, Amount: {}, Bonus: {}, Penalty: {}, AdditionalAllowance: {}, Support: {}",
                                         assignment.getId(), realDays, assignment.getSalaryAtTime(), assignmentAmount,
-                                        bonus, penalty,
-                                        supportForCalc);
+                                        bonus, penalty, additionalAllowance, support);
 
                         totalDays += realDays;
                         amountTotal = amountTotal.add(assignmentAmount);
                         totalBonus = totalBonus.add(bonus);
                         totalPenalties = totalPenalties.add(penalty);
-                        totalSupportCosts = totalSupportCosts.add(supportForCalc);
+                        // Chỉ tính additionalAllowance vào totalSupportCosts (phụ cấp tháng)
+                        // support (phụ cấp attendance) sẽ được cộng trực tiếp vào tiền lương, không tính vào totalSupportCosts
+                        totalSupportCosts = totalSupportCosts.add(additionalAllowance);
                         finalRow += assignmentAmount + " +";
                 }
 
-                BigDecimal insuranceTotal;
-                if (hasCompanyScope && payroll.getEmployee().getInsuranceSalary() != null) {
+                BigDecimal insuranceTotal=  BigDecimal.ZERO;
+                if (hasCompanyScope) {
+                    // Nếu có assignment COMPANY, thì không cộng employee.getAllowance() nữa
+                    // vì đã sử dụng additionalAllowance từ assignment COMPANY đó (đã được cộng trong vòng lặp)
+                    Optional<Assignment> companyAssignment = assignments.stream()
+                                    .filter(a -> a.getScope() != null && a.getScope() == AssignmentScope.COMPANY)
+                                    .findFirst();
+                    if (companyAssignment.isEmpty()) {
+                            // Không có assignment COMPANY (không nên xảy ra), fallback về employee.getAllowance()
+                            if (payroll.getEmployee().getAllowance() != null) {
+                                    totalSupportCosts = totalSupportCosts.add(payroll.getEmployee().getAllowance());
+                                    log.debug("[PAYROLL-UPDATE][ALLOWANCE] No COMPANY assignment found, using employee.getAllowance() = {}", 
+                                                    payroll.getEmployee().getAllowance());
+                            }
+                    } else {
+                            // Có assignment COMPANY, đã sử dụng additionalAllowance từ assignment đó
+                            BigDecimal companyAllowance = defaultZero(companyAssignment.get().getAdditionalAllowance());
+                            log.debug("[PAYROLL-UPDATE][ALLOWANCE] Using COMPANY assignment additionalAllowance = {} (instead of employee.getAllowance())", 
+                                            companyAllowance);
+                    }
+                    if ( payroll.getEmployee().getInsuranceSalary() != null){
                         insuranceTotal = payroll.getEmployee().getInsuranceSalary();
-                        log.info("[PAYROLL-CALC] Insurance taken from Employee Profile: {}", insuranceTotal);
+                        log.debug("[PAYROLL-EXPORT][DEBUG] Using employee.insuranceSalary for insuranceTotal = {}",
+                                insuranceTotal);
+                    }
                 } else {
                         insuranceTotal = request.getInsuranceTotal() != null ? request.getInsuranceTotal()
                                         : (payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal()
@@ -1434,7 +1648,10 @@ public class PayrollServiceImpl implements PayrollService {
 
                 // Calculate total deductions: penalties + insurance (advanceTotal is now only a
                 // note, not deducted)
-                BigDecimal totalDeductions = totalPenalties.add(insuranceTotal);
+
+            BigDecimal totalDeductions =
+                    totalPenalties != null ? totalPenalties : BigDecimal.ZERO;
+                if (insuranceTotal != null)   totalPenalties.add(insuranceTotal);
 
                 log.debug(
                                 "[PAYROLL-UPDATE] Calculating deductions -> totalPenalties={}, insuranceTotal={}, totalDeductions={} (note: advanceTotal={} is NOT deducted)",
@@ -1478,6 +1695,41 @@ public class PayrollServiceImpl implements PayrollService {
                 payroll.setBaseSalary(baseSalaryTotal);
                 payroll.setNote(noteStr);
                 payroll.setUpdatedAt(LocalDateTime.now());
+
+                // ===== AUTO-UPDATE PAYMENT STATUS =====
+                // Sau khi tính lại finalSalary, cần tự động cập nhật lại trạng thái thanh toán
+                // dựa trên paidAmount hiện tại và finalSalary mới
+                // Điều này xử lý trường hợp: nhân viên đã trả đủ nhưng sau đó được phân công thêm công việc
+                BigDecimal currentPaid = payroll.getPaidAmount() != null ? payroll.getPaidAmount() : BigDecimal.ZERO;
+                
+                // Use epsilon for floating-point comparison (0.01 VND tolerance)
+                BigDecimal epsilon = new BigDecimal("0.01");
+                BigDecimal difference = finalSalary.subtract(currentPaid);
+                
+                // Lưu trạng thái cũ để log
+                com.company.company_clean_hub_be.entity.PayrollStatus oldStatus = payroll.getStatus();
+                
+                if (currentPaid.compareTo(BigDecimal.ZERO) == 0) {
+                        // Chưa trả gì
+                        payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID);
+                        payroll.setPaymentDate(null);
+                        log.info("[PAYROLL-UPDATE-STATUS] Status changed: {} -> UNPAID (no payment)", oldStatus);
+                } else if (difference.compareTo(epsilon) <= 0) {
+                        // Đã trả đủ hoặc hơn (difference <= 0.01)
+                        payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PAID);
+                        // Chỉ cập nhật paymentDate nếu chưa có (giữ nguyên nếu đã có)
+                        if (payroll.getPaymentDate() == null) {
+                                payroll.setPaymentDate(LocalDateTime.now());
+                        }
+                        log.info("[PAYROLL-UPDATE-STATUS] Status changed: {} -> PAID (fully paid)", oldStatus);
+                } else {
+                        // Đã trả một phần (difference > 0.01)
+                        payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PARTIAL_PAID);
+                        // Nếu đang chuyển từ PAID về PARTIAL_PAID, giữ nguyên paymentDate (đã có lịch sử thanh toán)
+                        // Không set paymentDate = null vì đã có thanh toán trước đó
+                        log.info("[PAYROLL-UPDATE-STATUS] Status changed: {} -> PARTIAL_PAID (finalSalary increased, remaining: {})", 
+                                        oldStatus, difference);
+                }
 
                 Payroll updated = payrollRepository.save(payroll);
 
@@ -1619,8 +1871,11 @@ public class PayrollServiceImpl implements PayrollService {
                                         attendanceRepository.sumSupportCostByAssignment(assignment.getId()));
                         BigDecimal additionalAllowance = defaultZero(assignment.getAdditionalAllowance());
 
+                        // Tách support và additionalAllowance: 
+                        // - additionalAllowance: chia đều (phụ cấp tháng)
+                        // - support: cộng trực tiếp vào tiền lương (phụ cấp attendance)
                         BigDecimal expectedSalary = calculateAssignmentAmount(
-                                        assignment, bonus, support.add(additionalAllowance));
+                                        assignment, bonus, additionalAllowance, support);
 
                         com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse detail = com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse
                                         .builder()

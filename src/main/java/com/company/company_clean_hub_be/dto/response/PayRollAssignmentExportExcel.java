@@ -8,7 +8,7 @@ import lombok.Data;
 @Builder
 public class PayRollAssignmentExportExcel {
     // Employee info (will be merged across assignments)
-    private Long employeeId;
+    private String employeeId;
     private String employeeName;
     private String bankName;
     private String bankAccount;

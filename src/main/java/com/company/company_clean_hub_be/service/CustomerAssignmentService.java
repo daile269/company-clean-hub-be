@@ -39,14 +39,15 @@ public interface CustomerAssignmentService {
     PageResponse<CustomerResponse> getAssignedCustomers(Long managerId, String keyword, int page, int pageSize);
 
     /**
-     * Lấy danh sách khách hàng của user hiện tại (có phân trang)
+     * Lấy danh sách khách hàng của user hiện tại (có phân trang hoặc lấy hết)
      * 
      * @param keyword  Từ khóa tìm kiếm (optional)
      * @param page     Trang hiện tại
      * @param pageSize Số lượng items mỗi trang
-     * @return Danh sách khách hàng có phân trang
+     * @param all      Nếu true, lấy toàn bộ dữ liệu không phân trang
+     * @return Danh sách khách hàng có phân trang hoặc toàn bộ
      */
-    PageResponse<CustomerResponse> getMyAssignedCustomers(String keyword, int page, int pageSize);
+    PageResponse<CustomerResponse> getMyAssignedCustomers(String keyword, int page, int pageSize, boolean all);
 
     /**
      * Lấy danh sách phân công của một manager

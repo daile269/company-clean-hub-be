@@ -200,9 +200,48 @@ public class CustomerAssignmentServiceImpl implements CustomerAssignmentService 
     }
 
     @Override
-    public PageResponse<CustomerResponse> getMyAssignedCustomers(String keyword, int page, int pageSize) {
+    public PageResponse<CustomerResponse> getMyAssignedCustomers(String keyword, int page, int pageSize, boolean all) {
         Long currentUserId = getCurrentUserId();
-        return getAssignedCustomers(currentUserId, keyword, page, pageSize);
+
+        if (all) {
+            // Lấy toàn bộ dữ liệu không phân trang
+            log.info("Lấy toàn bộ khách hàng được phân công cho user hiện tại: {}, keyword: {}", currentUserId,
+                    keyword);
+
+            List<Customer> allCustomers = customerAssignmentRepository.findAllCustomersByManagerId(currentUserId);
+
+            // Filter by keyword if provided
+            List<CustomerResponse> customerResponses = allCustomers.stream()
+                    .map(this::mapToCustomerResponse)
+                    .filter(customer -> {
+                        if (keyword == null || keyword.trim().isEmpty()) {
+                            return true;
+                        }
+                        String searchTerm = keyword.toLowerCase();
+                        return (customer.getCode() != null && customer.getCode().toLowerCase().contains(searchTerm)) ||
+                                (customer.getName() != null && customer.getName().toLowerCase().contains(searchTerm)) ||
+                                (customer.getPhone() != null && customer.getPhone().toLowerCase().contains(searchTerm))
+                                ||
+                                (customer.getEmail() != null && customer.getEmail().toLowerCase().contains(searchTerm))
+                                ||
+                                (customer.getTaxCode() != null
+                                        && customer.getTaxCode().toLowerCase().contains(searchTerm));
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+
+            return PageResponse.<CustomerResponse>builder()
+                    .content(customerResponses)
+                    .page(0)
+                    .pageSize(customerResponses.size())
+                    .totalElements((long) customerResponses.size())
+                    .totalPages(1)
+                    .first(true)
+                    .last(true)
+                    .build();
+        } else {
+            // Phân trang bình thường
+            return getAssignedCustomers(currentUserId, keyword, page, pageSize);
+        }
     }
 
     @Override
@@ -220,7 +259,8 @@ public class CustomerAssignmentServiceImpl implements CustomerAssignmentService 
     public List<CustomerAssignmentResponse> getAssignmentsByCustomer(Long customerId, String role) {
         log.info("Lấy danh sách manager được phân công cho customer: {}, filter role: {}", customerId, role);
 
-        List<CustomerAssignment> assignments = customerAssignmentRepository.findByCustomerIdAndManagerRoleNative(customerId, role);
+        List<CustomerAssignment> assignments = customerAssignmentRepository
+                .findByCustomerIdAndManagerRoleNative(customerId, role);
 
         return assignments.stream()
                 .map(this::mapToResponse)
