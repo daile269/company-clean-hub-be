@@ -343,9 +343,7 @@ public class AssignmentScheduler {
                 BigDecimal workHours = BigDecimal.valueOf(8);
                 BigDecimal bonus = BigDecimal.ZERO;
                 BigDecimal penalty = BigDecimal.ZERO;
-                BigDecimal supportCost = savedAssignment.getAdditionalAllowance() != null 
-                        ? savedAssignment.getAdditionalAllowance() 
-                        : BigDecimal.ZERO;
+                BigDecimal supportCost = BigDecimal.ZERO;
 
                 // Sinh chấm công cho từng ngày
                 int generatedDays = 0;
