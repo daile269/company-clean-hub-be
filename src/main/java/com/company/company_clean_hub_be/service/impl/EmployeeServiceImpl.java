@@ -92,7 +92,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, page={}, pageSize={}",
                                 keyword,
                                 employmentType, page, pageSize);
-                Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+                Pageable pageable = PageRequest.of(page, pageSize, Sort.by("employeeCode").descending());
                 Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, pageable);
 
                 List<EmployeeResponse> employees = employeePage.getContent().stream()

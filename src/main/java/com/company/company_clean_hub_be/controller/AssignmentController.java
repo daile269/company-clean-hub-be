@@ -319,10 +319,12 @@ public class AssignmentController {
     public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse>> getReassignmentHistoryByCustomerId(
             @PathVariable Long customerId,
             @RequestParam(required = false) Long contractId,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> history = assignmentService
-                .getReassignmentHistoryByCustomerId(customerId, contractId, page, pageSize);
+                .getReassignmentHistoryByCustomerId(customerId, contractId, month, year, page, pageSize);
         return ApiResponse.success(
                 "Lấy lịch sử điều động theo khách hàng thành công",
                 history,
