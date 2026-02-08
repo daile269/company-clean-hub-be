@@ -61,6 +61,8 @@ public interface AssignmentService {
             PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> getReassignmentHistoryByCustomerId(
                     Long customerId,
                     Long contractId,
+                    Integer month,
+                    Integer year,
                     int page,
                     int pageSize
             );

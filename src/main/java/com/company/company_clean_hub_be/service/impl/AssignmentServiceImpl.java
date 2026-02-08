@@ -1459,7 +1459,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         @Override
         public PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> getReassignmentHistoryByCustomerId(
-                        Long customerId, Long contractId, int page, int pageSize) {
+                        Long customerId, Long contractId, Integer month, Integer year, int page, int pageSize) {
                 Customer customer = customerRepository.findById(customerId)
                                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
 
@@ -1486,12 +1486,33 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 org.springframework.data.domain.Sort.by("createdAt").descending());
 
                 for (Contract contract : pageContracts) {
-                        org.springframework.data.domain.Page<AssignmentHistory> pageHistories = assignmentHistoryRepository
-                                        .findByContractIdOrderByCreatedAtDesc(contract.getId(), pageable);
+                        List<AssignmentHistoryResponse> mapped;
 
-                        List<AssignmentHistoryResponse> mapped = pageHistories.getContent().stream()
-                                        .map(this::mapHistoryToResponse)
-                                        .collect(Collectors.toList());
+                        if (month == null && year == null) {
+                                org.springframework.data.domain.Page<AssignmentHistory> pageHistories = assignmentHistoryRepository
+                                                .findByContractIdOrderByCreatedAtDesc(contract.getId(), pageable);
+
+                                mapped = pageHistories.getContent().stream()
+                                                .map(this::mapHistoryToResponse)
+                                                .collect(Collectors.toList());
+                        } else {
+                                List<AssignmentHistory> allHistories = assignmentHistoryRepository.findByContractIdOrderByCreatedAtDesc(contract.getId());
+                                List<AssignmentHistory> filtered = allHistories.stream()
+                                                .filter(h -> {
+                                                        boolean mOk = month == null || h.getCreatedAt().getMonthValue() == month;
+                                                        boolean yOk = year == null || h.getCreatedAt().getYear() == year;
+                                                        return mOk && yOk;
+                                                })
+                                                .collect(Collectors.toList());
+
+                                int histFrom = Math.min(filtered.size(), safePage * safePageSize);
+                                int histTo = Math.min(filtered.size(), histFrom + safePageSize);
+                                List<AssignmentHistory> pageList = filtered.subList(histFrom, histTo);
+
+                                mapped = pageList.stream()
+                                                .map(this::mapHistoryToResponse)
+                                                .collect(Collectors.toList());
+                        }
 
                         result.add(new com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse(
                                         contract.getId(),

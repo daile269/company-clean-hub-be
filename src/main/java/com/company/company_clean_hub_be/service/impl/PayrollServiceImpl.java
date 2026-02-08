@@ -1230,7 +1230,7 @@ public class PayrollServiceImpl implements PayrollService {
                         Boolean isPaid, int page, int pageSize) {
                 log.info("getPayrollsWithFilter requested: keyword='{}', month={}, year={}, isPaid={}, page={}, pageSize={}",
                                 keyword, month, year, isPaid, page, pageSize);
-                Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+                Pageable pageable = PageRequest.of(page, pageSize, Sort.by("employee.employeeCode").descending());
                 Page<Payroll> payrollPage = payrollRepository.findByFilters(keyword, month, year, isPaid, pageable);
 
                 List<PayrollResponse> payrolls = payrollPage.getContent().stream()
