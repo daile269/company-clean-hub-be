@@ -1042,6 +1042,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         @Override
         public PageResponse<com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse> getAssignmentsByCustomerGroupedByContract(
                         Long customerId,
+                        String keyword,
                         Long contractId,
                         ContractType contractType,
                         AssignmentStatus status,
@@ -1075,8 +1076,25 @@ public class AssignmentServiceImpl implements AssignmentService {
                 Page<Assignment> allAssignments = assignmentRepository.findAllAssignmentsByCustomerWithFilters(
                                 customerId, contractType, status, month, year, unpaged);
 
+                // Filter assignments by keyword if provided (employee name or code)
+                List<Assignment> filteredAssignments = allAssignments.getContent();
+                if (keyword != null && !keyword.trim().isEmpty()) {
+                        String lowerKeyword = keyword.toLowerCase().trim();
+                        filteredAssignments = filteredAssignments.stream()
+                                        .filter(a -> {
+                                                if (a.getEmployee() == null) return false;
+                                                Employee emp = a.getEmployee();
+                                                boolean matchName = emp.getName() != null && 
+                                                                   emp.getName().toLowerCase().contains(lowerKeyword);
+                                                boolean matchCode = emp.getEmployeeCode() != null && 
+                                                                   emp.getEmployeeCode().toLowerCase().contains(lowerKeyword);
+                                                return matchName || matchCode;
+                                        })
+                                        .collect(Collectors.toList());
+                }
+
                 // Group assignments by contract
-                Map<Long, List<Assignment>> assignmentsByContract = allAssignments.getContent().stream()
+                Map<Long, List<Assignment>> assignmentsByContract = filteredAssignments.stream()
                                 .filter(a -> a.getContract() != null)
                                 .collect(Collectors.groupingBy(a -> a.getContract().getId()));
 
