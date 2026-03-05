@@ -158,59 +158,84 @@ public class InvoiceServiceImpl implements InvoiceService {
         // Compute number of primary assigned employees for the contract in the month.
         // Exclude SUPPORT and TEMPORARY from primary count so short-term replacements don't increase the divisor.
         YearMonth invoiceYearMonth = YearMonth.of(request.getInvoiceYear(), request.getInvoiceMonth());
+        LocalDate firstDayOfInvoiceMonth = invoiceYearMonth.atDay(1);
+        LocalDate lastDayOfInvoiceMonth = invoiceYearMonth.atEndOfMonth();
+        
         List<Assignment> assignments = assignmentRepository.findByContractId(contract.getId());
         log.info("Contract {} - Total assignments found: {}", contract.getId(), assignments.size());
         
         // Log assignment details for debugging
         for (Assignment a : assignments) {
-            log.info("  Assignment {}: employee={}, type={}, status={}, startDate={}",
+            log.info("  Assignment {}: employee={}, type={}, status={}, startDate={}, endDate={}",
                 a.getId(),
                 a.getEmployee() != null ? a.getEmployee().getId() : "null",
                 a.getAssignmentType(),
                 a.getStatus(),
-                a.getStartDate());
+                a.getStartDate(),
+                a.getEndDate());
         }
         
-        java.util.Set<Long> primaryEmployeeIds = assignments.stream()
-            .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS)
-            .filter(a -> {
-                if (a.getStartDate() == null) return false;
-                YearMonth assignmentYearMonth = YearMonth.from(a.getStartDate());
-                boolean passes = assignmentYearMonth.equals(invoiceYearMonth);
-                log.debug("Assignment {} startDate={} ({}) vs invoiceYearMonth={}: {}",
-                    a.getId(), a.getStartDate(), assignmentYearMonth, invoiceYearMonth, passes ? "PASS" : "SKIP");
-                return passes;
-            })
-            .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
-            .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.TEMPORARY)
-            .map(a -> a.getEmployee() != null ? a.getEmployee().getId() : null)
-            .filter(id -> id != null)
-            .collect(Collectors.toSet());
+        // Calculate max concurrent employees during the invoice month
+        // Count positions (not unique people) by finding the maximum number of employees working on any single day
+        int maxConcurrentEmployees = 0;
+        LocalDate currentDay = firstDayOfInvoiceMonth;
+        while (!currentDay.isAfter(lastDayOfInvoiceMonth)) {
+            final LocalDate checkDay = currentDay;
+            long concurrentCount = assignments.stream()
+                .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS || 
+                             a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.COMPLETED ||
+                             a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED)
+                .filter(a -> a.getStartDate() != null)
+                .filter(a -> {
+                    // Check if assignment was active on checkDay
+                    boolean startedOnOrBefore = !a.getStartDate().isAfter(checkDay);
+                    boolean endedOnOrAfter = a.getEndDate() == null || !a.getEndDate().isBefore(checkDay);
+                    return startedOnOrBefore && endedOnOrAfter;
+                })
+                .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
+                .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.TEMPORARY)
+                .filter(a -> a.getEmployee() != null)
+                .count();
+            
+            if (concurrentCount > maxConcurrentEmployees) {
+                maxConcurrentEmployees = (int) concurrentCount;
+                log.info("Contract {} - New max concurrent employees: {} on day {}", contract.getId(), maxConcurrentEmployees, checkDay);
+            }
+            currentDay = currentDay.plusDays(1);
+        }
 
-        log.info("Contract {} - Primary employee IDs (excluding SUPPORT/TEMPORARY): {}", contract.getId(), primaryEmployeeIds);
-
-        log.info("Contract {} - Primary employee IDs (excluding SUPPORT/TEMPORARY): {}", contract.getId(), primaryEmployeeIds);
-
-        int numEmployees = primaryEmployeeIds.size();
-        log.info("Contract {} - Primary employee count: {}", contract.getId(), numEmployees);
+        int numEmployees = maxConcurrentEmployees;
+        log.info("Contract {} - Max concurrent primary employees (excluding SUPPORT/TEMPORARY): {}", contract.getId(), numEmployees);
         
         // Fallback: if no primary (e.g., only TEMPORARY assignments exist), include TEMPORARY as well (but still exclude SUPPORT)
         if (numEmployees == 0) {
             log.info("Contract {} - No primary employees found, applying fallback to include TEMPORARY assignments", contract.getId());
-            java.util.Set<Long> anyEmployeeIds = assignments.stream()
-                .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS)
-                .filter(a -> {
-                    if (a.getStartDate() == null) return false;
-                    YearMonth assignmentYearMonth = YearMonth.from(a.getStartDate());
-                    return assignmentYearMonth.equals(invoiceYearMonth);
-                })
-                .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
-                .map(a -> a.getEmployee() != null ? a.getEmployee().getId() : null)
-                .filter(id -> id != null)
-                .collect(Collectors.toSet());
-            numEmployees = anyEmployeeIds.size();
-            log.info("Contract {} - Fallback employee IDs (excluding only SUPPORT): {}", contract.getId(), anyEmployeeIds);
-            log.info("Contract {} - Fallback employee count: {}", contract.getId(), numEmployees);
+            int maxConcurrentFallback = 0;
+            LocalDate fallbackDay = firstDayOfInvoiceMonth;
+            while (!fallbackDay.isAfter(lastDayOfInvoiceMonth)) {
+                final LocalDate checkDay = fallbackDay;
+                long concurrentCount = assignments.stream()
+                    .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS ||
+                                 a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.COMPLETED ||
+                                 a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED)
+                    .filter(a -> a.getStartDate() != null)
+                    .filter(a -> {
+                        // Check if assignment was active on checkDay
+                        boolean startedOnOrBefore = !a.getStartDate().isAfter(checkDay);
+                        boolean endedOnOrAfter = a.getEndDate() == null || !a.getEndDate().isBefore(checkDay);
+                        return startedOnOrBefore && endedOnOrAfter;
+                    })
+                    .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
+                    .filter(a -> a.getEmployee() != null)
+                    .count();
+                
+                if (concurrentCount > maxConcurrentFallback) {
+                    maxConcurrentFallback = (int) concurrentCount;
+                }
+                fallbackDay = fallbackDay.plusDays(1);
+            }
+            numEmployees = maxConcurrentFallback;
+            log.info("Contract {} - Fallback max concurrent employees (excluding only SUPPORT): {}", contract.getId(), numEmployees);
         }
         
         log.info("Contract {} - Final employee count for invoice {}/{}: {} (attendances: {}, contractDays: {})",
