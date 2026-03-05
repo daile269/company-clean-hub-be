@@ -176,30 +176,49 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
         
         // Calculate max concurrent employees during the invoice month
-        // Count positions (not unique people) by finding the maximum number of employees working on any single day
+        // Count distinct employees (not assignments) working on any single day
         int maxConcurrentEmployees = 0;
         LocalDate currentDay = firstDayOfInvoiceMonth;
         while (!currentDay.isAfter(lastDayOfInvoiceMonth)) {
             final LocalDate checkDay = currentDay;
-            long concurrentCount = assignments.stream()
-                .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS || 
-                             a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.COMPLETED ||
-                             a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED)
-                .filter(a -> a.getStartDate() != null)
-                .filter(a -> {
-                    // Check if assignment was active on checkDay
-                    boolean startedOnOrBefore = !a.getStartDate().isAfter(checkDay);
-                    boolean endedOnOrAfter = a.getEndDate() == null || !a.getEndDate().isBefore(checkDay);
-                    return startedOnOrBefore && endedOnOrAfter;
-                })
-                .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
-                .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.TEMPORARY)
-                .filter(a -> a.getEmployee() != null)
-                .count();
+            
+            // For each employee, get the latest assignment that started on or before checkDay
+            java.util.Map<Long, Assignment> latestAssignmentPerEmployee = new java.util.HashMap<>();
+            for (Assignment a : assignments) {
+                if (a.getEmployee() == null) continue;
+                if (a.getStartDate() == null) continue;
+                if (a.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT) continue;
+                if (a.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.TEMPORARY) continue;
+                if (a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS &&
+                    a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.COMPLETED &&
+                    a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED) continue;
+                
+                // Only consider assignments that started on or before checkDay
+                if (a.getStartDate().isAfter(checkDay)) continue;
+                
+                Long empId = a.getEmployee().getId();
+                Assignment existing = latestAssignmentPerEmployee.get(empId);
+                if (existing == null || a.getStartDate().isAfter(existing.getStartDate())) {
+                    latestAssignmentPerEmployee.put(empId, a);
+                }
+            }
+            
+            // Then check which of those latest assignments are active on checkDay
+            List<Long> activeEmployeeIds = new ArrayList<>();
+            for (java.util.Map.Entry<Long, Assignment> entry : latestAssignmentPerEmployee.entrySet()) {
+                Assignment a = entry.getValue();
+                boolean endedOnOrAfter = a.getEndDate() == null || a.getEndDate().isAfter(checkDay);
+                if (endedOnOrAfter) {
+                    activeEmployeeIds.add(entry.getKey());
+                }
+            }
+            
+            long concurrentCount = activeEmployeeIds.size();
             
             if (concurrentCount > maxConcurrentEmployees) {
                 maxConcurrentEmployees = (int) concurrentCount;
-                log.info("Contract {} - New max concurrent employees: {} on day {}", contract.getId(), maxConcurrentEmployees, checkDay);
+                log.info("Contract {} - New max concurrent employees: {} on day {} - Employee IDs: {}", 
+                    contract.getId(), maxConcurrentEmployees, checkDay, activeEmployeeIds);
             }
             currentDay = currentDay.plusDays(1);
         }
@@ -214,23 +233,38 @@ public class InvoiceServiceImpl implements InvoiceService {
             LocalDate fallbackDay = firstDayOfInvoiceMonth;
             while (!fallbackDay.isAfter(lastDayOfInvoiceMonth)) {
                 final LocalDate checkDay = fallbackDay;
-                long concurrentCount = assignments.stream()
-                    .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS ||
-                                 a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.COMPLETED ||
-                                 a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED)
-                    .filter(a -> a.getStartDate() != null)
-                    .filter(a -> {
-                        // Check if assignment was active on checkDay
-                        boolean startedOnOrBefore = !a.getStartDate().isAfter(checkDay);
-                        boolean endedOnOrAfter = a.getEndDate() == null || !a.getEndDate().isBefore(checkDay);
-                        return startedOnOrBefore && endedOnOrAfter;
-                    })
-                    .filter(a -> a.getAssignmentType() != com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT)
-                    .filter(a -> a.getEmployee() != null)
-                    .count();
                 
-                if (concurrentCount > maxConcurrentFallback) {
-                    maxConcurrentFallback = (int) concurrentCount;
+                // Get latest assignment per employee that started on or before checkDay (includes TEMPORARY, excludes SUPPORT)
+                java.util.Map<Long, Assignment> latestAssignmentPerEmployee = new java.util.HashMap<>();
+                for (Assignment a : assignments) {
+                    if (a.getEmployee() == null) continue;
+                    if (a.getStartDate() == null) continue;
+                    if (a.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT) continue;
+                    if (a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS &&
+                        a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.COMPLETED &&
+                        a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED) continue;
+                    
+                    // Only consider assignments that started on or before checkDay
+                    if (a.getStartDate().isAfter(checkDay)) continue;
+                    
+                    Long empId = a.getEmployee().getId();
+                    Assignment existing = latestAssignmentPerEmployee.get(empId);
+                    if (existing == null || a.getStartDate().isAfter(existing.getStartDate())) {
+                        latestAssignmentPerEmployee.put(empId, a);
+                    }
+                }
+                
+                // Filter those latest assignments to see which are active on checkDay
+                int activeCount = 0;
+                for (Assignment a : latestAssignmentPerEmployee.values()) {
+                    boolean endedOnOrAfter = a.getEndDate() == null || a.getEndDate().isAfter(checkDay);
+                    if (endedOnOrAfter) {
+                        activeCount++;
+                    }
+                }
+                
+                if (activeCount > maxConcurrentFallback) {
+                    maxConcurrentFallback = activeCount;
                 }
                 fallbackDay = fallbackDay.plusDays(1);
             }
