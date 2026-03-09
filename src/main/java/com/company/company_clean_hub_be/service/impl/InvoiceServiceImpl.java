@@ -101,6 +101,8 @@ public class InvoiceServiceImpl implements InvoiceService {
             .subtotal(BigDecimal.ZERO)
             .vatPercentage(null)
             .vatAmount(BigDecimal.ZERO)
+            .penalty(request.getPenalty())
+            .penaltyReason(request.getPenaltyReason())
             .totalAmount(BigDecimal.ZERO)
             .invoiceType(contract.getContractType())
             .notes(request.getNotes())
@@ -460,7 +462,14 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         invoice.setSubtotal(subtotal);
         invoice.setVatAmount(totalVat);
-        invoice.setTotalAmount(subtotal.add(totalVat));
+        
+        // Tính tổng hóa đơn và trừ tiền phạt nếu có
+        BigDecimal invoiceTotal = subtotal.add(totalVat);
+        if (request.getPenalty() != null && request.getPenalty().compareTo(BigDecimal.ZERO) > 0) {
+            invoiceTotal = invoiceTotal.subtract(request.getPenalty());
+            log.info("Applied penalty {} to invoice, total: {} -> {}", request.getPenalty(), subtotal.add(totalVat), invoiceTotal);
+        }
+        invoice.setTotalAmount(invoiceTotal);
         invoice = invoiceRepository.save(invoice);
 
         log.info("Created invoice {} for contract {} - Month {}/{} by {} with {} lines", 
@@ -801,6 +810,8 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .subtotal(invoice.getSubtotal())
                 .vatPercentage(invoice.getVatPercentage())
                 .vatAmount(invoice.getVatAmount())
+                .penalty(invoice.getPenalty())
+                .penaltyReason(invoice.getPenaltyReason())
                 .totalAmount(invoice.getTotalAmount())
             .invoiceLines(lineResponses)
                 .invoiceType(invoice.getInvoiceType())
