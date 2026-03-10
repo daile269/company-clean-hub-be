@@ -1145,9 +1145,36 @@ public class AssignmentServiceImpl implements AssignmentService {
                 for (Contract contract : pagedContracts) {
                         List<Assignment> contractAssignments = assignmentsByContract.getOrDefault(contract.getId(),
                                         new ArrayList<>());
-                        List<AssignmentResponse> assignmentResponses = contractAssignments.stream()
+                        List<AssignmentResponse> rawResponses = contractAssignments.stream()
                                         .map(this::mapToResponse)
                                         .collect(Collectors.toList());
+
+                        java.util.Map<String, AssignmentResponse> grouped = new java.util.LinkedHashMap<>();
+                        for (AssignmentResponse res : rawResponses) {
+                                String key = String.format("%d_%s_%s_%s",
+                                                res.getEmployeeId(),
+                                                res.getSalaryAtTime() != null ? res.getSalaryAtTime().toString() : "null",
+                                                res.getAssignmentType() != null ? res.getAssignmentType() : "null",
+                                                res.getStatus() != null ? res.getStatus().name() : "null");
+
+                                if (grouped.containsKey(key)) {
+                                        AssignmentResponse existing = grouped.get(key);
+                                        existing.setWorkDays((existing.getWorkDays() == null ? 0 : existing.getWorkDays())
+                                                        + (res.getWorkDays() == null ? 0 : res.getWorkDays()));
+                                        existing.setPlannedDays((existing.getPlannedDays() == null ? 0 : existing.getPlannedDays())
+                                                        + (res.getPlannedDays() == null ? 0 : res.getPlannedDays()));
+                                        if (res.getStartDate() != null) {
+                                                if (existing.getStartDate() == null || res.getStartDate().isBefore(existing.getStartDate())) {
+                                                        existing.setStartDate(res.getStartDate());
+                                                }
+                                        }
+                                } else {
+                                        if (res.getWorkDays() == null) res.setWorkDays(0);
+                                        if (res.getPlannedDays() == null) res.setPlannedDays(0);
+                                        grouped.put(key, res);
+                                }
+                        }
+                        List<AssignmentResponse> assignmentResponses = new java.util.ArrayList<>(grouped.values());
 
                         result.add(new com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse(
                                         contract.getId(),
