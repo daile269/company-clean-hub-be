@@ -6,7 +6,6 @@ import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.dto.response.ServiceResponse;
 import com.company.company_clean_hub_be.entity.Assignment;
 import com.company.company_clean_hub_be.entity.Contract;
-import com.company.company_clean_hub_be.entity.ContractType;
 import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.ServiceEntity;
 import com.company.company_clean_hub_be.exception.AppException;
@@ -106,6 +105,13 @@ public class ContractServiceImpl implements ContractService {
                         services.add(service);
                 }
 
+                // Validate khung giờ
+                if (request.getWorkStartTime() != null && request.getWorkEndTime() != null) {
+                        if (!request.getWorkStartTime().isBefore(request.getWorkEndTime())) {
+                                throw new AppException(ErrorCode.INVALID_WORK_TIME_RANGE);
+                        }
+                }
+
                 Contract contract = Contract.builder()
                                 .customer(customer)
                                 .services(services)
@@ -115,6 +121,9 @@ public class ContractServiceImpl implements ContractService {
                                 .contractType(request.getContractType())
                                 .paymentStatus(request.getPaymentStatus())
                                 .description(request.getDescription())
+                                .numberOfEmployees(request.getNumberOfEmployees())
+                                .workStartTime(request.getWorkStartTime())
+                                .workEndTime(request.getWorkEndTime())
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
                                 .build();
@@ -151,6 +160,15 @@ public class ContractServiceImpl implements ContractService {
                 contract.setContractType(request.getContractType());
                 contract.setPaymentStatus(request.getPaymentStatus());
                 contract.setDescription(request.getDescription());
+                contract.setNumberOfEmployees(request.getNumberOfEmployees());
+                // Validate khung giờ
+                if (request.getWorkStartTime() != null && request.getWorkEndTime() != null) {
+                        if (!request.getWorkStartTime().isBefore(request.getWorkEndTime())) {
+                                throw new AppException(ErrorCode.INVALID_WORK_TIME_RANGE);
+                        }
+                }
+                contract.setWorkStartTime(request.getWorkStartTime());
+                contract.setWorkEndTime(request.getWorkEndTime());
                 contract.setUpdatedAt(LocalDateTime.now());
 
                 Contract updatedContract = contractRepository.save(contract);
@@ -367,6 +385,9 @@ public class ContractServiceImpl implements ContractService {
                                 .contractType(contract.getContractType())
                                 .paymentStatus(contract.getPaymentStatus())
                                 .description(contract.getDescription())
+                                .numberOfEmployees(contract.getNumberOfEmployees())
+                                .workStartTime(contract.getWorkStartTime())
+                                .workEndTime(contract.getWorkEndTime())
                                 .createdAt(contract.getCreatedAt())
                                 .updatedAt(contract.getUpdatedAt())
                                 .build();

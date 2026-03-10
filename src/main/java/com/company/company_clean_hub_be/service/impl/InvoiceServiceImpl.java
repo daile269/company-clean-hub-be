@@ -11,7 +11,6 @@ import com.company.company_clean_hub_be.repository.ContractRepository;
 import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.InvoiceRepository;
 import com.company.company_clean_hub_be.repository.InvoiceLineRepository;
-import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.AttendanceRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.service.InvoiceService;
@@ -53,7 +52,6 @@ public class InvoiceServiceImpl implements InvoiceService {
     InvoiceLineRepository invoiceLineRepository;
     ContractRepository contractRepository;
     CustomerRepository customerRepository;
-    AssignmentRepository assignmentRepository;
     AttendanceRepository attendanceRepository;
     UserRepository userRepository;
 
@@ -101,6 +99,8 @@ public class InvoiceServiceImpl implements InvoiceService {
             .subtotal(BigDecimal.ZERO)
             .vatPercentage(null)
             .vatAmount(BigDecimal.ZERO)
+            .penalty(request.getPenalty())
+            .penaltyReason(request.getPenaltyReason())
             .totalAmount(BigDecimal.ZERO)
             .invoiceType(contract.getContractType())
             .notes(request.getNotes())
@@ -155,125 +155,10 @@ public class InvoiceServiceImpl implements InvoiceService {
         Long attendancesCountLong = attendanceRepository.countAttendancesByContractAndMonthYearExcludingAssignmentType(contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT);
         int attendancesCount = attendancesCountLong != null ? attendancesCountLong.intValue() : 0;
 
-        // Compute number of primary assigned employees for the contract in the month.
-        // Exclude SUPPORT and TEMPORARY from primary count so short-term replacements don't increase the divisor.
-        YearMonth invoiceYearMonth = YearMonth.of(request.getInvoiceYear(), request.getInvoiceMonth());
-        LocalDate firstDayOfInvoiceMonth = invoiceYearMonth.atDay(1);
-        LocalDate lastDayOfInvoiceMonth = invoiceYearMonth.atEndOfMonth();
-        
-        List<Assignment> assignments = assignmentRepository.findByContractId(contract.getId());
-        log.info("Contract {} - Total assignments found: {}", contract.getId(), assignments.size());
-        
-        // Log assignment details for debugging
-        for (Assignment a : assignments) {
-            log.info("  Assignment {}: employee={}, type={}, status={}, startDate={}, endDate={}",
-                a.getId(),
-                a.getEmployee() != null ? a.getEmployee().getId() : "null",
-                a.getAssignmentType(),
-                a.getStatus(),
-                a.getStartDate(),
-                a.getEndDate());
-        }
-        
-        // Calculate max concurrent employees during the invoice month
-        // Count distinct employees (not assignments) working on any single day
-        int maxConcurrentEmployees = 0;
-        LocalDate currentDay = firstDayOfInvoiceMonth;
-        while (!currentDay.isAfter(lastDayOfInvoiceMonth)) {
-            final LocalDate checkDay = currentDay;
-            
-            // For each employee, get the latest assignment that started on or before checkDay
-            java.util.Map<Long, Assignment> latestAssignmentPerEmployee = new java.util.HashMap<>();
-            for (Assignment a : assignments) {
-                if (a.getEmployee() == null) continue;
-                if (a.getStartDate() == null) continue;
-                if (a.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT) continue;
-                if (a.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.TEMPORARY) continue;
-                if (a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS &&
-                    a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.COMPLETED &&
-                    a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED) continue;
-                
-                // Only consider assignments that started on or before checkDay
-                if (a.getStartDate().isAfter(checkDay)) continue;
-                
-                Long empId = a.getEmployee().getId();
-                Assignment existing = latestAssignmentPerEmployee.get(empId);
-                if (existing == null || a.getStartDate().isAfter(existing.getStartDate())) {
-                    latestAssignmentPerEmployee.put(empId, a);
-                }
-            }
-            
-            // Then check which of those latest assignments are active on checkDay
-            List<Long> activeEmployeeIds = new ArrayList<>();
-            for (java.util.Map.Entry<Long, Assignment> entry : latestAssignmentPerEmployee.entrySet()) {
-                Assignment a = entry.getValue();
-                boolean endedOnOrAfter = a.getEndDate() == null || a.getEndDate().isAfter(checkDay);
-                if (endedOnOrAfter) {
-                    activeEmployeeIds.add(entry.getKey());
-                }
-            }
-            
-            long concurrentCount = activeEmployeeIds.size();
-            
-            if (concurrentCount > maxConcurrentEmployees) {
-                maxConcurrentEmployees = (int) concurrentCount;
-                log.info("Contract {} - New max concurrent employees: {} on day {} - Employee IDs: {}", 
-                    contract.getId(), maxConcurrentEmployees, checkDay, activeEmployeeIds);
-            }
-            currentDay = currentDay.plusDays(1);
-        }
-
-        int numEmployees = maxConcurrentEmployees;
-        log.info("Contract {} - Max concurrent primary employees (excluding SUPPORT/TEMPORARY): {}", contract.getId(), numEmployees);
-        
-        // Fallback: if no primary (e.g., only TEMPORARY assignments exist), include TEMPORARY as well (but still exclude SUPPORT)
-        if (numEmployees == 0) {
-            log.info("Contract {} - No primary employees found, applying fallback to include TEMPORARY assignments", contract.getId());
-            int maxConcurrentFallback = 0;
-            LocalDate fallbackDay = firstDayOfInvoiceMonth;
-            while (!fallbackDay.isAfter(lastDayOfInvoiceMonth)) {
-                final LocalDate checkDay = fallbackDay;
-                
-                // Get latest assignment per employee that started on or before checkDay (includes TEMPORARY, excludes SUPPORT)
-                java.util.Map<Long, Assignment> latestAssignmentPerEmployee = new java.util.HashMap<>();
-                for (Assignment a : assignments) {
-                    if (a.getEmployee() == null) continue;
-                    if (a.getStartDate() == null) continue;
-                    if (a.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT) continue;
-                    if (a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS &&
-                        a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.COMPLETED &&
-                        a.getStatus() != com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED) continue;
-                    
-                    // Only consider assignments that started on or before checkDay
-                    if (a.getStartDate().isAfter(checkDay)) continue;
-                    
-                    Long empId = a.getEmployee().getId();
-                    Assignment existing = latestAssignmentPerEmployee.get(empId);
-                    if (existing == null || a.getStartDate().isAfter(existing.getStartDate())) {
-                        latestAssignmentPerEmployee.put(empId, a);
-                    }
-                }
-                
-                // Filter those latest assignments to see which are active on checkDay
-                int activeCount = 0;
-                for (Assignment a : latestAssignmentPerEmployee.values()) {
-                    boolean endedOnOrAfter = a.getEndDate() == null || a.getEndDate().isAfter(checkDay);
-                    if (endedOnOrAfter) {
-                        activeCount++;
-                    }
-                }
-                
-                if (activeCount > maxConcurrentFallback) {
-                    maxConcurrentFallback = activeCount;
-                }
-                fallbackDay = fallbackDay.plusDays(1);
-            }
-            numEmployees = maxConcurrentFallback;
-            log.info("Contract {} - Fallback max concurrent employees (excluding only SUPPORT): {}", contract.getId(), numEmployees);
-        }
-        
-        log.info("Contract {} - Final employee count for invoice {}/{}: {} (attendances: {}, contractDays: {})",
-            contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), numEmployees, attendancesCount, contractDays);
+        // Lấy số lượng nhân viên phụ trách từ hợp đồng
+        int numEmployees = contract.getNumberOfEmployees() != null ? contract.getNumberOfEmployees() : 0;
+        log.info("Contract {} - numberOfEmployees from contract: {} (attendances: {}, contractDays: {})",
+            contract.getId(), numEmployees, attendancesCount, contractDays);
 
         if (totalContractPrice.compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("Contract {} totalContractPrice is zero for month {}/{}", contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear());
@@ -460,7 +345,14 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         invoice.setSubtotal(subtotal);
         invoice.setVatAmount(totalVat);
-        invoice.setTotalAmount(subtotal.add(totalVat));
+        
+        // Tính tổng hóa đơn và trừ tiền phạt nếu có
+        BigDecimal invoiceTotal = subtotal.add(totalVat);
+        if (request.getPenalty() != null && request.getPenalty().compareTo(BigDecimal.ZERO) > 0) {
+            invoiceTotal = invoiceTotal.subtract(request.getPenalty());
+            log.info("Applied penalty {} to invoice, total: {} -> {}", request.getPenalty(), subtotal.add(totalVat), invoiceTotal);
+        }
+        invoice.setTotalAmount(invoiceTotal);
         invoice = invoiceRepository.save(invoice);
 
         log.info("Created invoice {} for contract {} - Month {}/{} by {} with {} lines", 
@@ -801,6 +693,8 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .subtotal(invoice.getSubtotal())
                 .vatPercentage(invoice.getVatPercentage())
                 .vatAmount(invoice.getVatAmount())
+                .penalty(invoice.getPenalty())
+                .penaltyReason(invoice.getPenaltyReason())
                 .totalAmount(invoice.getTotalAmount())
             .invoiceLines(lineResponses)
                 .invoiceType(invoice.getInvoiceType())

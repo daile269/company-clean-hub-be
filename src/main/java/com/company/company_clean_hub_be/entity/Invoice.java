@@ -62,7 +62,15 @@ public class Invoice {
     @Column(precision = 15, scale = 2)
     BigDecimal vatAmount;
 
-    // Tổng tiền sau VAT
+    // Tiền phạt (sẽ trừ vào tổng hóa đơn)
+    @Column(precision = 15, scale = 2)
+    BigDecimal penalty;
+
+    // Lý do khấu trừ/phạt
+    @Column(length = 500)
+    String penaltyReason;
+
+    // Tổng tiền sau VAT (đã trừ tiền phạt nếu có)
     @Column(nullable = false, precision = 15, scale = 2)
     BigDecimal totalAmount;
 

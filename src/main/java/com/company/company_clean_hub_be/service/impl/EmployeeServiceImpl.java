@@ -40,6 +40,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         private final RoleRepository roleRepository;
         private final PasswordEncoder passwordEncoder;
         private final UserRepository userRepository;
+        private final com.company.company_clean_hub_be.service.NotificationService notificationService;
 
         @Override
         public String generateEmployeeCode(EmploymentType employmentType) {
@@ -68,7 +69,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                         generatedCode = prefix + String.format("%06d", nextNumber);
                         attempts++;
                         if (attempts >= MAX_ATTEMPTS) {
-                                log.error("Failed to generate unique employee code for prefix {} after {} attempts", prefix,
+                                log.error("Failed to generate unique employee code for prefix {} after {} attempts",
+                                                prefix,
                                                 MAX_ATTEMPTS);
                                 throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
                         }
@@ -181,6 +183,40 @@ public class EmployeeServiceImpl implements EmployeeService {
 
                 Employee savedEmployee = employeeRepository.save(employee);
                 log.info("createEmployee completed by {}: employeeId={}", username, savedEmployee.getId());
+
+                // Gửi notification cho Quản lý tổng (QLT1)
+                try {
+                        java.util.List<User> managers = userRepository.findActiveUsersByRoleCode("QLT1");
+                        log.info("[NOTIFY][NEW_EMPLOYEE] Found {} manager(s) with role QLT1 to notify",
+                                        managers.size());
+                        if (managers.isEmpty()) {
+                                log.warn("[NOTIFY][NEW_EMPLOYEE] No QLT1 managers found — notification will NOT be sent for employeeId={}",
+                                                savedEmployee.getId());
+                        }
+                        String createdTime = LocalDateTime.now()
+                                        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+                        for (User manager : managers) {
+                                log.info("[NOTIFY][NEW_EMPLOYEE] Sending to userId={} ({})",
+                                                manager.getId(), manager.getUsername());
+                                notificationService.createNotification(
+                                                manager,
+                                                com.company.company_clean_hub_be.entity.NotificationType.NEW_EMPLOYEE_CREATED,
+                                                "[NV MOI] Nhân viên mới được thêm vào hệ thống",
+                                                String.format("Nhân viên %s (%s) vừa được thêm bởi %s vào lúc %s.",
+                                                                savedEmployee.getName(),
+                                                                savedEmployee.getEmployeeCode(),
+                                                                username,
+                                                                createdTime),
+                                                savedEmployee.getId(),
+                                                null,
+                                                null);
+                                log.info("[NOTIFY][NEW_EMPLOYEE] ✅ Sent successfully to userId={}", manager.getId());
+                        }
+                } catch (Exception e) {
+                        log.warn("[NOTIFY][NEW_EMPLOYEE] ❌ Failed for employeeId={}: {}",
+                                        savedEmployee.getId(), e.getMessage(), e);
+                }
+
                 return mapToResponse(savedEmployee);
         }
 

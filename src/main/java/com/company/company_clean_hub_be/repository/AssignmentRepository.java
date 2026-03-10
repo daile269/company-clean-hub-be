@@ -205,4 +205,29 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
                     @Param("endDate") LocalDate endDate,
                     @Param("status") AssignmentStatus status
             );
+
+            // Tìm assignment có contract giao thời gian (overlap) với nhân viên vào ngày cụ thể
+            @Query("""
+                SELECT a FROM Assignment a
+                JOIN a.contract c
+                WHERE a.employee.id = :employeeId
+                AND (:excludeId IS NULL OR a.id <> :excludeId)
+                AND a.status IN (
+                    com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS,
+                    com.company.company_clean_hub_be.entity.AssignmentStatus.SCHEDULED
+                )
+                AND a.startDate <= :checkDate
+                AND (a.endDate IS NULL OR a.endDate >= :checkDate)
+                AND c.workStartTime IS NOT NULL
+                AND c.workEndTime IS NOT NULL
+                AND c.workStartTime < :endTime
+                AND c.workEndTime > :startTime
+            """)
+            List<Assignment> findAssignmentsWithTimeConflict(
+                    @Param("employeeId") Long employeeId,
+                    @Param("checkDate") LocalDate checkDate,
+                    @Param("startTime") java.time.LocalTime startTime,
+                    @Param("endTime") java.time.LocalTime endTime,
+                    @Param("excludeId") Long excludeId
+            );
 }
