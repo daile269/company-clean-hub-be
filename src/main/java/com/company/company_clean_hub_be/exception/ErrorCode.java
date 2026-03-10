@@ -64,7 +64,9 @@ public enum ErrorCode {
     UNAUTHENTICATED(403, "Không có quyền truy cập"),
     
     INVALID_ASSIGNMENT_STATUS(400, "Trạng thái phân công không hợp lệ cho thao tác này, hoặc phân công đã được hủy trước đó"),
-    INVALID_REQUEST(400, "Yêu cầu không hợp lệ");
+    INVALID_REQUEST(400, "Yêu cầu không hợp lệ"),
+    INVALID_WORK_TIME_RANGE(400, "Giờ bắt đầu phải nhỏ hơn giờ kết thúc"),
+    NOTIFICATION_NOT_FOUND(404, "Thông báo không tồn tại");
 
     private final int code;
     private final String message;

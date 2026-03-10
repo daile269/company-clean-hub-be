@@ -28,6 +28,9 @@ public class ContractResponse {
     private ContractType contractType;
     private String paymentStatus;
     private String description;
+    private Integer numberOfEmployees;
+    private java.time.LocalTime workStartTime;
+    private java.time.LocalTime workEndTime;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
