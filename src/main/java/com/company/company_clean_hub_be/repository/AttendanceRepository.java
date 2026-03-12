@@ -32,6 +32,11 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                         @Param("employeeId") Long employeeId,
                         @Param("date") LocalDate date);
 
+        @Query("SELECT a FROM Attendance a WHERE a.employee.id = :employeeId AND a.date = :date AND (a.deleted IS NULL OR a.deleted = false) AND (a.imageUrl IS NULL OR a.imageUrl = '')")
+        List<Attendance> findByEmployeeIdAndDateAndImageUrlIsNull(
+                        @Param("employeeId") Long employeeId,
+                        @Param("date") LocalDate date);
+
         @Query("SELECT a FROM Attendance a WHERE a.assignment.id = :assignmentId AND a.assignment.employee.id = :employeeId AND a.date = :date AND (a.deleted IS NULL OR a.deleted = false)")
         Optional<Attendance> findByAssignmentAndEmployeeAndDate(
                         @Param("assignmentId") Long assignmentId,

@@ -202,6 +202,16 @@ public class AssignmentController {
                 HttpStatus.OK.value());
     }
 
+    @GetMapping("/employee/{employeeId}/today-capture")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW') or @securityCheck.isEmployeeSelf(#employeeId)")
+    public ApiResponse<List<AssignmentResponse>> getTodayAssignmentsForCapture(@PathVariable Long employeeId) {
+        List<AssignmentResponse> assignments = assignmentService.getTodayAssignmentsForCapture(employeeId);
+        return ApiResponse.success(
+                "Lấy danh sách phân công cần chụp ảnh hôm nay thành công",
+                assignments,
+                HttpStatus.OK.value());
+    }
+
     @GetMapping("/assignments/{employeeId}/{month}/" +
             "{year}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")

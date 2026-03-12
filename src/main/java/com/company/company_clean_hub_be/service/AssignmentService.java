@@ -50,6 +50,7 @@ public interface AssignmentService {
     PageResponse<com.company.company_clean_hub_be.dto.response.EmployeeResponse> getEmployeesNotAssignedToCustomer(
             Long customerId, com.company.company_clean_hub_be.entity.EmploymentType employmentType, Integer month, Integer year, int page, int pageSize);
     List<AssignmentResponse> getAssignmentsByEmployee(Long employeeId);
+    List<AssignmentResponse> getTodayAssignmentsForCapture(Long employeeId);
 
         PageResponse<AssignmentResponse> getAssignmentsByContract(Long contractId, com.company.company_clean_hub_be.entity.AssignmentStatus status, Integer month, Integer year, int page, int pageSize);
 

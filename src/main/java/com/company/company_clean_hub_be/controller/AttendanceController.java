@@ -1,5 +1,7 @@
 package com.company.company_clean_hub_be.controller;
 
+import com.company.company_clean_hub_be.dto.request.AttendanceCaptureRequest;
+import com.company.company_clean_hub_be.dto.request.AttendanceDeleteRequest;
 import com.company.company_clean_hub_be.dto.request.AttendanceRequest;
 import com.company.company_clean_hub_be.dto.request.AutoAttendanceRequest;
 import com.company.company_clean_hub_be.dto.request.TemporaryAssignmentRequest;
@@ -78,6 +80,12 @@ public class AttendanceController {
             @Valid @RequestBody AttendanceRequest request) {
         AttendanceResponse attendance = attendanceService.updateAttendance(id, request);
         return ApiResponse.success("Cập nhật chấm công thành công", attendance, HttpStatus.OK.value());
+    }
+
+    @PutMapping("/capture")
+    public ApiResponse<AttendanceResponse> captureAttendance(@Valid @RequestBody AttendanceCaptureRequest request) throws java.io.IOException {
+        AttendanceResponse attendance = attendanceService.captureAttendance(request);
+        return ApiResponse.success("Chụp ảnh chấm công thành công", attendance, HttpStatus.OK.value());
     }
 
     @DeleteMapping("/{id}")

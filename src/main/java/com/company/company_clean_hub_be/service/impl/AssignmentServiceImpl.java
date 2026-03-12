@@ -1164,6 +1164,24 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
 
         @Override
+        public List<AssignmentResponse> getTodayAssignmentsForCapture(Long employeeId) {
+                // validate employee exists
+                employeeRepository.findById(employeeId)
+                                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+                LocalDate today = LocalDate.now();
+                // Tìm các attendance của nhân viên trong ngày hôm nay mà chưa có ảnh chụp
+                List<Attendance> attendances = attendanceRepository.findByEmployeeIdAndDateAndImageUrlIsNull(employeeId, today);
+
+                return attendances.stream()
+                                .filter(att -> att.getAssignment() != null && 
+                                               (att.getAssignment().getStatus() == AssignmentStatus.IN_PROGRESS || 
+                                                att.getAssignment().getStatus() == AssignmentStatus.SCHEDULED))
+                                .map(att -> mapToResponse(att.getAssignment()))
+                                .collect(Collectors.toList());
+        }
+
+        @Override
         public PageResponse<AssignmentResponse> getAssignmentsByContract(Long contractId,
                         com.company.company_clean_hub_be.entity.AssignmentStatus status, Integer month, Integer year,
                         int page, int pageSize) {
