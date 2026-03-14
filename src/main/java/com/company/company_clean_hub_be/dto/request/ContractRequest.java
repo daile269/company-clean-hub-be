@@ -46,4 +46,11 @@ public class ContractRequest {
     private String description;
 
     private Boolean requiresImageVerification;
+
+    @jakarta.validation.constraints.Min(value = 1, message = "Số lượng nhân viên phải lớn hơn 0")
+    private Integer numberOfEmployees;
+
+    private java.time.LocalTime workStartTime;
+
+    private java.time.LocalTime workEndTime;
 }

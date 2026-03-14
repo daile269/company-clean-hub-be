@@ -169,7 +169,7 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     public PageResponse<CustomerResponse> getCustomersWithFilter(String keyword, int page, int pageSize) {
-        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("customerCode").descending());
         Page<Customer> customerPage = customerRepository.findByFilters(keyword, pageable);
 
         List<CustomerResponse> customers = customerPage.getContent().stream()

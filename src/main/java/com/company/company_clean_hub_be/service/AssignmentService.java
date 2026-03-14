@@ -34,6 +34,7 @@ public interface AssignmentService {
     );
     PageResponse<com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse> getAssignmentsByCustomerGroupedByContract(
             Long customerId,
+            String keyword,
             Long contractId,
             com.company.company_clean_hub_be.entity.ContractType contractType,
             com.company.company_clean_hub_be.entity.AssignmentStatus status,
@@ -62,6 +63,8 @@ public interface AssignmentService {
             PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> getReassignmentHistoryByCustomerId(
                     Long customerId,
                     Long contractId,
+                    Integer month,
+                    Integer year,
                     int page,
                     int pageSize
             );

@@ -3,6 +3,7 @@ package com.company.company_clean_hub_be.dto.request;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 @Data
@@ -14,6 +15,8 @@ public class InvoiceCreationRequest {
     Long contractId;
     Integer invoiceMonth;  // 1-12
     Integer invoiceYear;   // Ví dụ: 2025
+    BigDecimal penalty;    // Tiền phạt (optional)
+    String penaltyReason;  // Lý do khấu trừ (optional)
     String notes;
 
     // Cho bulk creation by customer

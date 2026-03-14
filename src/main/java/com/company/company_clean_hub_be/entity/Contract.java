@@ -4,6 +4,7 @@
     import java.time.DayOfWeek;
     import java.time.LocalDate;
     import java.time.LocalDateTime;
+    import java.time.LocalTime;
     import java.util.HashSet;
     import java.util.List;
     import java.util.Set;
@@ -96,6 +97,15 @@
         private Boolean requiresImageVerification = false;
         
         private String description;
+
+        @Column(name = "number_of_employees")
+        private Integer numberOfEmployees;
+
+        @Column(name = "work_start_time")
+        private LocalTime workStartTime;
+
+        @Column(name = "work_end_time")
+        private LocalTime workEndTime;
 
         @Column(name = "created_at")
         private LocalDateTime createdAt;

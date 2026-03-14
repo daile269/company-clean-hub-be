@@ -155,6 +155,7 @@ public class AssignmentController {
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse>> getAssignmentsByCustomerGroupedByContract(
             @PathVariable Long customerId,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long contractId,
             @RequestParam(required = false) com.company.company_clean_hub_be.entity.ContractType contractType,
             @RequestParam(required = false) com.company.company_clean_hub_be.entity.AssignmentStatus status,
@@ -164,7 +165,7 @@ public class AssignmentController {
             @RequestParam(defaultValue = "10") int pageSize) {
         PageResponse<com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse> assignments = assignmentService
                 .getAssignmentsByCustomerGroupedByContract(
-                        customerId, contractId, contractType, status, month, year, page, pageSize);
+                        customerId, keyword, contractId, contractType, status, month, year, page, pageSize);
         return ApiResponse.success(
                 "Lấy danh sách phân công theo hợp đồng thành công",
                 assignments,
@@ -329,10 +330,12 @@ public class AssignmentController {
     public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse>> getReassignmentHistoryByCustomerId(
             @PathVariable Long customerId,
             @RequestParam(required = false) Long contractId,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         PageResponse<com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse> history = assignmentService
-                .getReassignmentHistoryByCustomerId(customerId, contractId, page, pageSize);
+                .getReassignmentHistoryByCustomerId(customerId, contractId, month, year, page, pageSize);
         return ApiResponse.success(
                 "Lấy lịch sử điều động theo khách hàng thành công",
                 history,

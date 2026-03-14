@@ -81,7 +81,11 @@ public enum Permission {
     INVOICE_EXPORT("Xuất Excel hóa đơn"),
 
     // Audit
-    AUDIT_VIEW("Xem lịch sử thay đổi");
+    AUDIT_VIEW("Xem lịch sử thay đổi"),
+
+    // Notification
+    NOTIFICATION_VIEW("Xem thông báo của bản thân"),
+    NOTIFICATION_MANAGE("Quản lý thông báo (xem tất cả, xóa)");
     
     private final String description;
     

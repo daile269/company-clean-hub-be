@@ -30,6 +30,8 @@ public class InvoiceResponse {
     BigDecimal subtotal;
     BigDecimal vatPercentage;
     BigDecimal vatAmount;
+    BigDecimal penalty;
+    String penaltyReason;
     BigDecimal totalAmount;
     ContractType invoiceType;
     List<InvoiceLineResponse> invoiceLines;
