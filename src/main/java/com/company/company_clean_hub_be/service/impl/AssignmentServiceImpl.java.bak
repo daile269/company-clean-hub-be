@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
+import com.company.company_clean_hub_be.service.VerificationService;
 
 @Service
 @RequiredArgsConstructor
@@ -43,9 +44,12 @@ public class AssignmentServiceImpl implements AssignmentService {
         private final com.company.company_clean_hub_be.repository.DeletedAttendanceBackupRepository deletedAttendanceBackupRepository;
         private final com.company.company_clean_hub_be.repository.PayrollRepository payrollRepository;
         private final com.company.company_clean_hub_be.repository.PaymentHistoryRepository paymentHistoryRepository;
-        private final com.company.company_clean_hub_be.service.NotificationService notificationService;
+
         private final com.company.company_clean_hub_be.service.VerificationService verificationService;
         private final com.company.company_clean_hub_be.repository.AssignmentVerificationRepository verificationRepository;
+
+        private final com.company.company_clean_hub_be.service.NotificationService notificationService;
+
 
         @Override
         public List<AssignmentResponse> getAllAssignments() {
@@ -200,29 +204,60 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 Assignment savedAssignment = assignmentRepository.save(assignment);
 
-                log.info("[DEBUG] Assignment saved: id={}, employee={}, contract={}, status={}, startDate={}",
-                                savedAssignment.getId(),
-                                savedAssignment.getEmployee().getId(),
-                                savedAssignment.getContract() != null ? savedAssignment.getContract().getId() : null,
-                                finalStatus,
-                                request.getStartDate());
+                // Tự động tạo chấm công cho cả SCHEDULED và IN_PROGRESS
+                // Cron sau này chỉ chuyển status, không tạo attendance nữa
+                if (AssignmentStatus.IN_PROGRESS.equals(finalStatus)
+                                || AssignmentStatus.SCHEDULED.equals(finalStatus)) {
+                        // Nếu là SUPPORT: tạo chấm công theo danh sách ngày được gửi trong request
+                        if (assignmentTypeParsed == AssignmentType.SUPPORT) {
+                                List<java.time.LocalDate> requestedDates = request.getDates();
+                                if (requestedDates != null && !requestedDates.isEmpty()) {
+                                        List<Attendance> toSave = new ArrayList<>();
+                                        for (java.time.LocalDate d : requestedDates) {
+                                                boolean alreadyExists = attendanceRepository
+                                                                .findByAssignmentAndEmployeeAndDate(
+                                                                                savedAssignment.getId(),
+                                                                                savedAssignment.getEmployee().getId(),
+                                                                                d)
+                                                                .isPresent();
+                                                if (!alreadyExists) {
+                                                        Attendance att = Attendance.builder()
+                                                                        .employee(savedAssignment.getEmployee())
+                                                                        .assignment(savedAssignment)
+                                                                        .date(d)
+                                                                        .workHours(java.math.BigDecimal.valueOf(8))
+                                                                        .deleted(false)
+                                                                        .bonus(java.math.BigDecimal.ZERO)
+                                                                        .penalty(java.math.BigDecimal.ZERO)
+                                                                        .supportCost(java.math.BigDecimal.ZERO)
+                                                                        .isOvertime(false)
+                                                                        .overtimeAmount(java.math.BigDecimal.ZERO)
+                                                                        .description(request.getDescription() != null
+                                                                                        ? request.getDescription()
+                                                                                        : "Tự động tạo từ phân công (SUPPORT)")
+                                                                        .createdAt(LocalDateTime.now())
+                                                                        .updatedAt(LocalDateTime.now())
+                                                                        .build();
+                                                        toSave.add(att);
+                                                }
+                                        }
 
                 // CRITICAL FIX: Kiểm tra verification TRƯỚC khi sinh attendance
                 boolean requiresVerification = false;
                 String verificationReason = null;
                 log.info("[DEBUG] ===== STARTING VERIFICATION CHECK =====");
-                log.info("[DEBUG] Assignment ID: {}, Employee ID: {}, Contract ID: {}",
+                log.info("[DEBUG] Assignment ID: {}, Employee ID: {}, Contract ID: {}", 
                         savedAssignment.getId(),
                         savedAssignment.getEmployee().getId(),
                         savedAssignment.getContract() != null ? savedAssignment.getContract().getId() : "NULL");
-
+                
                 try {
                         log.info("[DEBUG] Calling verificationService.requiresVerification()...");
                         requiresVerification = verificationService.requiresVerification(savedAssignment);
                         log.info("[DEBUG] ===== VERIFICATION CHECK RESULT: {} =====", requiresVerification);
-                        log.info("[DEBUG] Verification check: assignmentId={}, requiresVerification={}",
+                        log.info("[DEBUG] Verification check: assignmentId={}, requiresVerification={}", 
                                 savedAssignment.getId(), requiresVerification);
-
+                        
                         if (requiresVerification) {
                                 boolean isNewEmployee = verificationService.isEmployeeNew(savedAssignment.getEmployee().getId());
                                 verificationReason = isNewEmployee ? "NEW_EMPLOYEE" : "CONTRACT_SETTING";
@@ -237,25 +272,24 @@ public class AssignmentServiceImpl implements AssignmentService {
                 }
 
                 // Tự động tạo chấm công cho cả SCHEDULED và IN_PROGRESS
-                // Cron sau này chỉ chuyển status, không tạo attendance nữa
                 log.info("[DEBUG] ===== ATTENDANCE GENERATION PHASE =====");
-                log.info("[DEBUG] finalStatus={}, IN_PROGRESS={}, SCHEDULED={}",
+                log.info("[DEBUG] finalStatus={}, IN_PROGRESS={}, SCHEDULED={}", 
                         finalStatus, AssignmentStatus.IN_PROGRESS, AssignmentStatus.SCHEDULED);
-
+                
                 if (AssignmentStatus.IN_PROGRESS.equals(finalStatus)
                                 || AssignmentStatus.SCHEDULED.equals(finalStatus)) {
-
+                        
                         log.info("[DEBUG] ===== ENTERING ATTENDANCE GENERATION BLOCK =====");
                         log.info("[DEBUG] Creating attendances: assignmentId={}, requiresVerification={}, assignmentType={}",
                                 savedAssignment.getId(), requiresVerification, assignmentTypeParsed);
-
+                        
                         // Nếu cần verification, chỉ sinh 1 attendance cho ngày đầu tiên
                         if (requiresVerification) {
                                 log.info("[DEBUG] ===== VERIFICATION REQUIRED PATH - Creating only 1 attendance =====");
                                 log.info("[DEBUG] VERIFICATION REQUIRED - Creating only 1 attendance for first working day");
                                 LocalDate firstWorkingDay = findFirstWorkingDay(request.getStartDate(), workingDays);
                                 log.info("[DEBUG] First working day: {}", firstWorkingDay);
-
+                                
                                 if (firstWorkingDay != null) {
                                         boolean alreadyExists = attendanceRepository
                                                         .findByAssignmentAndEmployeeAndDate(
@@ -263,9 +297,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                         savedAssignment.getEmployee().getId(),
                                                                         firstWorkingDay)
                                                         .isPresent();
-
+                                        
                                         log.info("[DEBUG] Attendance already exists for {}: {}", firstWorkingDay, alreadyExists);
-
+                                        
                                         if (!alreadyExists) {
                                                 Attendance att = Attendance.builder()
                                                                 .employee(savedAssignment.getEmployee())
@@ -289,7 +323,6 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 log.info("[DEBUG] Created 1 attendance for first working day: {}", firstWorkingDay);
                                         }
                                 }
-
                                 // Tạo verification requirement
                                 try {
                                         verificationService.createVerificationRequirement(savedAssignment, verificationReason);
@@ -302,7 +335,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 // Không cần verification - sinh toàn bộ attendance như bình thường
                                 log.info("[DEBUG] ===== NO VERIFICATION REQUIRED PATH - Creating all attendances normally =====");
                                 log.info("[DEBUG] NO VERIFICATION REQUIRED - Creating all attendances normally");
-
+                                
                                 // Nếu là SUPPORT: tạo chấm công theo danh sách ngày được gửi trong request
                                 if (assignmentTypeParsed == AssignmentType.SUPPORT) {
                                         log.info("[DEBUG] Assignment type is SUPPORT");
@@ -336,6 +369,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                                 .build();
                                                                 toSave.add(att);
                                                         }
+
                                                 }
 
                                                 if (!toSave.isEmpty()) {
@@ -381,30 +415,25 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                                         nextMonth.getMonthValue());
 
                                                         if (existingMonthAssignment.isEmpty()) {
-                                                        // Tạo assignment mới cho tháng này
-                                                        Assignment monthlyAssignment = Assignment.builder()
-                                                                        .employee(employee)
-                                                                        .contract(contract)
-                                                                        .scope(scope)
-                                                                        .startDate(monthStartDate)
-                                                                        .status(AssignmentStatus.IN_PROGRESS) // Các
-                                                                                                              // tháng
-                                                                                                              // trong
-                                                                                                              // quá khứ
-                                                                                                              // luôn là
-                                                                                                              // IN_PROGRESS
-                                                                        .salaryAtTime(request.getSalaryAtTime())
-                                                                        .workingDaysPerWeek(workingDays != null
-                                                                                        ? new ArrayList<>(workingDays)
-                                                                                        : null)
-                                                                        .additionalAllowance(request
-                                                                                        .getAdditionalAllowance())
-                                                                        .description(request.getDescription())
-                                                                        .assignmentType(assignmentTypeParsed)
-                                                                        .assignedBy(savedAssignment.getAssignedBy())
-                                                                        .createdAt(LocalDateTime.now())
-                                                                        .updatedAt(LocalDateTime.now())
-                                                                        .build();
+                                                                // Tạo assignment mới cho tháng này
+                                                                Assignment monthlyAssignment = Assignment.builder()
+                                                                                .employee(employee)
+                                                                                .contract(contract)
+                                                                                .scope(scope)
+                                                                                .startDate(monthStartDate)
+                                                                                .status(AssignmentStatus.IN_PROGRESS)
+                                                                                .salaryAtTime(request.getSalaryAtTime())
+                                                                                .workingDaysPerWeek(workingDays != null
+                                                                                                ? new ArrayList<>(workingDays)
+                                                                                                : null)
+                                                                                .additionalAllowance(request
+                                                                                                .getAdditionalAllowance())
+                                                                                .description(request.getDescription())
+                                                                                .assignmentType(assignmentTypeParsed)
+                                                                                .assignedBy(savedAssignment.getAssignedBy())
+                                                                                .createdAt(LocalDateTime.now())
+                                                                                .updatedAt(LocalDateTime.now())
+                                                                                .build();
 
                                                                 Assignment savedMonthlyAssignment = assignmentRepository
                                                                                 .save(monthlyAssignment);
@@ -449,12 +478,6 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 savedAssignment.getId(), e.getMessage());
                         }
                 }
-
-
-                log.info("[DEBUG] ===== createAssignment COMPLETED =====");
-                log.info("[DEBUG] Final result: assignmentId={}, requiresVerification={}, attendancesCreated={}",
-                        savedAssignment.getId(), requiresVerification,
-                        savedAssignment.getWorkDays() != null ? savedAssignment.getWorkDays() : 0);
 
                 return mapToResponse(savedAssignment);
         }
@@ -740,7 +763,8 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                                                 log.debug("Month/Year {}/{} for employeeId={}: remainingAssignments={}, remainingAttendances={}, hasRemainingData={}",
                                                                 month, year, employeeId,
-                                                                remainingAssignments != null ? remainingAssignments.size()
+                                                                remainingAssignments != null
+                                                                                ? remainingAssignments.size()
                                                                                 : 0,
                                                                 remainingAttendances != null
                                                                                 ? remainingAttendances.size()
@@ -1362,52 +1386,52 @@ public class AssignmentServiceImpl implements AssignmentService {
                 // Find today's attendances for the employee
                 List<Attendance> attendances = attendanceRepository.findAllByEmployeeAndDate(employeeId, today);
                 log.info("[DEBUG] getTodayAssignmentsForCapture: Found {} attendances for today", attendances.size());
-
+                
                 List<AssignmentResponse> result = attendances.stream()
                                 .filter(att -> {
                                     if (att.getAssignment() == null) {
                                         log.info("[DEBUG] Filtering: Assignment is null");
                                         return false;
                                     }
-
+                                    
                                     AssignmentStatus status = att.getAssignment().getStatus();
                                     boolean statusOk = status == AssignmentStatus.IN_PROGRESS || status == AssignmentStatus.SCHEDULED;
                                     log.info("[DEBUG] Filtering: Assignment {} status={}, statusOk={}", att.getAssignment().getId(), status, statusOk);
-
+                                    
                                     if (!statusOk) return false;
-
+                                    
                                     // IMPORTANT: Only show assignments that NEED verification (PENDING or IN_PROGRESS)
                                     // This endpoint is for "tasks that need image capture"
                                     Long assignmentId = att.getAssignment().getId();
-                                    java.util.Optional<com.company.company_clean_hub_be.entity.AssignmentVerification> verificationOpt =
+                                    java.util.Optional<com.company.company_clean_hub_be.entity.AssignmentVerification> verificationOpt = 
                                         verificationRepository.findByAssignmentId(assignmentId);
-
+                                    
                                     log.info("[DEBUG] Filtering: Assignment {} - Checking verification in DB", assignmentId);
                                     log.info("[DEBUG] Filtering: Assignment {} - Verification found: {}", assignmentId, verificationOpt.isPresent());
-
+                                    
                                     // Only show if verification exists AND is PENDING or IN_PROGRESS
                                     if (verificationOpt.isPresent()) {
                                         com.company.company_clean_hub_be.entity.AssignmentVerification verification = verificationOpt.get();
                                         com.company.company_clean_hub_be.entity.VerificationStatus verStatus = verification.getStatus();
-
-                                        boolean isPendingOrInProgress = verStatus == com.company.company_clean_hub_be.entity.VerificationStatus.PENDING
+                                        
+                                        boolean isPendingOrInProgress = verStatus == com.company.company_clean_hub_be.entity.VerificationStatus.PENDING 
                                                                      || verStatus == com.company.company_clean_hub_be.entity.VerificationStatus.IN_PROGRESS;
-
-                                        log.info("[DEBUG] Filtering: Assignment {} has verification, status={}, isPendingOrInProgress={}",
+                                        
+                                        log.info("[DEBUG] Filtering: Assignment {} has verification, status={}, isPendingOrInProgress={}", 
                                             assignmentId, verStatus, isPendingOrInProgress);
-
+                                        
                                         // Only show if verification is PENDING or IN_PROGRESS (needs capture)
                                         log.info("[DEBUG] Filtering: Assignment {} verification check result: shouldShow={}", assignmentId, isPendingOrInProgress);
                                         return isPendingOrInProgress;
                                     }
-
+                                    
                                     // No verification required - don't show (this is for capture tasks only)
                                     log.info("[DEBUG] Filtering: Assignment {} no verification required, show=false", assignmentId);
                                     return false;
                                 })
                                 .map(att -> mapToResponse(att.getAssignment()))
                                 .collect(Collectors.toList());
-
+                
                 log.info("[DEBUG] getTodayAssignmentsForCapture: Returning {} assignments after filtering", result.size());
                 return result;
         }
@@ -1664,7 +1688,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         private void autoGenerateAttendancesForAssignment(Assignment assignment, LocalDate startDate) {
                 log.info("[DEBUG] ===== autoGenerateAttendancesForAssignment called =====");
                 log.info("[DEBUG] Assignment ID: {}, Start Date: {}", assignment.getId(), startDate);
-
+                
                 if (assignment.getWorkingDaysPerWeek() == null || assignment.getWorkingDaysPerWeek().isEmpty()) {
                         log.info("[DEBUG] No working days defined, returning");
                         return;
@@ -1762,9 +1786,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                 if (!attendances.isEmpty()) {
                         log.info("[DEBUG] ===== SAVING {} ATTENDANCES =====", attendances.size());
                         log.info("[DEBUG] Attendance details: assignmentId={}, startDate={}, endDate={}",
-                                assignment.getId(), startDate,
+                                assignment.getId(), startDate, 
                                 attendances.get(attendances.size() - 1).getDate());
-
+                        
                         attendanceRepository.saveAll(attendances);
                         log.info("[DEBUG] ===== ATTENDANCES SAVED SUCCESSFULLY =====");
                         log.info("Auto-generated {} attendances for assignmentId={} from {} to {}",
@@ -2299,6 +2323,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 "Đã khôi phục %d attendance và trả assignment về trạng thái IN_PROGRESS",
                                                 restored))
                                 .build();
+
         }
 
         // ───────────────────────────────────────────────────────────────

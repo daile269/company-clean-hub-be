@@ -64,7 +64,27 @@ public enum ErrorCode {
     UNAUTHENTICATED(403, "Không có quyền truy cập"),
     
     INVALID_ASSIGNMENT_STATUS(400, "Trạng thái phân công không hợp lệ cho thao tác này, hoặc phân công đã được hủy trước đó"),
+    INVALID_ATTENDANCE_DATE(400, "Ngày chấm công phải là ngày hôm nay"),
     INVALID_REQUEST(400, "Yêu cầu không hợp lệ"),
+
+    // Verification related errors
+    VERIFICATION_NOT_FOUND(404, "Không tìm thấy yêu cầu xác minh"),
+    VERIFICATION_CAPTURE_NOT_ALLOWED(400, "Không thể chụp ảnh xác minh (đã hoàn thành hoặc hết lượt)"),
+    VERIFICATION_ALREADY_APPROVED(400, "Yêu cầu xác minh đã được duyệt"),
+    VERIFICATION_ALREADY_EXISTS(400, "Yêu cầu xác minh đã tồn tại cho assignment này"),
+
+    // File upload errors
+    FILE_UPLOAD_FAILED(500, "Tải lên file thất bại"),
+    INVALID_IMAGE_FORMAT(400, "Định dạng ảnh không hợp lệ"),
+    IMAGE_TOO_LARGE(400, "Kích thước ảnh quá lớn"),
+
+    // Method deprecated
+    METHOD_DEPRECATED(400, "Phương thức này đã deprecated, vui lòng sử dụng API mới"),
+
+    // Attendance generation errors
+    ATTENDANCE_GENERATION_FAILED(500, "Sinh chấm công thất bại"),
+    ASSIGNMENT_VERIFICATION_REQUIRED(400, "Assignment này yêu cầu xác minh hình ảnh"),
+
     INVALID_WORK_TIME_RANGE(400, "Giờ bắt đầu phải nhỏ hơn giờ kết thúc"),
     NOTIFICATION_NOT_FOUND(404, "Thông báo không tồn tại");
 

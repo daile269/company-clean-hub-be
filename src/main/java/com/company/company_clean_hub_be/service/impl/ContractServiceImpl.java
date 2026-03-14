@@ -124,6 +124,7 @@ public class ContractServiceImpl implements ContractService {
                                 .numberOfEmployees(request.getNumberOfEmployees())
                                 .workStartTime(request.getWorkStartTime())
                                 .workEndTime(request.getWorkEndTime())
+                                .requiresImageVerification(request.getRequiresImageVerification() != null ? request.getRequiresImageVerification() : false)
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
                                 .build();
@@ -160,6 +161,9 @@ public class ContractServiceImpl implements ContractService {
                 contract.setContractType(request.getContractType());
                 contract.setPaymentStatus(request.getPaymentStatus());
                 contract.setDescription(request.getDescription());
+                if (request.getRequiresImageVerification() != null) {
+                        contract.setRequiresImageVerification(request.getRequiresImageVerification());
+                }
                 contract.setNumberOfEmployees(request.getNumberOfEmployees());
                 // Validate khung giờ
                 if (request.getWorkStartTime() != null && request.getWorkEndTime() != null) {

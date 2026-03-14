@@ -17,6 +17,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -91,8 +93,22 @@ public class Attendance {
     @JsonIgnore
     private User approvedBy;
     
-
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignment_verification_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
+    private AssignmentVerification assignmentVerification;
     private String description;
+
+    @Column(name = "deleted", nullable = false)
+    @ColumnDefault("false")
+    @Comment("Soft delete flag")
+    @Builder.Default
+    private Boolean deleted = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -100,11 +116,9 @@ public class Attendance {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Column(name = "deleted", nullable = false)
-    @ColumnDefault("false")
-    @Comment("Soft delete flag")
-    private Boolean deleted = false;
-
-    @Column(name = "deleted_at")
-    private LocalDateTime deletedAt;
+    @OneToOne(mappedBy = "attendance", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @JsonIgnore
+    private Evaluation evaluation;
 }

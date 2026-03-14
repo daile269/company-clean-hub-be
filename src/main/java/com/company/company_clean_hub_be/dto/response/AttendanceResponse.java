@@ -37,6 +37,11 @@ public class AttendanceResponse {
     private Long approvedBy;
     private String approvedByName;
     
+    private String evaluationStatus;
+
+    // Image-related fields removed - now available through VerificationImage
+    // Use VerificationService.getVerificationImages() to get image details
+    
     private String description;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

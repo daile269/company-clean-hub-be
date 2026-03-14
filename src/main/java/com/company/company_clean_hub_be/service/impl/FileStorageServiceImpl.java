@@ -31,6 +31,40 @@ public class FileStorageServiceImpl implements FileStorageService {
         return storeFileToFolder(file, EMPLOYEE_FOLDER);
     }
 
+    @Override
+    public String storeBase64(String base64Content, String fileName, String folder) throws IOException {
+        log.info("Uploading base64 file to Cloudinary: fileName={}, folder={}", fileName, folder);
+        
+        // Remove prefix if it exists (e.g., "data:image/jpeg;base64,")
+        if (base64Content.contains(",")) {
+            base64Content = base64Content.split(",")[1];
+        }
+
+        try {
+            Map<String, Object> uploadResult = cloudinary.uploader().upload(
+                    java.util.Base64.getDecoder().decode(base64Content),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "auto",
+                            "access_mode", "public"
+                    )
+            );
+
+            String publicId = (String) uploadResult.get("public_id");
+            log.info("Base64 file uploaded successfully to Cloudinary: publicId={}", publicId);
+            return publicId;
+        } catch (Exception ex) {
+            log.error("Failed to upload base64 file to Cloudinary: {}", fileName, ex);
+            throw new IOException("Failed to upload base64 file to Cloudinary", ex);
+        }
+    }
+
+    @Override
+    public String getSecureUrl(String publicId) {
+        if (publicId == null || publicId.isEmpty()) return null;
+        return cloudinary.url().secure(true).generate(publicId);
+    }
+
     public String storeFileToFolder(MultipartFile file, String folder) throws IOException {
         String originalFileName = file.getOriginalFilename();
         log.info("Uploading file to Cloudinary: originalName={}, folder={}", originalFileName, folder);

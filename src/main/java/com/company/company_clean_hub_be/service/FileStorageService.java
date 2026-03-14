@@ -7,6 +7,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 public interface FileStorageService {
     String storeFile(MultipartFile file) throws IOException;
+    String storeBase64(String base64Content, String fileName, String folder) throws IOException;
     void deleteFile(String relativePath) throws IOException;
     Resource loadFileAsResource(String relativePath) throws IOException;
+    String getSecureUrl(String publicId);
 }

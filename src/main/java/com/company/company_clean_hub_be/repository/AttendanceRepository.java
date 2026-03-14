@@ -32,6 +32,13 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                         @Param("employeeId") Long employeeId,
                         @Param("date") LocalDate date);
 
+        // DEPRECATED: Image verification now handled by VerificationImage entity
+        // This method is kept for backward compatibility but should not be used
+        @Query("SELECT a FROM Attendance a WHERE a.assignment.employee.id = :employeeId AND a.date = :date AND (a.deleted IS NULL OR a.deleted = false)")
+        List<Attendance> findByEmployeeIdAndDateAndImageUrlIsNull(
+                        @Param("employeeId") Long employeeId,
+                        @Param("date") LocalDate date);
+
         @Query("SELECT a FROM Attendance a WHERE a.assignment.id = :assignmentId AND a.assignment.employee.id = :employeeId AND a.date = :date AND (a.deleted IS NULL OR a.deleted = false)")
         Optional<Attendance> findByAssignmentAndEmployeeAndDate(
                         @Param("assignmentId") Long assignmentId,

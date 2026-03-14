@@ -1386,18 +1386,27 @@ public class PayrollServiceImpl implements PayrollService {
                 log.info("getPayrollsWithFilter requested: keyword='{}', month={}, year={}, isPaid={}, sortBy={}, sortDirection={}, page={}, pageSize={}",
                                 keyword, month, year, isPaid, sortBy, sortDirection, page, pageSize);
 
-                Sort sort = Sort.by("createdAt").descending();
+                // Always use a stable sort with a secondary key (id) to avoid duplicate/overlapping
+                // records between pages when primary sort field has many identical values
+                Sort sort = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+
                 if (sortBy != null && !sortBy.isBlank()) {
                         Sort.Direction direction = "desc".equalsIgnoreCase(sortDirection)
                                         ? Sort.Direction.DESC
                                         : Sort.Direction.ASC;
 
                         if ("employeeName".equals(sortBy)) {
-                                sort = Sort.by(direction, "employee.name");
+                                sort = Sort.by(
+                                                Sort.Order.by("employee.name").with(direction),
+                                                Sort.Order.desc("id"));
                         } else if ("employeeCode".equals(sortBy)) {
-                                sort = Sort.by(direction, "employee.employeeCode");
+                                sort = Sort.by(
+                                                Sort.Order.by("employee.employeeCode").with(direction),
+                                                Sort.Order.desc("id"));
                         } else if ("createdAt".equals(sortBy)) {
-                                sort = Sort.by(direction, "createdAt");
+                                sort = Sort.by(
+                                                Sort.Order.by("createdAt").with(direction),
+                                                Sort.Order.desc("id"));
                         }
                 }
 

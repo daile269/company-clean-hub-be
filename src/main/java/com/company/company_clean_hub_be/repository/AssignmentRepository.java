@@ -206,6 +206,17 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
                     @Param("status") AssignmentStatus status
             );
 
+            @Query("SELECT COUNT(a) FROM Assignment a WHERE a.employee.id = :employeeId")
+            Long countAssignmentsByEmployee(
+                    @Param("employeeId") Long employeeId
+            );
+
+            @Query("SELECT COUNT(a) FROM Assignment a WHERE a.employee.id = :employeeId AND a.contract.id = :contractId AND a.status IN ('IN_PROGRESS', 'COMPLETED')")
+            Long countCompletedAssignmentsByEmployeeAndContract(
+                    @Param("employeeId") Long employeeId,
+                    @Param("contractId") Long contractId
+            );
+
             // Tìm assignment có contract giao thời gian (overlap) với nhân viên vào ngày cụ thể
             @Query("""
                 SELECT a FROM Assignment a
