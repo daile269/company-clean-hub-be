@@ -115,6 +115,7 @@ public class ContractServiceImpl implements ContractService {
                                 .contractType(request.getContractType())
                                 .paymentStatus(request.getPaymentStatus())
                                 .description(request.getDescription())
+                                .requiresImageVerification(request.getRequiresImageVerification() != null ? request.getRequiresImageVerification() : false)
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
                                 .build();
@@ -151,6 +152,9 @@ public class ContractServiceImpl implements ContractService {
                 contract.setContractType(request.getContractType());
                 contract.setPaymentStatus(request.getPaymentStatus());
                 contract.setDescription(request.getDescription());
+                if (request.getRequiresImageVerification() != null) {
+                        contract.setRequiresImageVerification(request.getRequiresImageVerification());
+                }
                 contract.setUpdatedAt(LocalDateTime.now());
 
                 Contract updatedContract = contractRepository.save(contract);
@@ -367,6 +371,7 @@ public class ContractServiceImpl implements ContractService {
                                 .contractType(contract.getContractType())
                                 .paymentStatus(contract.getPaymentStatus())
                                 .description(contract.getDescription())
+                                .requiresImageVerification(contract.getRequiresImageVerification())
                                 .createdAt(contract.getCreatedAt())
                                 .updatedAt(contract.getUpdatedAt())
                                 .build();

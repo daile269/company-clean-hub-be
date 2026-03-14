@@ -44,4 +44,6 @@ public class ContractRequest {
     private String paymentStatus;
 
     private String description;
+
+    private Boolean requiresImageVerification;
 }

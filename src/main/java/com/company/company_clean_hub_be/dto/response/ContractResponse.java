@@ -28,6 +28,7 @@ public class ContractResponse {
     private ContractType contractType;
     private String paymentStatus;
     private String description;
+    private Boolean requiresImageVerification;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

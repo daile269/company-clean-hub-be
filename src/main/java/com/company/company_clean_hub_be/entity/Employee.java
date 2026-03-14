@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -54,6 +55,7 @@ public class Employee extends User {
     // Loại nhân viên: COMPANY_STAFF (văn phòng) hoặc CONTRACT_STAFF (hợp đồng)
     @Enumerated(EnumType.STRING)
     @Column(name = "employment_type", nullable = false, length = 20)
+    @Builder.Default
     private EmploymentType employmentType = EmploymentType.CONTRACT_STAFF;
 
     // Chỉ cho COMPANY_STAFF: Lương cố định tháng

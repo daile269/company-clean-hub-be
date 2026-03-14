@@ -17,7 +17,19 @@ import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.AttendanceRepository;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
+import com.company.company_clean_hub_be.dto.request.AttendanceCaptureRequest;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
+import com.company.company_clean_hub_be.exception.ResourceNotFoundException;
 import com.company.company_clean_hub_be.service.AttendanceService;
+import com.company.company_clean_hub_be.service.FileStorageService;
+import com.company.company_clean_hub_be.service.VerificationService;
+import com.company.company_clean_hub_be.repository.AssignmentVerificationRepository;
+import com.company.company_clean_hub_be.entity.AssignmentVerification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -27,6 +39,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -44,6 +57,9 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final EmployeeRepository employeeRepository;
     private final AssignmentRepository assignmentRepository;
     private final UserRepository userRepository;
+    private final FileStorageService fileStorageService;
+    private final VerificationService verificationService;
+    private final AssignmentVerificationRepository assignmentVerificationRepository;
 
     @Override
     public AttendanceResponse createAttendance(AttendanceRequest request) {
@@ -410,10 +426,27 @@ public class AttendanceServiceImpl implements AttendanceService {
                 log.info("restoreByDateContractEmployee completed by {}: attendanceId={}", username, attendance.getId());
         }
 
-        private AttendanceResponse mapToResponse(Attendance attendance) {
-                Assignment assignment = attendance.getAssignment();
-                Employee employee = assignment != null ? assignment.getEmployee() : null;
-                User approver = attendance.getApprovedBy();
+    @Override
+    public List<AttendanceResponse> getTodayAttendancesByEmployee(Long employeeId) {
+        log.info("getTodayAttendancesByEmployee requested: employeeId={}", employeeId);
+        LocalDate today = LocalDate.now();
+        List<Attendance> attendances = attendanceRepository.findAllByEmployeeAndDate(employeeId, today);
+        return attendances.stream().map(this::mapToResponse).collect(Collectors.toList());
+    }
+
+    // DEPRECATED: Use VerificationService.captureVerificationImage() instead
+    // This method is kept for backward compatibility but should not be used
+    @Override
+    @Transactional
+    public AttendanceResponse captureAttendance(AttendanceCaptureRequest request) throws IOException {
+        log.warn("DEPRECATED: captureAttendance called. Use VerificationService.captureVerificationImage() instead");
+        throw new AppException(ErrorCode.METHOD_DEPRECATED);
+    }
+
+    private AttendanceResponse mapToResponse(Attendance attendance) {
+        Assignment assignment = attendance.getAssignment();
+        Employee employee = assignment != null ? assignment.getEmployee() : null;
+        User approver = attendance.getApprovedBy();
 
         return AttendanceResponse.builder()
                 .id(attendance.getId())
@@ -433,6 +466,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .overtimeAmount(attendance.getOvertimeAmount())
                 .approvedBy(approver != null ? approver.getId() : null)
                 .approvedByName(approver != null ? approver.getUsername() : null)
+                .evaluationStatus(attendance.getEvaluation() != null ? attendance.getEvaluation().getStatus().name() : null)
+                // Image-related fields removed - now stored in VerificationImage
                 .description(attendance.getDescription())
                 .createdAt(attendance.getCreatedAt())
                 .updatedAt(attendance.getUpdatedAt())
@@ -535,4 +570,194 @@ public class AttendanceServiceImpl implements AttendanceService {
                 assignmentRepository.save(assignment);
                 log.info("Recalculated workDays for assignmentId={}: workDays={}", assignment.getId(), assignment.getWorkDays());
         }
+
+    @Override
+    @Transactional
+    public List<AttendanceResponse> autoGenerateAttendancesWithVerification(AutoAttendanceRequest request) {
+        log.info("autoGenerateAttendancesWithVerification requested: employeeId={}, assignmentId={}, month={}, year={}", 
+            request.getEmployeeId(), request.getAssignmentId(), request.getMonth(), request.getYear());
+        
+        Employee employee = employeeRepository.findById(request.getEmployeeId())
+                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+        Assignment assignment = assignmentRepository.findById(request.getAssignmentId())
+                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+
+        // Check if assignment requires verification
+        boolean requiresVerification = verificationService.requiresVerification(assignment);
+        
+        if (!requiresVerification) {
+            // No verification needed, generate all attendances normally
+            return autoGenerateAttendances(request);
+        }
+
+        // Verification required - only generate first day
+        YearMonth yearMonth = YearMonth.of(request.getYear(), request.getMonth());
+        LocalDate startDate = yearMonth.atDay(1);
+        
+        List<LocalDate> excludeDates = request.getExcludeDates() != null ? 
+                request.getExcludeDates() : new ArrayList<>();
+
+        // Find first working day
+        LocalDate firstWorkingDay = findFirstWorkingDay(startDate, yearMonth.atEndOfMonth(), excludeDates);
+        
+        if (firstWorkingDay == null) {
+            log.warn("No working days found in month {}/{}", request.getMonth(), request.getYear());
+            return new ArrayList<>();
+        }
+
+        // Generate only first day attendance
+        List<Attendance> attendances = new ArrayList<>();
+        
+        boolean alreadyExists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                request.getAssignmentId(),
+                request.getEmployeeId(), 
+                firstWorkingDay
+        ).isPresent();
+
+        if (!alreadyExists) {
+            // Get or create verification requirement
+            AssignmentVerification verification = getOrCreateVerification(assignment);
+            
+            Attendance attendance = Attendance.builder()
+                    .assignment(assignment)
+                    .employee(employee)
+                    .date(firstWorkingDay)
+                    .workHours(java.math.BigDecimal.valueOf(8))
+                    .bonus(java.math.BigDecimal.ZERO)
+                    .penalty(java.math.BigDecimal.ZERO)
+                    .supportCost(java.math.BigDecimal.ZERO)
+                    .isOvertime(false)
+                    .deleted(false)
+                    .overtimeAmount(java.math.BigDecimal.ZERO)
+                    .assignmentVerification(verification)
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+            
+            attendances.add(attendance);
+        }
+
+        List<Attendance> savedAttendances = attendanceRepository.saveAll(attendances);
+        log.info("autoGenerateAttendancesWithVerification completed: createdCount={} (verification required)", savedAttendances.size());
+
+        return savedAttendances.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+    @Override
+    @Transactional
+    public AttendanceResponse generateSingleAttendance(Long assignmentId, LocalDate date) {
+        log.info("generateSingleAttendance: assignmentId={}, date={}", assignmentId, date);
+        
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+
+        // Check if attendance already exists
+        Optional<Attendance> existing = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                assignmentId, assignment.getEmployee().getId(), date);
+        
+        if (existing.isPresent()) {
+            log.warn("Attendance already exists for assignment {} on date {}", assignmentId, date);
+            return mapToResponse(existing.get());
+        }
+
+        // Get verification if exists
+        AssignmentVerification verification = verificationService.getVerificationByAssignmentId(assignmentId)
+                .map(response -> assignmentVerificationRepository.findById(response.getId()).orElse(null))
+                .orElse(null);
+
+        Attendance attendance = Attendance.builder()
+                .assignment(assignment)
+                .employee(assignment.getEmployee())
+                .date(date)
+                .workHours(java.math.BigDecimal.valueOf(8))
+                .bonus(java.math.BigDecimal.ZERO)
+                .penalty(java.math.BigDecimal.ZERO)
+                .supportCost(java.math.BigDecimal.ZERO)
+                .isOvertime(false)
+                .deleted(false)
+                .overtimeAmount(java.math.BigDecimal.ZERO)
+                .assignmentVerification(verification)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        Attendance saved = attendanceRepository.save(attendance);
+        log.info("Generated single attendance: {}", saved.getId());
+        
+        return mapToResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public void generateRemainingAttendances(Long assignmentId, LocalDate fromDate) {
+        log.info("generateRemainingAttendances: assignmentId={}, fromDate={}", assignmentId, fromDate);
+        
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+
+        // Generate attendances from fromDate to end of month
+        LocalDate endDate = fromDate.withDayOfMonth(fromDate.lengthOfMonth());
+        LocalDate currentDate = fromDate.plusDays(1); // Start from next day
+        
+        List<Attendance> attendances = new ArrayList<>();
+        
+        while (!currentDate.isAfter(endDate)) {
+            // Skip Sundays
+            if (currentDate.getDayOfWeek() != DayOfWeek.SUNDAY) {
+                // Check if attendance already exists
+                boolean alreadyExists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                        assignmentId, assignment.getEmployee().getId(), currentDate).isPresent();
+                
+                if (!alreadyExists) {
+                    Attendance attendance = Attendance.builder()
+                            .assignment(assignment)
+                            .employee(assignment.getEmployee())
+                            .date(currentDate)
+                            .workHours(java.math.BigDecimal.valueOf(8))
+                            .bonus(java.math.BigDecimal.ZERO)
+                            .penalty(java.math.BigDecimal.ZERO)
+                            .supportCost(java.math.BigDecimal.ZERO)
+                            .isOvertime(false)
+                            .deleted(false)
+                            .overtimeAmount(java.math.BigDecimal.ZERO)
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .build();
+                    
+                    attendances.add(attendance);
+                }
+            }
+            currentDate = currentDate.plusDays(1);
+        }
+
+        if (!attendances.isEmpty()) {
+            attendanceRepository.saveAll(attendances);
+            log.info("Generated {} remaining attendances for assignment {}", attendances.size(), assignmentId);
+        }
+    }
+    private LocalDate findFirstWorkingDay(LocalDate startDate, LocalDate endDate, List<LocalDate> excludeDates) {
+        LocalDate currentDate = startDate;
+        while (!currentDate.isAfter(endDate)) {
+            boolean isSunday = currentDate.getDayOfWeek() == DayOfWeek.SUNDAY;
+            boolean isExcluded = excludeDates.contains(currentDate);
+            
+            if (!isSunday && !isExcluded) {
+                return currentDate;
+            }
+            currentDate = currentDate.plusDays(1);
+        }
+        return null;
+    }
+
+    private AssignmentVerification getOrCreateVerification(Assignment assignment) {
+        return verificationService.getVerificationByAssignmentId(assignment.getId())
+                .map(response -> assignmentVerificationRepository.findById(response.getId()).orElse(null))
+                .orElseGet(() -> {
+                    String reason = verificationService.isEmployeeNew(assignment.getEmployee().getId()) 
+                            ? "NEW_EMPLOYEE" : "CONTRACT_SETTING";
+                    return verificationService.createVerificationRequirement(assignment, reason);
+                });
+    }
 }

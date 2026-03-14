@@ -91,6 +91,10 @@
         @Size(max = 50)
         private String paymentStatus;
         
+        @Column(name = "requires_image_verification")
+        @Builder.Default
+        private Boolean requiresImageVerification = false;
+        
         private String description;
 
         @Column(name = "created_at")

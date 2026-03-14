@@ -65,7 +65,7 @@ public class AssignmentServiceTest {
         attendance.setDate(LocalDate.now());
 
         when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
-        when(attendanceRepository.findByEmployeeIdAndDateAndImageUrlIsNull(eq(employeeId), any(LocalDate.class)))
+        when(attendanceRepository.findAllByEmployeeAndDate(eq(employeeId), any(LocalDate.class)))
             .thenReturn(Arrays.asList(attendance));
 
         List<AssignmentResponse> results = assignmentService.getTodayAssignmentsForCapture(employeeId);

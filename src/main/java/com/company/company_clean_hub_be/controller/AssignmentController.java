@@ -46,7 +46,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/{id}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
+//    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_VIEW')")
     public ApiResponse<AssignmentResponse> getAssignmentById(@PathVariable Long id) {
         AssignmentResponse assignment = assignmentService.getAssignmentById(id);
         System.out.println("id ass:" + id);
@@ -259,7 +259,7 @@ public class AssignmentController {
     }
 
     @GetMapping("/{assignmentId}/attendances")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ATTENDANCE_VIEW')")
+//    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ATTENDANCE_VIEW')")
     public ApiResponse<PageResponse<com.company.company_clean_hub_be.dto.response.AttendanceResponse>> getAttendancesByAssignment(
             @PathVariable Long assignmentId,
             @RequestParam(required = false) Integer month,
