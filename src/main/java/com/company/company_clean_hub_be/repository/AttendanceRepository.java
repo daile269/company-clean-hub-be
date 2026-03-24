@@ -45,6 +45,12 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                         @Param("employeeId") Long employeeId,
                         @Param("date") LocalDate date);
 
+        @Query("SELECT a FROM Attendance a WHERE a.assignment.id = :assignmentId AND a.employee.id = :employeeId AND a.date = :date AND a.deleted = true")
+        Optional<Attendance> findDeletedByAssignmentAndEmployeeAndDate(
+                        @Param("assignmentId") Long assignmentId,
+                        @Param("employeeId") Long employeeId,
+                        @Param("date") LocalDate date);
+
         @Query("SELECT a FROM Attendance a JOIN a.assignment as asn WHERE asn.contract.id = :contractId AND asn.employee.id = :employeeId AND a.date = :date")
         Optional<Attendance> findByContractAndEmployeeAndDate(
                 @Param("contractId") Long contractId,
@@ -223,5 +229,17 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                 @Param("year") Integer year,
                 org.springframework.data.domain.Pageable pageable
         );
+
+        @Query("SELECT a.date FROM Attendance a " +
+               "WHERE a.assignment.employee.id = :employeeId " +
+               "AND a.assignment.assignmentType = 'FIXED_BY_COMPANY' " +
+               "AND a.deleted = true " +
+               "AND (:month IS NULL OR FUNCTION('MONTH', a.date) = :month) " +
+               "AND (:year IS NULL OR FUNCTION('YEAR', a.date) = :year) " +
+               "ORDER BY a.date ASC")
+        List<LocalDate> findCompanyLeaveDates(
+                @Param("employeeId") Long employeeId,
+                @Param("month") Integer month,
+                @Param("year") Integer year);
 
 }
