@@ -245,4 +245,44 @@ public class EmployeeController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+    @PutMapping("/{id}/company-leave")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_EDIT')")
+    public ApiResponse<EmployeeResponse> takeCompanyLeave(@PathVariable Long id, 
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate leaveDate) {
+        EmployeeResponse employee = employeeService.takeCompanyLeave(id, leaveDate);
+        return ApiResponse.success("Đã ghi nhận nhân viên nghỉ 1 ngày", employee, HttpStatus.OK.value());
+    }
+
+    @PutMapping("/{id}/cancel-company-leave")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_EDIT')")
+    public ApiResponse<EmployeeResponse> cancelCompanyLeave(@PathVariable Long id, 
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate leaveDate) {
+        EmployeeResponse employee = employeeService.cancelCompanyLeave(id, leaveDate);
+        return ApiResponse.success("Đã hủy ngày nghỉ của nhân viên", employee, HttpStatus.OK.value());
+    }
+
+    @PutMapping("/{id}/resign-office")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_EDIT')")
+    public ApiResponse<EmployeeResponse> resignOfficeWork(@PathVariable Long id, 
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate resignDate) {
+        EmployeeResponse employee = employeeService.resignOfficeWork(id, resignDate);
+        return ApiResponse.success("Đã thiết lập nghỉ hẳn làm việc văn phòng", employee, HttpStatus.OK.value());
+    }
+
+    @PutMapping("/{id}/cancel-resign-office")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_EDIT')")
+    public ApiResponse<EmployeeResponse> cancelResignOfficeWork(@PathVariable Long id) {
+        EmployeeResponse employee = employeeService.cancelResignOfficeWork(id);
+        return ApiResponse.success("Đã hoàn tác nghỉ hẳn văn phòng", employee, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/{id}/company-leaves")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_VIEW')")
+    public ApiResponse<List<String>> getCompanyLeaves(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year) {
+        List<String> leaves = employeeService.getCompanyLeaves(id, month, year);
+        return ApiResponse.success("Lấy danh sách ngày nghỉ thành công", leaves, HttpStatus.OK.value());
+    }
 }

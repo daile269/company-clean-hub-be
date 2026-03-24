@@ -405,7 +405,7 @@ public class ContractServiceImpl implements ContractService {
 
                 Contract contract = assignment.getContract();
                 if (contract == null) {
-                        throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
+                        return null; // Assignments for COMPANY don't have contracts
                 }
 
                 return mapToResponse(contract);

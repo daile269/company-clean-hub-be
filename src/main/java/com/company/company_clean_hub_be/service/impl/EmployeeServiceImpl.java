@@ -41,6 +41,8 @@ public class EmployeeServiceImpl implements EmployeeService {
         private final PasswordEncoder passwordEncoder;
         private final UserRepository userRepository;
         private final com.company.company_clean_hub_be.service.NotificationService notificationService;
+        private final com.company.company_clean_hub_be.repository.AssignmentRepository assignmentRepository;
+        private final com.company.company_clean_hub_be.repository.AttendanceRepository attendanceRepository;
 
         @Override
         public String generateEmployeeCode(EmploymentType employmentType) {
@@ -442,6 +444,180 @@ public class EmployeeServiceImpl implements EmployeeService {
                 Employee updatedEmployee = employeeRepository.save(employee);
                 log.info("updateAdvanceSalary completed by {}: id={}", username, updatedEmployee.getId());
                 return mapToResponse(updatedEmployee);
+        }
+
+        @Override
+        public EmployeeResponse takeCompanyLeave(Long id, java.time.LocalDate leaveDate) {
+                Employee employee = employeeRepository.findById(id)
+                                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+                List<com.company.company_clean_hub_be.entity.Assignment> assignments = assignmentRepository.findByEmployeeId(id);
+                boolean foundAttendance = false;
+                
+                for (com.company.company_clean_hub_be.entity.Assignment asn : assignments) {
+                        if (asn.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.FIXED_BY_COMPANY) {
+                                java.util.Optional<com.company.company_clean_hub_be.entity.Attendance> attOpt = 
+                                        attendanceRepository.findByAssignmentAndEmployeeAndDate(asn.getId(), id, leaveDate);
+                                if (attOpt.isPresent()) {
+                                        foundAttendance = true;
+                                        com.company.company_clean_hub_be.entity.Attendance att = attOpt.get();
+                                        att.setDeleted(true);
+                                        att.setDeletedAt(LocalDateTime.now());
+                                        att.setDescription("Nghỉ phép tự động (Company)");
+                                        attendanceRepository.save(att);
+                                        log.info("Marked attendance deleted for company assignmentId={} date={}", asn.getId(), leaveDate);
+                                }
+                        }
+                }
+                
+                if (!foundAttendance) {
+                        throw new AppException(ErrorCode.ATTENDANCE_NOT_FOUND);
+                }
+                
+                return mapToResponse(employee);
+        }
+
+        @Override
+        public EmployeeResponse cancelCompanyLeave(Long id, java.time.LocalDate leaveDate) {
+                Employee employee = employeeRepository.findById(id)
+                                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+                List<com.company.company_clean_hub_be.entity.Assignment> assignments = assignmentRepository.findByEmployeeId(id);
+                for (com.company.company_clean_hub_be.entity.Assignment asn : assignments) {
+                        if (asn.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.FIXED_BY_COMPANY) {
+                                java.util.Optional<com.company.company_clean_hub_be.entity.Attendance> attOpt = 
+                                        attendanceRepository.findDeletedByAssignmentAndEmployeeAndDate(asn.getId(), id, leaveDate);
+                                if (attOpt.isPresent()) {
+                                        com.company.company_clean_hub_be.entity.Attendance att = attOpt.get();
+                                        att.setDeleted(false);
+                                        att.setDeletedAt(null);
+                                        att.setDescription("");
+                                        attendanceRepository.save(att);
+                                        log.info("Restored attendance for company assignmentId={} date={}", asn.getId(), leaveDate);
+                                }
+                        }
+                }
+                return mapToResponse(employee);
+        }
+
+        @Override
+        public EmployeeResponse resignOfficeWork(Long id, java.time.LocalDate resignDate) {
+                log.info("Starting resignOfficeWork for employeeId={}, resignDate={}", id, resignDate);
+                Employee employee = employeeRepository.findById(id)
+                                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+                List<com.company.company_clean_hub_be.entity.Assignment> assignments = assignmentRepository.findByEmployeeId(id);
+                log.info("Found {} total assignments for employeeId={}", assignments.size(), id);
+                
+                int terminatedCount = 0;
+                for (com.company.company_clean_hub_be.entity.Assignment asn : assignments) {
+                        if (asn.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.FIXED_BY_COMPANY 
+                            && (asn.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS 
+                                || asn.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.SCHEDULED)) {
+                                
+                                log.info("Processing TERMINATION for company assignmentId={}, currentStatus={}, startDate={}", 
+                                        asn.getId(), asn.getStatus(), asn.getStartDate());
+                                
+                                asn.setStatus(com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED);
+                                asn.setEndDate(resignDate);
+                                asn.setUpdatedAt(LocalDateTime.now());
+                                terminatedCount++;
+
+                                // Subtract attendances from resignDate onwards
+                                List<com.company.company_clean_hub_be.entity.Attendance> allAtts = attendanceRepository.findByAssignmentId(asn.getId());
+                                log.info("Found {} attendance records for assignmentId={}", allAtts.size(), asn.getId());
+                                
+                                int newWorkDays = 0;
+                                for (com.company.company_clean_hub_be.entity.Attendance att : allAtts) {
+                                        boolean isDeleted = false;
+                                        if (!att.getDate().isBefore(resignDate) && (att.getDeleted() == null || !att.getDeleted())) {
+                                                att.setDeleted(true);
+                                                att.setDeletedAt(LocalDateTime.now());
+                                                att.setDescription("Đã thôi việc văn phòng từ " + resignDate);
+                                                attendanceRepository.save(att);
+                                                isDeleted = true;
+                                        } else if (att.getDeleted() != null && att.getDeleted()) {
+                                                isDeleted = true;
+                                        }
+
+                                        if (!isDeleted) {
+                                                newWorkDays++;
+                                        }
+                                }
+                                
+                                log.info("Updating workDays for assignmentId={} to {}", asn.getId(), newWorkDays);
+                                asn.setWorkDays(newWorkDays);
+                                assignmentRepository.save(asn);
+                        }
+                }
+                
+                if (terminatedCount == 0) {
+                        log.warn("No active company assignment found for employeeId={} to terminate", id);
+                }
+                
+                log.info("Completed resignOfficeWork for employeeId={}. Total assignments terminated: {}", id, terminatedCount);
+                return mapToResponse(employee);
+        }
+
+        @Override
+        public EmployeeResponse cancelResignOfficeWork(Long id) {
+                log.info("Starting cancelResignOfficeWork for employeeId={}", id);
+                Employee employee = employeeRepository.findById(id)
+                                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+                List<com.company.company_clean_hub_be.entity.Assignment> assignments = assignmentRepository.findByEmployeeId(id);
+                int restoredCount = 0;
+                
+                for (com.company.company_clean_hub_be.entity.Assignment asn : assignments) {
+                        if (asn.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.FIXED_BY_COMPANY 
+                            && asn.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.TERMINATED) {
+                                
+                                log.info("Restoring TERMINATED office assignmentId={}", asn.getId());
+                                asn.setStatus(com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS);
+                                asn.setEndDate(null); 
+                                asn.setUpdatedAt(LocalDateTime.now());
+                                restoredCount++;
+
+                                // Restore attendances that were auto-deleted during resign
+                                List<com.company.company_clean_hub_be.entity.Attendance> allAtts = 
+                                        attendanceRepository.findByAssignmentId(asn.getId());
+                                        
+                                int newWorkDays = 0;
+                                for (com.company.company_clean_hub_be.entity.Attendance att : allAtts) {
+                                        boolean isDeleted = (att.getDeleted() != null && att.getDeleted());
+                                        
+                                        if (isDeleted && att.getDescription() != null && att.getDescription().contains("Đã thôi việc văn phòng")) {
+                                                att.setDeleted(false);
+                                                att.setDeletedAt(null);
+                                                att.setDescription(""); 
+                                                attendanceRepository.save(att);
+                                                isDeleted = false;
+                                        }
+                                        
+                                        if (!isDeleted) {
+                                                newWorkDays++;
+                                        }
+                                }
+                                
+                                log.info("Restoring workDays for assignmentId={} to {}", asn.getId(), newWorkDays);
+                                asn.setWorkDays(newWorkDays);
+                                assignmentRepository.save(asn);
+                        }
+                }
+                
+                log.info("Completed cancelResignOfficeWork for employeeId={}. Total assignments restored: {}", id, restoredCount);
+                return mapToResponse(employee);
+        }
+
+        @Override
+        public List<String> getCompanyLeaves(Long id, Integer month, Integer year) {
+                if (!employeeRepository.existsById(id)) {
+                        throw new AppException(ErrorCode.EMPLOYEE_NOT_FOUND);
+                }
+                List<java.time.LocalDate> dates = attendanceRepository.findCompanyLeaveDates(id, month, year);
+                return dates.stream()
+                        .map(date -> date.toString())
+                        .collect(Collectors.toList());
         }
 
 }
