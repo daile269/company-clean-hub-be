@@ -1,5 +1,6 @@
 package com.company.company_clean_hub_be.controller;
 
+import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.NotificationResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.User;
@@ -10,6 +11,7 @@ import com.company.company_clean_hub_be.service.NotificationService;
 import com.company.company_clean_hub_be.service.SseEmitterService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -54,12 +56,13 @@ public class NotificationController {
      */
     @GetMapping
     @PreAuthorize("hasAuthority('NOTIFICATION_VIEW')")
-    public ResponseEntity<PageResponse<NotificationResponse>> getMyNotifications(
+    public ApiResponse<PageResponse<NotificationResponse>> getMyNotifications(
             @RequestParam(required = false, defaultValue = "ALL") String type,
             @RequestParam(required = false) Boolean isRead,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        return ResponseEntity.ok(notificationService.getMyNotificationsPaged(type, isRead, page, pageSize));
+        PageResponse<NotificationResponse> result = notificationService.getMyNotificationsPaged(type, isRead, page, pageSize);
+        return ApiResponse.success("Lấy danh sách thông báo thành công", result, HttpStatus.OK.value());
     }
 
     /**
@@ -68,8 +71,9 @@ public class NotificationController {
      */
     @GetMapping("/unread")
     @PreAuthorize("hasAuthority('NOTIFICATION_VIEW')")
-    public ResponseEntity<List<NotificationResponse>> getMyUnreadNotifications() {
-        return ResponseEntity.ok(notificationService.getMyUnreadNotifications());
+    public ApiResponse<List<NotificationResponse>> getMyUnreadNotifications() {
+        List<NotificationResponse> result = notificationService.getMyUnreadNotifications();
+        return ApiResponse.success("Lấy danh sách thông báo chưa đọc thành công", result, HttpStatus.OK.value());
     }
 
     /**
@@ -78,9 +82,9 @@ public class NotificationController {
      */
     @GetMapping("/unread/count")
     @PreAuthorize("hasAuthority('NOTIFICATION_VIEW')")
-    public ResponseEntity<Map<String, Long>> countUnread() {
+    public ApiResponse<Map<String, Long>> countUnread() {
         long count = notificationService.countMyUnread();
-        return ResponseEntity.ok(Map.of("count", count));
+        return ApiResponse.success("Đếm số thông báo chưa đọc thành công", Map.of("count", count), HttpStatus.OK.value());
     }
 
     /**
@@ -89,8 +93,9 @@ public class NotificationController {
      */
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('NOTIFICATION_VIEW')")
-    public ResponseEntity<NotificationResponse> getNotificationDetail(@PathVariable Long id) {
-        return ResponseEntity.ok(notificationService.getDetail(id));
+    public ApiResponse<NotificationResponse> getNotificationDetail(@PathVariable Long id) {
+        NotificationResponse result = notificationService.getDetail(id);
+        return ApiResponse.success("Lấy chi tiết thông báo thành công", result, HttpStatus.OK.value());
     }
 
     /**
@@ -99,8 +104,9 @@ public class NotificationController {
      */
     @PutMapping("/{id}/read")
     @PreAuthorize("hasAuthority('NOTIFICATION_VIEW')")
-    public ResponseEntity<NotificationResponse> markAsRead(@PathVariable Long id) {
-        return ResponseEntity.ok(notificationService.markAsRead(id));
+    public ApiResponse<NotificationResponse> markAsRead(@PathVariable Long id) {
+        NotificationResponse result = notificationService.markAsRead(id);
+        return ApiResponse.success("Đã đánh dấu thông báo là đã đọc", result, HttpStatus.OK.value());
     }
 
     /**
@@ -109,8 +115,8 @@ public class NotificationController {
      */
     @PutMapping("/read-all")
     @PreAuthorize("hasAuthority('NOTIFICATION_VIEW')")
-    public ResponseEntity<Void> markAllAsRead() {
+    public ApiResponse<Void> markAllAsRead() {
         notificationService.markAllAsRead();
-        return ResponseEntity.ok().build();
+        return ApiResponse.success("Đã đánh dấu tất cả thông báo là đã đọc", null, HttpStatus.OK.value());
     }
 }
