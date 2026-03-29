@@ -389,6 +389,7 @@ public class ContractServiceImpl implements ContractService {
                                 .contractType(contract.getContractType())
                                 .paymentStatus(contract.getPaymentStatus())
                                 .description(contract.getDescription())
+                                .requiresImageVerification(contract.getRequiresImageVerification())
                                 .numberOfEmployees(contract.getNumberOfEmployees())
                                 .workStartTime(contract.getWorkStartTime())
                                 .workEndTime(contract.getWorkEndTime())
