@@ -1396,6 +1396,15 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         log.info("[DEBUG] Filtering: Assignment {} has verification, status={}, isPendingOrInProgress={}",
                                             assignmentId, verStatus, isPendingOrInProgress);
 
+                                        // [FIX] Crucial check: only show if NO image has been captured for this attendance record yet
+                                        List<com.company.company_clean_hub_be.dto.response.VerificationImageResponse> images = 
+                                            verificationService.getImagesByAttendanceId(att.getId());
+                                        
+                                        if (!images.isEmpty()) {
+                                            log.info("[DEBUG] Filtering: Assignment {} already captured today, show=false", assignmentId);
+                                            return false;
+                                        }
+
                                         // Only show if verification is PENDING or IN_PROGRESS (needs capture)
                                         log.info("[DEBUG] Filtering: Assignment {} verification check result: shouldShow={}", assignmentId, isPendingOrInProgress);
                                         return isPendingOrInProgress;

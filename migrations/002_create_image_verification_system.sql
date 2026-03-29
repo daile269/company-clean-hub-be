@@ -29,7 +29,7 @@ CREATE TABLE assignment_verifications (
     approved_by BIGINT NULL,
     approved_at DATETIME(6) NULL,
     auto_approved_at DATETIME(6) NULL,
-    created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
+        created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     
     FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
