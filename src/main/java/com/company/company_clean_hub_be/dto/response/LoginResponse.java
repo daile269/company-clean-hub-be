@@ -21,7 +21,8 @@ public class LoginResponse {
     private Long roleId;
     private String userType;
 
-    public LoginResponse(String token, Long id, String username, String email, String phone, String roleName, Long roleId, String userType) {
+    public LoginResponse(String token, Long id, String username, String email, String phone, String roleName,
+            Long roleId, String userType) {
         this.token = token;
         this.type = "Bearer";
         this.id = id;

@@ -137,6 +137,31 @@ public class AssignmentServiceImpl implements AssignmentService {
                         workingDays = contract.getWorkingDaysPerWeek() != null
                                         ? new ArrayList<>(contract.getWorkingDaysPerWeek())
                                         : null;
+                        // If contract declares a fixed number of employees, ensure new assignment
+                        // won't exceed that number (exclude SUPPORT assignments from the count)
+                        Integer maxPositions = contract.getNumberOfEmployees();
+                        if (maxPositions != null) {
+                                // Count distinct active employees for this contract up to the startDate,
+                                // excluding SUPPORT assignments (SUPPORT does not occupy a contract slot)
+                                Long currentCount = assignmentRepository
+                                                .countDistinctActiveEmployeesByContractBeforeExcludingType(
+                                                                contract.getId(), request.getStartDate(),
+                                                                com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT);
+
+                                // If the employee we're assigning is already among active assignments,
+                                // do not treat them as increasing the headcount
+                                boolean employeeAlreadyCounted = assignmentRepository
+                                                .findActiveAssignmentByEmployeeAndContract(request.getEmployeeId(),
+                                                                request.getContractId())
+                                                .stream().anyMatch(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS);
+
+                                if (!employeeAlreadyCounted && currentCount != null
+                                                && currentCount >= maxPositions) {
+                                        log.warn("Attempt to create assignment would exceed contract positions: contractId={}, max={}, current={}",
+                                                        contract.getId(), maxPositions, currentCount);
+                                        throw new AppException(ErrorCode.CONTRACT_POSITIONS_EXCEEDED);
+                                }
+                        }
                 } else {
                         // COMPANY scope: contract is null, workingDaysPerWeek from request
                         workingDays = request.getWorkingDaysPerWeek() != null
@@ -180,6 +205,13 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 log.warn("Invalid assignmentType '{}', defaulting to FIXED_BY_CONTRACT", at);
                                 assignmentTypeParsed = AssignmentType.FIXED_BY_CONTRACT;
                         }
+                }
+
+                // Business rule: users with role code 'QLV' are NOT allowed to create SUPPORT assignments
+                if (creator.getRole() != null && "QLV".equalsIgnoreCase(creator.getRole().getCode())
+                                && assignmentTypeParsed == AssignmentType.SUPPORT) {
+                        log.warn("QLV user '{}' attempted to create SUPPORT assignment - forbidden", username);
+                        throw new AppException(ErrorCode.QLV_CANNOT_CREATE_SUPPORT_ASSIGNMENT);
                 }
 
                 Assignment assignment = Assignment.builder()
