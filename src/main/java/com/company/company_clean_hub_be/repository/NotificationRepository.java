@@ -22,6 +22,12 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     // Đếm chưa đọc (badge)
     long countByRecipientIdAndIsReadFalse(Long recipientId);
 
+    // Đếm tất cả chưa đọc trong toàn bộ hệ thống
+    long countByIsReadFalse();
+
+    // Lấy tất cả chưa đọc trong toàn bộ hệ thống
+    List<Notification> findAllByIsReadFalse();
+
     // ─── Filter theo type ───────────────────────────────────────────────────────
 
     // Lấy tất cả theo type
@@ -39,7 +45,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     // ─── Query linh hoạt (type nullable = lấy tất cả) ───────────────────────────
     @Query("""
         SELECT n FROM Notification n
-        WHERE n.recipient.id = :recipientId
+        WHERE (:recipientId IS NULL OR n.recipient.id = :recipientId)
         AND (:type IS NULL OR n.type = :type)
         AND (:isRead IS NULL OR n.isRead = :isRead)
         ORDER BY n.createdAt DESC
@@ -53,7 +59,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     // ─── Query có phân trang ─────────────────────────────────────────────────────
     @Query("""
         SELECT n FROM Notification n
-        WHERE n.recipient.id = :recipientId
+        WHERE (:recipientId IS NULL OR n.recipient.id = :recipientId)
         AND (:type IS NULL OR n.type = :type)
         AND (:isRead IS NULL OR n.isRead = :isRead)
         ORDER BY n.createdAt DESC
