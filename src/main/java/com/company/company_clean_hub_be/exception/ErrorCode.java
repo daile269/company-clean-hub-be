@@ -55,6 +55,8 @@ public enum ErrorCode {
 
     QLV_CREATE_AFTER_ALLOWED_TIME(403, "QLV không được tạo phân công cho hôm nay sau 08:00"),
     QLV_ACTION_WINDOW_EXPIRED(403, "QLV chỉ được sửa/xóa phân công trong vòng 1 giờ kể từ khi tạo"),
+        QLV_CANNOT_CREATE_SUPPORT_ASSIGNMENT(403, "QLV không được phân công hỗ trợ"),
+        CONTRACT_POSITIONS_EXCEEDED(400, "Số lượng phân công vượt số vị trí trong hợp đồng"),
 
     FORBIDDEN(403, "Bạn không có quyền thực hiện thao tác này"),
     EMPLOYEE_UPDATE_TIME_EXPIRED(403, "Quá thời gian cho phép chỉnh sửa nhân viên (1 giờ sau khi tạo)"),
