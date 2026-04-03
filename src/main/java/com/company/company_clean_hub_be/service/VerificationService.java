@@ -40,4 +40,7 @@ public interface VerificationService {
     
     // Auto-approval
     void processAutoApprovals();
+
+    // Sync state
+    void syncContractVerificationState(com.company.company_clean_hub_be.entity.Contract contract, boolean requiresVerification);
 }
