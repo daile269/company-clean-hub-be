@@ -50,6 +50,7 @@ public class ContractServiceImpl implements ContractService {
         private final ContractDocumentService contractDocumentService;
         private final InvoiceRepository invoiceRepository;
         private final RatingRepository ratingRepository;
+        private final com.company.company_clean_hub_be.service.VerificationService verificationService;
 
         @Override
         public List<ContractResponse> getAllContracts() {
@@ -161,6 +162,9 @@ public class ContractServiceImpl implements ContractService {
                 contract.setContractType(request.getContractType());
                 contract.setPaymentStatus(request.getPaymentStatus());
                 contract.setDescription(request.getDescription());
+                Boolean oldVerificationState = contract.getRequiresImageVerification() != null ? contract.getRequiresImageVerification() : false;
+                Boolean newVerificationState = request.getRequiresImageVerification() != null ? request.getRequiresImageVerification() : false;
+                
                 if (request.getRequiresImageVerification() != null) {
                         contract.setRequiresImageVerification(request.getRequiresImageVerification());
                 }
@@ -176,6 +180,12 @@ public class ContractServiceImpl implements ContractService {
                 contract.setUpdatedAt(LocalDateTime.now());
 
                 Contract updatedContract = contractRepository.save(contract);
+                
+                // Sync verification state for assignments
+                if (!oldVerificationState.equals(newVerificationState)) {
+                        verificationService.syncContractVerificationState(updatedContract, newVerificationState);
+                }
+                
                 log.info("updateContract completed by {}: id={}", username, updatedContract.getId());
                 return mapToResponse(updatedContract);
         }

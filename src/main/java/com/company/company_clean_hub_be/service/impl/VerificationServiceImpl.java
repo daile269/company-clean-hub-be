@@ -706,4 +706,71 @@ public class VerificationServiceImpl implements VerificationService {
         
         log.info("Auto-approval process completed. Approved: {}", verificationsToApprove.size());
     }
+
+    @Override
+    @Transactional
+    public void syncContractVerificationState(Contract contract, boolean requiresVerification) {
+        log.info("[DEBUG] syncContractVerificationState called for contract={}, requiresVerification={}", contract.getId(), requiresVerification);
+        
+        List<Assignment> activeAssignments = assignmentRepository.findByContractId(contract.getId()).stream()
+            .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS || a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.SCHEDULED)
+            .collect(Collectors.toList());
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate targetDate = LocalDate.now();
+
+        for (Assignment assignment : activeAssignments) {
+            try {
+                if (requiresVerification) {
+                    // False -> True
+                    log.info("[DEBUG] Processing False -> True for assignment {}", assignment.getId());
+                    // 1. Ensure verification exists
+                    AssignmentVerification verification = verificationRepository.findByAssignmentId(assignment.getId())
+                            .orElseGet(() -> createVerificationRequirement(assignment, "CONTRACT_SETTING"));
+                    
+                    // 2. Clear future attendances
+                    attendanceRepository.deleteByAssignmentIdAndDateAfter(assignment.getId(), targetDate);
+                    
+                    // 3. Update today's attendance (if exists)
+                    Optional<Attendance> todayAttendance = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                            assignment.getId(), assignment.getEmployee().getId(), targetDate);
+                    
+                    if (todayAttendance.isPresent()) {
+                        Attendance att = todayAttendance.get();
+                        if (att.getAssignmentVerification() == null) {
+                            att.setAssignmentVerification(verification);
+                            attendanceRepository.save(att);
+                        }
+                    }
+                    
+                    // 4. Update assignment's workDays count
+                    Long workDaysCount = attendanceRepository.countAttendancesByAssignment(assignment.getId());
+                    assignment.setWorkDays(workDaysCount != null ? workDaysCount.intValue() : 0);
+                    assignmentRepository.save(assignment);
+                    
+                } else {
+                    // True -> False
+                    log.info("[DEBUG] Processing True -> False for assignment {}", assignment.getId());
+                    // 1. Complete pending verifications
+                    verificationRepository.findByAssignmentId(assignment.getId()).ifPresent(verification -> {
+                        if (verification.getStatus() == VerificationStatus.PENDING || verification.getStatus() == VerificationStatus.IN_PROGRESS) {
+                            verification.setStatus(VerificationStatus.APPROVED);
+                            verification.setAutoApprovedAt(now);
+                            verificationRepository.save(verification);
+                        }
+                    });
+                    
+                    // 2. Generate remaining attendances
+                    generateAllRemainingAttendances(assignment.getId());
+                    
+                    // 3. Update assignment workDays
+                    Long workDaysCount = attendanceRepository.countAttendancesByAssignment(assignment.getId());
+                    assignment.setWorkDays(workDaysCount != null ? workDaysCount.intValue() : 0);
+                    assignmentRepository.save(assignment);
+                }
+            } catch (Exception e) {
+                log.error("[DEBUG] Failed to sync verification state for assignment {}: {}", assignment.getId(), e.getMessage(), e);
+            }
+        }
+    }
 }
