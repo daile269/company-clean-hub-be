@@ -113,6 +113,29 @@ public class AssignmentServiceImpl implements AssignmentService {
                         }
                 }
 
+                // Parse assignmentType safely (default to FIXED_BY_CONTRACT)
+                AssignmentType assignmentTypeParsed;
+                String at = request.getAssignmentType();
+                if (at == null || at.isBlank()) {
+                        assignmentTypeParsed = AssignmentType.FIXED_BY_CONTRACT;
+                } else {
+                        try {
+                                assignmentTypeParsed = AssignmentType.valueOf(at);
+                        } catch (IllegalArgumentException ex) {
+                                log.warn("Invalid assignmentType '{}', defaulting to FIXED_BY_CONTRACT", at);
+                                assignmentTypeParsed = AssignmentType.FIXED_BY_CONTRACT;
+                        }
+                }
+
+                // Business rule: Only "Quản lý tổng" (QLT1) can create SUPPORT assignments
+                if (assignmentTypeParsed == AssignmentType.SUPPORT) {
+                        String roleCode = (creator.getRole() != null) ? creator.getRole().getCode() : "";
+                        if (!"QLT1".equalsIgnoreCase(roleCode)) {
+                                log.warn("User '{}' with role '{}' attempted to create SUPPORT assignment - forbidden", username, roleCode);
+                                throw new AppException(ErrorCode.FORBIDDEN);
+                        }
+                }
+
                 Employee employee = employeeRepository.findById(request.getEmployeeId())
                                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
@@ -137,10 +160,12 @@ public class AssignmentServiceImpl implements AssignmentService {
                         workingDays = contract.getWorkingDaysPerWeek() != null
                                         ? new ArrayList<>(contract.getWorkingDaysPerWeek())
                                         : null;
+                        
                         // If contract declares a fixed number of employees, ensure new assignment
                         // won't exceed that number (exclude SUPPORT assignments from the count)
                         Integer maxPositions = contract.getNumberOfEmployees();
-                        if (maxPositions != null) {
+                        // Business rule: SUPPORT assignments are NOT bound by headcount limits
+                        if (maxPositions != null && assignmentTypeParsed != AssignmentType.SUPPORT) {
                                 // Count distinct active employees for this contract up to the startDate,
                                 // excluding SUPPORT assignments (SUPPORT does not occupy a contract slot)
                                 Long currentCount = assignmentRepository
@@ -191,27 +216,6 @@ public class AssignmentServiceImpl implements AssignmentService {
                         if (!existingAssignments.isEmpty()) {
                                 throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
                         }
-                }
-
-                // Parse assignmentType safely (default to FIXED_BY_CONTRACT)
-                AssignmentType assignmentTypeParsed;
-                String at = request.getAssignmentType();
-                if (at == null || at.isBlank()) {
-                        assignmentTypeParsed = AssignmentType.FIXED_BY_CONTRACT;
-                } else {
-                        try {
-                                assignmentTypeParsed = AssignmentType.valueOf(at);
-                        } catch (IllegalArgumentException ex) {
-                                log.warn("Invalid assignmentType '{}', defaulting to FIXED_BY_CONTRACT", at);
-                                assignmentTypeParsed = AssignmentType.FIXED_BY_CONTRACT;
-                        }
-                }
-
-                // Business rule: users with role code 'QLV' are NOT allowed to create SUPPORT assignments
-                if (creator.getRole() != null && "QLV".equalsIgnoreCase(creator.getRole().getCode())
-                                && assignmentTypeParsed == AssignmentType.SUPPORT) {
-                        log.warn("QLV user '{}' attempted to create SUPPORT assignment - forbidden", username);
-                        throw new AppException(ErrorCode.QLV_CANNOT_CREATE_SUPPORT_ASSIGNMENT);
                 }
 
                 Assignment assignment = Assignment.builder()
@@ -542,6 +546,15 @@ public class AssignmentServiceImpl implements AssignmentService {
                         }
                 }
 
+                // Business rule for SUPPORT: Only "Quản lý tổng" (QLT1) can update SUPPORT assignments
+                if (assignment.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT) {
+                        String roleCode = (updater.getRole() != null) ? updater.getRole().getCode() : "";
+                        if (!"QLT1".equalsIgnoreCase(roleCode)) {
+                                log.warn("User '{}' with role '{}' attempted to update SUPPORT assignment - forbidden", username, roleCode);
+                                throw new AppException(ErrorCode.FORBIDDEN);
+                        }
+                }
+
                 Employee employee = employeeRepository.findById(request.getEmployeeId())
                                 .orElseThrow(() -> {
                                         log.error("[ASSIGNMENT][UPDATE] Employee not found, employeeId={}",
@@ -661,6 +674,15 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                         assignment.getId(), age.toMinutes());
                                         throw new AppException(ErrorCode.QLV_ACTION_WINDOW_EXPIRED);
                                 }
+                        }
+                }
+
+                // Business rule for SUPPORT: Only "Quản lý tổng" (QLT1) can delete SUPPORT assignments
+                if (assignment.getAssignmentType() == com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT) {
+                        String roleCode = (currentUser != null && currentUser.getRole() != null) ? currentUser.getRole().getCode() : "";
+                        if (!"QLT1".equalsIgnoreCase(roleCode)) {
+                                log.warn("User '{}' with role '{}' attempted to delete SUPPORT assignment - forbidden", username, roleCode);
+                                throw new AppException(ErrorCode.FORBIDDEN);
                         }
                 }
 
