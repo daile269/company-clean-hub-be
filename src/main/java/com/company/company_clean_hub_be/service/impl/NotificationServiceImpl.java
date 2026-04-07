@@ -71,8 +71,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     public List<NotificationResponse> getMyNotificationsWithFilter(String type, Boolean isRead) {
         User currentUser = getCurrentUserEntity();
-        Long recipientId = isManagerRole(currentUser) ? null : currentUser.getId();
-
+        Long recipientId = currentUser.getId();
         // Parse type String → enum (null nếu không truyền hoặc "ALL")
         NotificationType notificationType = null;
         if (type != null && !type.isBlank() && !"ALL".equalsIgnoreCase(type)) {
@@ -92,7 +91,7 @@ public class NotificationServiceImpl implements NotificationService {
     public PageResponse<NotificationResponse> getMyNotificationsPaged(
             String type, Boolean isRead, int page, int pageSize) {
         User currentUser = getCurrentUserEntity();
-        Long recipientId = isManagerRole(currentUser) ? null : currentUser.getId();
+        Long recipientId = currentUser.getId();
 
         NotificationType notificationType = null;
         if (type != null && !type.isBlank() && !"ALL".equalsIgnoreCase(type)) {
@@ -131,10 +130,6 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     public long countMyUnread() {
         User currentUser = getCurrentUserEntity();
-        if (isManagerRole(currentUser)) {
-            // Đối với QLT1, đếm tất cả thông báo chưa đọc trong hệ thống
-            return notificationRepository.countByIsReadFalse();
-        }
         return notificationRepository.countByRecipientIdAndIsReadFalse(currentUser.getId());
     }
 
@@ -167,8 +162,8 @@ public class NotificationServiceImpl implements NotificationService {
         Notification notification = notificationRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.NOTIFICATION_NOT_FOUND));
 
-        // Chỉ owner mới được đánh dấu đã đọc, TRỪ khi là QLT1
-        if (!isManagerRole(currentUser) && !notification.getRecipient().getId().equals(currentUser.getId())) {
+        // Chỉ owner mới được đánh dấu đã đọc
+        if (!notification.getRecipient().getId().equals(currentUser.getId())) {
             throw new AppException(ErrorCode.FORBIDDEN);
         }
 
@@ -181,15 +176,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional
     public void markAllAsRead() {
         User currentUser = getCurrentUserEntity();
-        List<Notification> unread;
-        
-        if (isManagerRole(currentUser)) {
-            // QLT1: Đánh dấu ĐÃ ĐỌC tất cả thông báo chưa đọc trong toàn bộ hệ thống
-            unread = notificationRepository.findAllByIsReadFalse();
-        } else {
-            // User thường: Chỉ đánh dấu đống của mình
-            unread = notificationRepository.findByRecipientIdAndIsReadFalseOrderByCreatedAtDesc(currentUser.getId());
-        }
+        List<Notification> unread = notificationRepository.findByRecipientIdAndIsReadFalseOrderByCreatedAtDesc(currentUser.getId());
         
         unread.forEach(n -> n.setIsRead(true));
         notificationRepository.saveAll(unread);
