@@ -178,7 +178,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 boolean employeeAlreadyCounted = assignmentRepository
                                                 .findActiveAssignmentByEmployeeAndContract(request.getEmployeeId(),
                                                                 request.getContractId())
-                                                .stream().anyMatch(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS);
+                                                .stream().anyMatch(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS 
+                                                                || a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.SCHEDULED);
 
                                 if (!employeeAlreadyCounted && currentCount != null
                                                 && currentCount >= maxPositions) {
@@ -207,9 +208,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                         finalStatus = request.getStatus() != null ? request.getStatus() : AssignmentStatus.IN_PROGRESS;
                 }
 
-                // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (CHỈ check
-                // nếu finalStatus là IN_PROGRESS và scope là CONTRACT)
-                if (scope == AssignmentScope.CONTRACT && AssignmentStatus.IN_PROGRESS.equals(finalStatus)) {
+                // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (Chặn trùng cho cả IN_PROGRESS và SCHEDULED)
+                if (scope == AssignmentScope.CONTRACT && (AssignmentStatus.IN_PROGRESS.equals(finalStatus) || AssignmentStatus.SCHEDULED.equals(finalStatus))) {
                         List<Assignment> existingAssignments = assignmentRepository
                                         .findActiveAssignmentByEmployeeAndContract(request.getEmployeeId(),
                                                         request.getContractId());
@@ -572,8 +572,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                 // throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
                 // }
 
-                // Validate active assignment uniqueness
-                if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus())) {
+                // Validate active assignment uniqueness (Chặn trùng cho cả IN_PROGRESS và SCHEDULED)
+                if (AssignmentStatus.IN_PROGRESS.equals(request.getStatus()) || AssignmentStatus.SCHEDULED.equals(request.getStatus())) {
                         List<Assignment> existingAssignments = assignmentRepository
                                         .findActiveAssignmentByEmployeeAndContractAndIdNot(
                                                         request.getEmployeeId(),

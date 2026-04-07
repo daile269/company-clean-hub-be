@@ -79,7 +79,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     @Query("SELECT a FROM Assignment a " +
            "WHERE a.employee.id = :employeeId " +
            "AND a.contract.id = :contractId " +
-           "AND a.status = 'IN_PROGRESS'")
+           "AND a.status IN ('IN_PROGRESS', 'SCHEDULED')")
     List<Assignment> findActiveAssignmentByEmployeeAndContract(
             @Param("employeeId") Long employeeId,
             @Param("contractId") Long contractId
@@ -104,7 +104,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     @Query("SELECT a FROM Assignment a " +
            "WHERE a.employee.id = :employeeId " +
            "AND a.contract.id = :contractId " +
-           "AND a.status = 'IN_PROGRESS' " +
+           "AND a.status IN ('IN_PROGRESS', 'SCHEDULED') " +
            "AND a.id != :assignmentId")
     List<Assignment> findActiveAssignmentByEmployeeAndContractAndIdNot(
             @Param("employeeId") Long employeeId,
@@ -162,7 +162,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 
             @Query("SELECT COUNT(DISTINCT a.employee.id) FROM Assignment a " +
                    "WHERE a.contract.id = :contractId " +
-                   "AND a.status = 'IN_PROGRESS' " +
+                   "AND a.status IN ('IN_PROGRESS', 'SCHEDULED') " +
                      "AND a.startDate <= :endDate")
             Long countDistinctActiveEmployeesByContractBefore(
                     @Param("contractId") Long contractId,
@@ -171,7 +171,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 
              @Query("SELECT COUNT(DISTINCT a.employee.id) FROM Assignment a " +
                      "WHERE a.contract.id = :contractId " +
-                     "AND a.status = 'IN_PROGRESS' " +
+                     "AND a.status IN ('IN_PROGRESS', 'SCHEDULED') " +
                      "AND a.startDate <= :endDate " +
                      "AND (:excludedType IS NULL OR a.assignmentType <> :excludedType)")
              Long countDistinctActiveEmployeesByContractBeforeExcludingType(
