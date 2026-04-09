@@ -26,15 +26,15 @@ public interface AssignmentVerificationRepository extends JpaRepository<Assignme
     @Query("SELECT COUNT(av) FROM AssignmentVerification av WHERE av.assignment.employee.id = :employeeId AND av.status IN ('APPROVED', 'AUTO_APPROVED')")
     Long countCompletedVerificationsByEmployee(@Param("employeeId") Long employeeId);
 
-    @Query("SELECT av FROM AssignmentVerification av WHERE av.status = 'PENDING' OR av.status = 'IN_PROGRESS'")
+    @Query("SELECT av FROM AssignmentVerification av WHERE (av.status = 'PENDING' OR av.status = 'IN_PROGRESS') AND av.reason = 'NEW_EMPLOYEE'")
     List<AssignmentVerification> findPendingVerifications();
 
     @Query("SELECT av FROM AssignmentVerification av WHERE av.assignment.contract.id = :contractId")
     List<AssignmentVerification> findByContractId(@Param("contractId") Long contractId);
     
-    // Tìm verification cần auto-approve (đã đủ 5 lần và đang IN_PROGRESS)
+    // Tìm verification cần auto-approve (đã có attempt, đang pending/in-progress)
     @Query("SELECT av FROM AssignmentVerification av " +
-           "WHERE av.status = 'IN_PROGRESS' " +
-           "AND av.currentAttempts >= av.maxAttempts")
+           "WHERE av.status IN ('PENDING', 'IN_PROGRESS') " +
+           "AND av.currentAttempts > 0")
     List<AssignmentVerification> findVerificationsForAutoApproval();
 }

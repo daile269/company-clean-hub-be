@@ -73,7 +73,7 @@ public class Assignment {
     @PositiveOrZero
     private Integer plannedDays;
 
-    @ElementCollection(targetClass = DayOfWeek.class)
+    @ElementCollection(targetClass = java.time.DayOfWeek.class)
     @CollectionTable(name = "assignment_working_days", joinColumns = @JoinColumn(name = "assignment_id"))
     @Column(name = "day_of_week")
     @Enumerated(EnumType.STRING)

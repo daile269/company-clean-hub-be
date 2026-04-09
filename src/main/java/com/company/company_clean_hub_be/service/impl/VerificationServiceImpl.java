@@ -1,6 +1,5 @@
 package com.company.company_clean_hub_be.service.impl;
 
-import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -24,6 +23,9 @@ import com.company.company_clean_hub_be.entity.User;
 import com.company.company_clean_hub_be.entity.VerificationImage;
 import com.company.company_clean_hub_be.entity.VerificationReason;
 import com.company.company_clean_hub_be.entity.VerificationStatus;
+import com.company.company_clean_hub_be.entity.WorkSchedule;
+import com.company.company_clean_hub_be.entity.WorkScheduleReason;
+import com.company.company_clean_hub_be.entity.WorkScheduleStatus;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.exception.ResourceNotFoundException;
@@ -34,12 +36,18 @@ import com.company.company_clean_hub_be.repository.ContractRepository;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.repository.VerificationImageRepository;
+import com.company.company_clean_hub_be.repository.WorkScheduleRepository;
 import com.company.company_clean_hub_be.service.FileStorageService;
 import com.company.company_clean_hub_be.service.VerificationService;
+import com.company.company_clean_hub_be.service.WorkScheduleService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * NEW Implementation with WorkSchedule integration
+ * Separates work schedule (plan) from attendance (actual)
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -52,26 +60,23 @@ public class VerificationServiceImpl implements VerificationService {
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final ContractRepository contractRepository;
+    private final WorkScheduleRepository workScheduleRepository;
+    private final WorkScheduleService workScheduleService;
     private final FileStorageService fileStorageService;
 
     @Override
     @Transactional
     public AssignmentVerification createVerificationRequirement(Assignment assignment, String reasonStr) {
-        log.info("[DEBUG] ===== createVerificationRequirement called =====");
-        log.info("[DEBUG] Assignment ID: {}, Reason: {}", assignment.getId(), reasonStr);
-        log.info("Creating verification requirement for assignment: {}, reason: {}", assignment.getId(), reasonStr);
+        log.info("Creating verification requirement: assignmentId={}, reason={}", assignment.getId(), reasonStr);
 
         // Check if verification already exists
         Optional<AssignmentVerification> existing = verificationRepository.findByAssignmentId(assignment.getId());
         if (existing.isPresent()) {
-            log.warn("[DEBUG] Verification requirement already exists for assignment: {}", assignment.getId());
-            log.warn("Verification requirement already exists for assignment: {}", assignment.getId());
+            log.warn("Verification already exists for assignment: {}", assignment.getId());
             return existing.get();
         }
 
-        log.info("[DEBUG] Creating new verification requirement");
         VerificationReason reason = VerificationReason.valueOf(reasonStr);
-        log.info("[DEBUG] Reason enum: {}", reason);
 
         AssignmentVerification verification = AssignmentVerification.builder()
                 .assignment(assignment)
@@ -79,70 +84,28 @@ public class VerificationServiceImpl implements VerificationService {
                 .status(VerificationStatus.PENDING)
                 .maxAttempts(5)
                 .currentAttempts(0)
+                .transitionToContractMode(assignment.getContract() != null && 
+                    Boolean.TRUE.equals(assignment.getContract().getRequiresImageVerification()))
                 .build();
 
         AssignmentVerification saved = verificationRepository.save(verification);
-        log.info("[DEBUG] ===== Verification requirement created: {} =====", saved.getId());
-        log.info("Created verification requirement: {}", saved.getId());
+        log.info("Created verification requirement: id={}, transitionToContractMode={}", 
+            saved.getId(), saved.getTransitionToContractMode());
+        
         return saved;
     }
 
     @Override
     public Optional<AssignmentVerificationResponse> getVerificationByAssignmentId(Long assignmentId) {
-        log.info("[VerificationService] getVerificationByAssignmentId called with assignmentId={}", assignmentId);
+        log.info("Getting verification for assignment: {}", assignmentId);
 
-        // 1. Check if assignment exists
-        var assignmentOpt = assignmentRepository.findById(assignmentId);
-        if (assignmentOpt.isEmpty()) {
-            log.warn("[VerificationService] Assignment with id={} does NOT exist in DB!", assignmentId);
-            return Optional.empty();
-        }
-        var assignment = assignmentOpt.get();
-        log.info("[VerificationService] Assignment found: id={}, employeeId={}, status={}, contractId={}",
-                assignment.getId(),
-                assignment.getEmployee() != null ? assignment.getEmployee().getId() : "NULL",
-                assignment.getStatus(),
-                assignment.getContract() != null ? assignment.getContract().getId() : "NULL");
-
-        // 2. Check if verification exists for this assignment
         Optional<AssignmentVerification> verificationOpt = verificationRepository.findByAssignmentId(assignmentId);
         if (verificationOpt.isEmpty()) {
-            log.warn(
-                    "[VerificationService] No verification record found in assignment_verifications for assignmentId={}.",
-                    assignmentId);
-
-            // 3. Debug: check if verification is needed
-            boolean needsVerification = requiresVerification(assignment);
-            log.info("[VerificationService] Does assignment {} require verification? -> {}", assignmentId,
-                    needsVerification);
-
-            if (needsVerification) {
-                log.info("[VerificationService] Verification IS required but was never created. " +
-                        "This may happen if the assignment was created via the old flow (autoGenerateAttendances) " +
-                        "instead of autoGenerateAttendancesWithVerification.");
-            }
-
-            // 4. Debug: list all verifications for this employee
-            if (assignment.getEmployee() != null) {
-                var allEmployeeVerifications = verificationRepository
-                        .findByEmployeeId(assignment.getEmployee().getId());
-                log.info("[VerificationService] Total verifications for employeeId={}: count={}",
-                        assignment.getEmployee().getId(), allEmployeeVerifications.size());
-                for (var v : allEmployeeVerifications) {
-                    log.info("[VerificationService]   - verificationId={}, assignmentId={}, status={}, reason={}",
-                            v.getId(), v.getAssignment().getId(), v.getStatus(), v.getReason());
-                }
-            }
-
+            log.warn("No verification found for assignment: {}", assignmentId);
             return Optional.empty();
         }
 
-        AssignmentVerification verification = verificationOpt.get();
-        log.info("[VerificationService] Verification FOUND: id={}, status={}, reason={}, attempts={}/{}, canCapture={}",
-                verification.getId(), verification.getStatus(), verification.getReason(),
-                verification.getCurrentAttempts(), verification.getMaxAttempts(), verification.canCapture());
-
-        return Optional.of(mapToVerificationResponse(verification));
+        return Optional.of(mapToVerificationResponse(verificationOpt.get()));
     }
 
     @Override
@@ -164,69 +127,14 @@ public class VerificationServiceImpl implements VerificationService {
     @Override
     @Transactional
     public VerificationImageResponse captureVerificationImage(VerificationCaptureRequest request) {
-        log.info("[DEBUG] ===== captureVerificationImage called =====");
-        log.info("[DEBUG] Verification ID: {}", request.getVerificationId());
-        log.info("Capturing verification image for verification: {}", request.getVerificationId());
+        log.info("Capturing verification image: verificationId={}", request.getVerificationId());
 
-        AssignmentVerification verification = verificationRepository.findById(request.getVerificationId())
-                .orElseThrow(
-                        () -> new ResourceNotFoundException("Verification not found: " + request.getVerificationId()));
-
-        if (!verification.canCapture()) {
-            log.warn("[DEBUG] Cannot capture image - verification not eligible");
-            throw new AppException(ErrorCode.VERIFICATION_CAPTURE_NOT_ALLOWED);
-        }
-
-        try {
-            // Upload image to Cloudinary
-            String fileName = "verification_" + verification.getId() + "_" + System.currentTimeMillis();
-            String publicId = fileStorageService.storeBase64(request.getImageData(), fileName,
-                    "company-clean-hub/verification");
-            String imageUrl = fileStorageService.getSecureUrl(publicId);
-
-            // Create verification image record
-            VerificationImage image = VerificationImage.builder()
-                    .assignmentVerification(verification)
-                    .employee(verification.getAssignment().getEmployee())
-                    .attendance(request.getAttendanceId() != null
-                            ? attendanceRepository.findById(request.getAttendanceId()).orElse(null)
-                            : null)
-                    .cloudinaryPublicId(publicId)
-                    .cloudinaryUrl(imageUrl)
-                    .latitude(request.getLatitude())
-                    .longitude(request.getLongitude())
-                    .address(request.getAddress())
-                    .capturedAt(LocalDateTime.now())
-                    .faceConfidence(request.getFaceConfidence())
-                    .imageQualityScore(request.getImageQualityScore())
-                    .build();
-
-            VerificationImage savedImage = imageRepository.save(image);
-
-            // Update verification status and attempts
-            verification.incrementAttempts();
-            if (verification.getStatus() == VerificationStatus.PENDING) {
-                verification.setStatus(VerificationStatus.IN_PROGRESS);
-            }
-            verificationRepository.save(verification);
-
-            log.info("[DEBUG] Image saved: id={}, attempts: {}/{}", 
-                    savedImage.getId(), verification.getCurrentAttempts(), verification.getMaxAttempts());
-            log.info("Captured verification image: {}, attempts: {}/{}",
-                    savedImage.getId(), verification.getCurrentAttempts(), verification.getMaxAttempts());
-
-            // CRITICAL FIX: Trigger attendance generation for next day
-            log.info("[DEBUG] Triggering attendance generation after image capture");
-            triggerAttendanceGeneration(verification.getAssignment());
-            log.info("[DEBUG] ===== Attendance generation triggered =====");
-
-            return mapToImageResponse(savedImage);
-
-        } catch (IOException e) {
-            log.error("[DEBUG] Failed to upload verification image: {}", e.getMessage(), e);
-            log.error("Failed to upload verification image", e);
-            throw new AppException(ErrorCode.FILE_UPLOAD_FAILED);
-        }
+        // NOTE: This method is DEPRECATED with work_schedule
+        // Use WorkScheduleService.capturePhoto() instead
+        // Keeping for backward compatibility
+        
+        throw new AppException(ErrorCode.INVALID_REQUEST, 
+            "Please use /api/work-schedules/capture endpoint for photo capture");
     }
 
     @Override
@@ -241,11 +149,10 @@ public class VerificationServiceImpl implements VerificationService {
     @Transactional
     public AssignmentVerificationResponse approveVerification(VerificationApprovalRequest request,
             String approverUsername) {
-        log.info("Approving verification: {} by user: {}", request.getVerificationId(), approverUsername);
+        log.info("Approving verification: id={}, approver={}", request.getVerificationId(), approverUsername);
 
         AssignmentVerification verification = verificationRepository.findById(request.getVerificationId())
-                .orElseThrow(
-                        () -> new ResourceNotFoundException("Verification not found: " + request.getVerificationId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Verification not found: " + request.getVerificationId()));
 
         User approver = userRepository.findByUsername(approverUsername)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + approverUsername));
@@ -254,30 +161,20 @@ public class VerificationServiceImpl implements VerificationService {
         verification.setApprovedBy(approver);
         verification.setApprovedAt(LocalDateTime.now());
 
-        AssignmentVerification saved = verificationRepository.save(verification);
-        log.info("Approved verification: {}", saved.getId());
+        verificationRepository.save(verification);
 
-        // Business rule: once a manager approves verification, always disable image verification on the contract
-        // (disableVerification flag is kept for backward compatibility but no longer gates this behavior)
-        Contract contract = verification.getAssignment() != null ? verification.getAssignment().getContract() : null;
-        if (contract != null) {
-            log.info("[DEBUG] Disabling verification for contract: {}", contract.getId());
-            contract.setRequiresImageVerification(false);
-            contractRepository.save(contract);
-        }
+        // Handle work schedules based on transition mode
+        handleVerificationApproval(verification);
 
-        // FIXED: Generate ALL remaining attendances for the month after approval
-        log.info("[DEBUG] Generating all remaining attendances after approval");
-        generateAllRemainingAttendances(verification.getAssignment().getId());
-
-        return mapToVerificationResponse(saved);
+        log.info("Approved verification: {}", verification.getId());
+        return mapToVerificationResponse(verification);
     }
 
     @Override
     @Transactional
     public AssignmentVerificationResponse rejectVerification(Long verificationId, String reason,
             String approverUsername) {
-        log.info("Rejecting verification: {} by user: {}", verificationId, approverUsername);
+        log.info("Rejecting verification: id={}, approver={}", verificationId, approverUsername);
 
         AssignmentVerification verification = verificationRepository.findById(verificationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Verification not found: " + verificationId));
@@ -286,345 +183,341 @@ public class VerificationServiceImpl implements VerificationService {
         verification.setStatus(VerificationStatus.PENDING);
         verification.setCurrentAttempts(0);
 
-        AssignmentVerification saved = verificationRepository.save(verification);
-        log.info("Rejected verification: {}, reset attempts", saved.getId());
+        verificationRepository.save(verification);
+        log.info("Rejected verification: {}, reset attempts", verification.getId());
 
-        return mapToVerificationResponse(saved);
+        return mapToVerificationResponse(verification);
     }
 
     @Override
     public boolean requiresVerification(Assignment assignment) {
-        log.info("[DEBUG] ===== requiresVerification called =====");
-        log.info("[DEBUG] Assignment ID: {}, Employee ID: {}, Contract ID: {}", 
-                assignment.getId(),
-                assignment.getEmployee().getId(),
-                assignment.getContract() != null ? assignment.getContract().getId() : "NULL");
+        log.info("Checking if assignment requires verification: assignmentId={}", assignment.getId());
         
-        // Check condition 1: Employee is completely new (never had any assignment)
-        log.info("[DEBUG] Checking condition 1: isEmployeeCompletelyNew");
-        if (isEmployeeCompletelyNew(assignment.getEmployee().getId())) {
-            log.info("[DEBUG] ===== RESULT: TRUE (COMPLETELY_NEW_EMPLOYEE) =====");
-            log.info("Assignment {} requires verification: COMPLETELY_NEW_EMPLOYEE", assignment.getId());
+        // Condition 1: Completely new employee (never had any OTHER assignment)
+        // Pass assignment.getId() to exclude the current assignment from the count
+        if (isEmployeeCompletelyNew(assignment.getEmployee().getId(), assignment.getId())) {
+            log.info("Assignment {} requires verification: NEW_EMPLOYEE", assignment.getId());
             return true;
         }
 
-        // Check condition 2: Contract setting
-        log.info("[DEBUG] Checking condition 2: Contract requiresImageVerification");
-        if (assignment.getContract() != null) {
-            log.info("[DEBUG] Contract exists, requiresImageVerification={}", 
-                    assignment.getContract().getRequiresImageVerification());
-            if (Boolean.TRUE.equals(assignment.getContract().getRequiresImageVerification())) {
-                log.info("[DEBUG] ===== RESULT: TRUE (CONTRACT_SETTING) =====");
-                log.info("Assignment {} requires verification: CONTRACT_SETTING", assignment.getId());
-                return true;
-            }
-        } else {
-            log.info("[DEBUG] Contract is NULL");
+        // Condition 2: Contract setting
+        if (assignment.getContract() != null && 
+            Boolean.TRUE.equals(assignment.getContract().getRequiresImageVerification())) {
+            log.info("Assignment {} requires verification: CONTRACT_REQUIREMENT", assignment.getId());
+            return true;
         }
 
-        log.info("[DEBUG] ===== RESULT: FALSE (NO VERIFICATION REQUIRED) =====");
         return false;
     }
 
     @Override
     public boolean isEmployeeNew(Long employeeId) {
-        log.info("[DEBUG] isEmployeeNew called for employeeId={}", employeeId);
         Long completedCount = verificationRepository.countCompletedVerificationsByEmployee(employeeId);
-        log.info("[DEBUG] Completed verifications count for employeeId={}: {}", employeeId, completedCount);
-        boolean isNew = completedCount == 0;
-        log.info("[DEBUG] isEmployeeNew result: {}", isNew);
-        return isNew;
-    }
-
-    private boolean isEmployeeCompletelyNew(Long employeeId) {
-        log.info("[DEBUG] isEmployeeCompletelyNew called for employeeId={}", employeeId);
-        
-        // Check if employee has ANY assignment (completed or not)
-        Long totalAssignments = assignmentRepository.countAssignmentsByEmployee(employeeId);
-        log.info("[DEBUG] Total assignments for employeeId={}: {}", employeeId, totalAssignments);
-        
-        boolean isNew = totalAssignments == 0;
-        log.info("[DEBUG] isEmployeeCompletelyNew result: {}", isNew);
-        return isNew;
+        return completedCount == 0;
     }
 
     @Override
     public boolean canCaptureImage(Long verificationId) {
-        AssignmentVerification verification = verificationRepository.findById(verificationId)
-                .orElse(null);
-        
-        if (verification == null) {
-            return false;
-        }
-        
-        // Kiểm tra status
-        if (verification.isCompleted()) {
-            log.info("Cannot capture: verification {} is already completed", verificationId);
-            return false;
-        }
-        
-        // Kiểm tra số lần
-        if (verification.getCurrentAttempts() >= verification.getMaxAttempts()) {
-            log.info("Cannot capture: verification {} reached max attempts {}/{}", 
-                verificationId, verification.getCurrentAttempts(), verification.getMaxAttempts());
-            return false;
-        }
-        
-        // CRITICAL FIX: Kiểm tra đã chụp hôm nay chưa
-        LocalDateTime today = LocalDateTime.now();
-        boolean capturedToday = imageRepository.existsByVerificationIdAndCapturedDate(
-            verificationId, today);
-        
-        if (capturedToday) {
-            log.info("Cannot capture: verification {} already captured today", verificationId);
-            return false;
-        }
-        
-        log.info("Can capture: verification {} is eligible", verificationId);
-        return true;
+        // NOTE: This is deprecated with work_schedule
+        // Use WorkScheduleService.canCapturePhoto() instead
+        return false;
     }
 
-    private void triggerAttendanceGeneration(Assignment assignment) {
-        log.info("[DEBUG] ===== triggerAttendanceGeneration called =====");
-        log.info("[DEBUG] Assignment ID: {}", assignment.getId());
+    @Override
+    @Transactional
+    public void processAutoApprovals() {
+        log.info("Starting auto-approval process...");
         
-        // CRITICAL FIX: Sinh attendance từ ngày sau ngày chụp ảnh cuối cùng
-        List<LocalDateTime> captureDates = imageRepository.findCaptureDatesByAssignmentId(assignment.getId());
-        log.info("[DEBUG] Found {} capture dates", captureDates.size());
+        // Find verifications that already entered capture flow.
+        // Important: do not limit to IN_PROGRESS only, because some records
+        // can remain PENDING even after captures happened.
+        List<AssignmentVerification> verifications = verificationRepository
+            .findVerificationsForAutoApproval();
         
-        LocalDate startDate;
-        if (!captureDates.isEmpty()) {
-            // Lấy ngày chụp ảnh cuối cùng
-            LocalDate lastCaptureDate = captureDates.get(0).toLocalDate();
-            log.info("[DEBUG] Last capture date: {}", lastCaptureDate);
-            
-            // Sinh từ ngày sau ngày chụp ảnh
-            startDate = lastCaptureDate.plusDays(1);
-            log.info("[DEBUG] Generating attendances from day after last capture: {}", startDate);
-        } else {
-            // Fallback: nếu không có ảnh, sinh từ hôm nay
-            startDate = LocalDate.now();
-            log.warn("[DEBUG] No capture images found, generating from today: {}", startDate);
+        for (AssignmentVerification verification : verifications) {
+            try {
+                Long verifiedCount = workScheduleRepository.countByVerificationIdAndStatus(
+                    verification.getId(), WorkScheduleStatus.VERIFIED
+                );
+                
+                log.info("Verification {} has {} verified schedules", verification.getId(), verifiedCount);
+                
+                if (verifiedCount >= 5) {
+                    log.info("Auto-approving verification: id={}", verification.getId());
+                    
+                    verification.setStatus(VerificationStatus.AUTO_APPROVED);
+                    verification.setAutoApprovedAt(LocalDateTime.now());
+                    verificationRepository.save(verification);
+                    
+                    // Handle work schedules
+                    handleVerificationApproval(verification);
+                    
+                    log.info("Successfully auto-approved verification: {}", verification.getId());
+                } else {
+                    log.info("Verification {} not eligible yet (verified schedules: {})", 
+                        verification.getId(), verifiedCount);
+                }
+            } catch (Exception e) {
+                log.error("Failed to auto-approve verification: {}", verification.getId(), e);
+            }
         }
         
-        // FIXED: Luôn sinh attendance cho ngày tiếp theo, ngay cả khi là ngày mai
-        // Chỉ không sinh nếu startDate quá xa trong tương lai (> 1 tháng)
+        log.info("Auto-approval process completed");
+    }
+
+    @Override
+    @Transactional
+    public void syncContractVerificationState(Contract contract, boolean requiresVerification) {
+        log.info("Syncing contract verification state: contractId={}, enabled={}", 
+            contract.getId(), requiresVerification);
+        
+        List<Assignment> activeAssignments = assignmentRepository.findByContractId(contract.getId()).stream()
+            .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS || 
+                        a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.SCHEDULED)
+            .collect(Collectors.toList());
+
+        for (Assignment assignment : activeAssignments) {
+            try {
+                if (requiresVerification) {
+                    handleContractVerificationEnabled(assignment);
+                } else {
+                    handleContractVerificationDisabled(assignment);
+                }
+            } catch (Exception e) {
+                log.error("Failed to sync verification for assignment {}: {}", assignment.getId(), e.getMessage(), e);
+            }
+        }
+    }
+
+    // Private helper methods
+
+    private boolean isEmployeeCompletelyNew(Long employeeId, Long excludeAssignmentId) {
+        Long totalAssignments = excludeAssignmentId != null
+                ? assignmentRepository.countAssignmentsByEmployeeExcluding(employeeId, excludeAssignmentId)
+                : assignmentRepository.countAssignmentsByEmployee(employeeId);
+        return totalAssignments == 0;
+    }
+
+    private void handleVerificationApproval(AssignmentVerification verification) {
+        log.info("Handling verification approval: id={}, transitionToContractMode={}", 
+            verification.getId(), verification.getTransitionToContractMode());
+
+        // Get all work schedules for this verification
+        List<WorkSchedule> schedules = workScheduleRepository.findByVerificationId(verification.getId());
+        
+        if (verification.getTransitionToContractMode()) {
+            // Transition to CONTRACT_REQUIREMENT mode
+            log.info("Transitioning to CONTRACT_REQUIREMENT mode for verification: {}", verification.getId());
+            
+            // Create attendances for all SCHEDULED and MISSED schedules
+            for (WorkSchedule schedule : schedules) {
+                if (schedule.getStatus() == WorkScheduleStatus.SCHEDULED || 
+                    schedule.getStatus() == WorkScheduleStatus.MISSED) {
+                    
+                    if (schedule.getAttendance() == null) {
+                        Attendance attendance = createAttendanceFromSchedule(schedule);
+                        schedule.setAttendance(attendance);
+                    }
+                    schedule.setStatus(WorkScheduleStatus.VERIFIED);
+                    schedule.setSyncNote("Approved - transitioning to contract mode");
+                    schedule.setLastSyncedAt(LocalDateTime.now());
+                }
+            }
+            workScheduleRepository.saveAll(schedules);
+            
+            // Create future work schedules with CONTRACT_REQUIREMENT
+            LocalDate nextMonth = LocalDate.now().plusMonths(1);
+            LocalDate endOfNextMonth = nextMonth.withDayOfMonth(nextMonth.lengthOfMonth());
+            workScheduleService.createWorkSchedulesForAssignment(
+                verification.getAssignment(),
+                WorkScheduleReason.CONTRACT_REQUIREMENT,
+                null,
+                nextMonth.withDayOfMonth(1),
+                endOfNextMonth
+            );
+            
+        } else {
+            // No transition - complete verification
+            log.info("Completing verification without transition: {}", verification.getId());
+            
+            // Create attendances for ALL schedules (SCHEDULED + MISSED)
+            for (WorkSchedule schedule : schedules) {
+                if (schedule.getAttendance() == null) {
+                    Attendance attendance = createAttendanceFromSchedule(schedule);
+                    schedule.setAttendance(attendance);
+                }
+                schedule.setStatus(WorkScheduleStatus.VERIFIED);
+                schedule.setSyncNote("Approved - verification completed");
+                schedule.setLastSyncedAt(LocalDateTime.now());
+            }
+            workScheduleRepository.saveAll(schedules);
+            
+            // No more work schedules needed - will generate attendances directly
+        }
+    }
+
+    private void handleContractVerificationEnabled(Assignment assignment) {
+        log.info("[VERIFI-ENABLE] ===== START handleContractVerificationEnabled =====");
+        log.info("[VERIFI-ENABLE] assignmentId={}, employeeId={}, contractId={}", 
+            assignment.getId(), 
+            assignment.getEmployee() != null ? assignment.getEmployee().getId() : "NULL",
+            assignment.getContract() != null ? assignment.getContract().getId() : "NULL");
+        
         LocalDate today = LocalDate.now();
-        LocalDate maxFutureDate = today.plusMonths(1);
-        log.info("[DEBUG] Today: {}, startDate: {}, maxFutureDate: {}", today, startDate, maxFutureDate);
-        
-        if (!startDate.isAfter(maxFutureDate)) {
-            log.info("[DEBUG] Calling generateRemainingAttendances");
-            generateRemainingAttendances(assignment.getId(), startDate);
-            log.info("[DEBUG] ===== Triggered attendance generation for assignment: {} from date: {} =====", 
-                assignment.getId(), startDate);
-        } else {
-            log.info("[DEBUG] Start date {} is too far in the future, no attendances to generate yet", startDate);
+        log.info("[VERIFI-ENABLE] today={}", today);
+
+        // Xóa work_schedules SCHEDULED cũ (từ hôm nay trở đi) trước khi tạo mới
+        List<WorkSchedule> oldScheduled = workScheduleRepository.findByAssignmentId(assignment.getId())
+            .stream()
+            .filter(ws -> ws.getStatus() == WorkScheduleStatus.SCHEDULED 
+                       && !ws.getScheduledDate().isBefore(today))
+            .collect(Collectors.toList());
+        log.info("[VERIFI-ENABLE] Found {} old SCHEDULED work_schedules to delete (from {} onwards)", 
+            oldScheduled.size(), today);
+        oldScheduled.forEach(ws -> log.info("[VERIFI-ENABLE]   - workScheduleId={}, date={}, status={}", 
+            ws.getId(), ws.getScheduledDate(), ws.getStatus()));
+        if (!oldScheduled.isEmpty()) {
+            workScheduleRepository.deleteAll(oldScheduled);
+            log.info("[VERIFI-ENABLE] Deleted {} old SCHEDULED work_schedules", oldScheduled.size());
         }
+
+        // Đếm attendance trước khi xóa
+        Long attendancesBefore = attendanceRepository.countAttendancesByAssignment(assignment.getId());
+        log.info("[VERIFI-ENABLE] Attendance count BEFORE delete: {}", attendancesBefore);
+
+        // Xóa attendance từ hôm nay trở đi
+        attendanceRepository.deleteByAssignmentIdAndDateAfter(assignment.getId(), today.minusDays(1));
+
+        Long attendancesAfter = attendanceRepository.countAttendancesByAssignment(assignment.getId());
+        log.info("[VERIFI-ENABLE] Attendance count AFTER delete: {} (deleted {})", 
+            attendancesAfter, attendancesBefore - attendancesAfter);
+
+        // Cập nhật workDays
+        assignment.setWorkDays(attendancesAfter != null ? attendancesAfter.intValue() : 0);
+        assignmentRepository.save(assignment);
+        log.info("[VERIFI-ENABLE] Updated assignment workDays={}", assignment.getWorkDays());
+
+        // Reload để tránh lazy loading issue với workingDaysPerWeek
+        Assignment freshAssignment = assignmentRepository.findById(assignment.getId()).orElse(assignment);
+        log.info("[VERIFI-ENABLE] freshAssignment workingDaysPerWeek: {} (size={})", 
+            freshAssignment.getWorkingDaysPerWeek(),
+            freshAssignment.getWorkingDaysPerWeek() != null ? freshAssignment.getWorkingDaysPerWeek().size() : "NULL");
+
+        // Tạo work_schedules từ hôm nay
+        LocalDate endOfMonth = today.withDayOfMonth(today.lengthOfMonth());
+        log.info("[VERIFI-ENABLE] Creating work_schedules from {} to {}", today, endOfMonth);
+        
+        List<WorkSchedule> created = workScheduleService.createWorkSchedulesForAssignment(
+            freshAssignment,
+            WorkScheduleReason.CONTRACT_REQUIREMENT,
+            null,
+            today,
+            endOfMonth
+        );
+        
+        log.info("[VERIFI-ENABLE] Created {} work_schedules", created != null ? created.size() : 0);
+        if (created != null) {
+            created.forEach(ws -> log.info("[VERIFI-ENABLE]   + workScheduleId={}, date={}, status={}", 
+                ws.getId(), ws.getScheduledDate(), ws.getStatus()));
+        }
+        log.info("[VERIFI-ENABLE] ===== END handleContractVerificationEnabled =====");
     }
 
-    private void generateRemainingAttendances(Long assignmentId, LocalDate fromDate) {
-        log.info("[DEBUG] ===== generateRemainingAttendances called =====");
-        log.info("[DEBUG] assignmentId={}, fromDate={}", assignmentId, fromDate);
+    private void handleContractVerificationDisabled(Assignment assignment) {
+        log.info("Disabling verification for assignment: {}", assignment.getId());
 
-        Assignment assignment = assignmentRepository.findById(assignmentId)
-                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+        LocalDate today = LocalDate.now();
 
-        log.info("[DEBUG] Assignment found: id={}, workingDaysPerWeek={}", 
-                assignment.getId(), assignment.getWorkingDaysPerWeek());
+        // Cancel pending verifications (NEW_EMPLOYEE chưa hoàn thành)
+        verificationRepository.findByAssignmentId(assignment.getId()).ifPresent(verification -> {
+            if (verification.getStatus() == VerificationStatus.PENDING || 
+                verification.getStatus() == VerificationStatus.IN_PROGRESS) {
+                verification.setStatus(VerificationStatus.CANCELLED);
+                verification.setCancelledAt(LocalDateTime.now());
+                verification.setCancelledReason("Contract disabled verification");
+                verificationRepository.save(verification);
+            }
+        });
 
-        // FIXED: Chỉ tạo 1 attendance cho ngày tiếp theo, không phải toàn bộ tháng
-        LocalDate currentDate = fromDate;
-        log.info("[DEBUG] Generating attendance for next working day starting from {}", currentDate);
-
-        List<Attendance> attendances = new ArrayList<>();
-        
-        // Get working days from assignment
-        List<com.company.company_clean_hub_be.entity.DayOfWeek> workingDaysEntity = new ArrayList<>();
-        if (assignment.getWorkingDaysPerWeek() != null && !assignment.getWorkingDaysPerWeek().isEmpty()) {
-            workingDaysEntity = (List<com.company.company_clean_hub_be.entity.DayOfWeek>) (List<?>) assignment.getWorkingDaysPerWeek();
-            log.info("[DEBUG] Working days: {}", workingDaysEntity);
-        } else {
-            // Fallback: all days except Sunday
-            workingDaysEntity = new ArrayList<>();
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.MONDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.TUESDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.WEDNESDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.THURSDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.FRIDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.SATURDAY);
-            log.info("[DEBUG] No working days defined, using default (Mon-Sat)");
+        // Xóa work_schedules SCHEDULED từ hôm nay trở đi (không cần chụp ảnh nữa)
+        List<WorkSchedule> scheduledFuture = workScheduleRepository.findByAssignmentId(assignment.getId())
+            .stream()
+            .filter(ws -> ws.getStatus() == WorkScheduleStatus.SCHEDULED
+                       && !ws.getScheduledDate().isBefore(today))
+            .collect(Collectors.toList());
+        if (!scheduledFuture.isEmpty()) {
+            workScheduleRepository.deleteAll(scheduledFuture);
+            log.info("Deleted {} SCHEDULED work_schedules for assignment {}", scheduledFuture.size(), assignment.getId());
         }
 
-        // FIXED: Chỉ tìm 1 ngày làm việc tiếp theo, không phải toàn bộ tháng
-        LocalDate endDate = fromDate.plusMonths(1); // Giới hạn tìm kiếm trong 1 tháng
-        boolean foundWorkingDay = false;
-        
-        while (!currentDate.isAfter(endDate) && !foundWorkingDay) {
-            // Check if current date is a working day
-            java.time.DayOfWeek currentDayOfWeek = currentDate.getDayOfWeek();
-            boolean isWorkingDay = false;
-            
-            // Compare with working days
-            for (com.company.company_clean_hub_be.entity.DayOfWeek workDay : workingDaysEntity) {
-                if (workDay.name().equals(currentDayOfWeek.name())) {
-                    isWorkingDay = true;
-                    break;
-                }
-            }
-            
-            if (isWorkingDay) {
-                // Check if attendance already exists
-                boolean alreadyExists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
-                        assignmentId, assignment.getEmployee().getId(), currentDate).isPresent();
-
-                log.info("[DEBUG] Date {}: isWorkingDay=true, alreadyExists={}", currentDate, alreadyExists);
-
-                if (!alreadyExists) {
-                    Attendance attendance = Attendance.builder()
-                            .assignment(assignment)
-                            .employee(assignment.getEmployee())
-                            .date(currentDate)
+        // Sinh attendance cho các ngày từ hôm nay đến cuối tháng (theo lịch làm việc)
+        Assignment freshAssignment = assignmentRepository.findById(assignment.getId()).orElse(assignment);
+        List<java.time.DayOfWeek> workingDays = freshAssignment.getWorkingDaysPerWeek();
+        if (workingDays != null && !workingDays.isEmpty()) {
+            LocalDate endOfMonth = today.withDayOfMonth(today.lengthOfMonth());
+            LocalDate current = today;
+            List<Attendance> toCreate = new ArrayList<>();
+            while (!current.isAfter(endOfMonth)) {
+                if (workingDays.contains(current.getDayOfWeek())) {
+                    boolean exists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                        freshAssignment.getId(), freshAssignment.getEmployee().getId(), current).isPresent();
+                    if (!exists) {
+                        toCreate.add(Attendance.builder()
+                            .assignment(freshAssignment)
+                            .employee(freshAssignment.getEmployee())
+                            .date(current)
                             .workHours(java.math.BigDecimal.valueOf(8))
+                            .deleted(false)
                             .bonus(java.math.BigDecimal.ZERO)
                             .penalty(java.math.BigDecimal.ZERO)
                             .supportCost(java.math.BigDecimal.ZERO)
                             .isOvertime(false)
-                            .deleted(false)
                             .overtimeAmount(java.math.BigDecimal.ZERO)
-                            .description("Tự động tạo sau khi xác minh ảnh")
+                            .description("Tự động tạo khi tắt xác minh hình ảnh")
                             .createdAt(LocalDateTime.now())
                             .updatedAt(LocalDateTime.now())
-                            .build();
-
-                    attendances.add(attendance);
-                    log.info("[DEBUG] Added attendance for {}", currentDate);
-                    foundWorkingDay = true; // FIXED: Dừng sau khi tìm được 1 ngày làm việc
+                            .build());
+                    }
                 }
-            } else {
-                log.info("[DEBUG] Date {}: isWorkingDay=false ({})", currentDate, currentDayOfWeek);
+                current = current.plusDays(1);
             }
-            currentDate = currentDate.plusDays(1);
+            if (!toCreate.isEmpty()) {
+                attendanceRepository.saveAll(toCreate);
+                int newWorkDays = (freshAssignment.getWorkDays() != null ? freshAssignment.getWorkDays() : 0) + toCreate.size();
+                freshAssignment.setWorkDays(newWorkDays);
+                assignmentRepository.save(freshAssignment);
+                log.info("Created {} attendances after disabling verification for assignment {}", toCreate.size(), assignment.getId());
+            }
         }
 
-        if (!attendances.isEmpty()) {
-            log.info("[DEBUG] ===== SAVING {} ATTENDANCE(S) =====", attendances.size());
-            attendanceRepository.saveAll(attendances);
-            log.info("[DEBUG] ===== ATTENDANCE(S) SAVED SUCCESSFULLY =====");
-            log.info("Generated {} attendance(s) for assignment {}", attendances.size(), assignmentId);
-        } else {
-            log.info("[DEBUG] No new attendances to generate");
-        }
+        log.info("Disabled verification for assignment: {}", assignment.getId());
     }
 
-    private void generateAllRemainingAttendances(Long assignmentId) {
-        log.info("[DEBUG] ===== generateAllRemainingAttendances called (for approval) =====");
-        log.info("[DEBUG] assignmentId={}", assignmentId);
+    private Attendance createAttendanceFromSchedule(WorkSchedule schedule) {
+        Attendance attendance = Attendance.builder()
+            .assignment(schedule.getAssignment())
+            .employee(schedule.getEmployee())
+            .date(schedule.getScheduledDate())
+            .workHours(java.math.BigDecimal.valueOf(8))
+            .bonus(java.math.BigDecimal.ZERO)
+            .penalty(java.math.BigDecimal.ZERO)
+            .supportCost(java.math.BigDecimal.ZERO)
+            .isOvertime(false)
+            .deleted(false)
+            .overtimeAmount(java.math.BigDecimal.ZERO)
+            .assignmentVerification(schedule.getAssignmentVerification())
+            .description("Created from work schedule")
+            .createdAt(LocalDateTime.now())
+            .updatedAt(LocalDateTime.now())
+            .build();
 
-        Assignment assignment = assignmentRepository.findById(assignmentId)
-                .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
-
-        log.info("[DEBUG] Assignment found: id={}, workingDaysPerWeek={}", 
-                assignment.getId(), assignment.getWorkingDaysPerWeek());
-
-        // Get the last capture date
-        List<LocalDateTime> captureDates = imageRepository.findCaptureDatesByAssignmentId(assignmentId);
-        LocalDate startDate;
-        
-        if (!captureDates.isEmpty()) {
-            LocalDate lastCaptureDate = captureDates.get(0).toLocalDate();
-            startDate = lastCaptureDate.plusDays(1);
-            log.info("[DEBUG] Last capture date: {}, generating from: {}", lastCaptureDate, startDate);
-        } else {
-            startDate = LocalDate.now();
-            log.warn("[DEBUG] No capture images found, generating from today: {}", startDate);
-        }
-
-        // Generate ALL remaining attendances for the month (not just 1)
-        LocalDate currentDate = startDate;
-        LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth()); // End of month
-        log.info("[DEBUG] Generating ALL attendances from {} to {}", startDate, endDate);
-
-        List<Attendance> attendances = new ArrayList<>();
-        
-        // Get working days from assignment
-        List<com.company.company_clean_hub_be.entity.DayOfWeek> workingDaysEntity = new ArrayList<>();
-        if (assignment.getWorkingDaysPerWeek() != null && !assignment.getWorkingDaysPerWeek().isEmpty()) {
-            workingDaysEntity = (List<com.company.company_clean_hub_be.entity.DayOfWeek>) (List<?>) assignment.getWorkingDaysPerWeek();
-            log.info("[DEBUG] Working days: {}", workingDaysEntity);
-        } else {
-            // Fallback: all days except Sunday
-            workingDaysEntity = new ArrayList<>();
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.MONDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.TUESDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.WEDNESDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.THURSDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.FRIDAY);
-            workingDaysEntity.add(com.company.company_clean_hub_be.entity.DayOfWeek.SATURDAY);
-            log.info("[DEBUG] No working days defined, using default (Mon-Sat)");
-        }
-
-        // Generate ALL remaining working days (no foundWorkingDay flag)
-        while (!currentDate.isAfter(endDate)) {
-            java.time.DayOfWeek currentDayOfWeek = currentDate.getDayOfWeek();
-            boolean isWorkingDay = false;
-            
-            // Compare with working days
-            for (com.company.company_clean_hub_be.entity.DayOfWeek workDay : workingDaysEntity) {
-                if (workDay.name().equals(currentDayOfWeek.name())) {
-                    isWorkingDay = true;
-                    break;
-                }
-            }
-            
-            if (isWorkingDay) {
-                // Check if attendance already exists
-                boolean alreadyExists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
-                        assignmentId, assignment.getEmployee().getId(), currentDate).isPresent();
-
-                log.info("[DEBUG] Date {}: isWorkingDay=true, alreadyExists={}", currentDate, alreadyExists);
-
-                if (!alreadyExists) {
-                    Attendance attendance = Attendance.builder()
-                            .assignment(assignment)
-                            .employee(assignment.getEmployee())
-                            .date(currentDate)
-                            .workHours(java.math.BigDecimal.valueOf(8))
-                            .bonus(java.math.BigDecimal.ZERO)
-                            .penalty(java.math.BigDecimal.ZERO)
-                            .supportCost(java.math.BigDecimal.ZERO)
-                            .isOvertime(false)
-                            .deleted(false)
-                            .overtimeAmount(java.math.BigDecimal.ZERO)
-                            .description("Tự động tạo sau khi duyệt xác minh")
-                            .createdAt(LocalDateTime.now())
-                            .updatedAt(LocalDateTime.now())
-                            .build();
-
-                    attendances.add(attendance);
-                    log.info("[DEBUG] Added attendance for {}", currentDate);
-                }
-            } else {
-                log.info("[DEBUG] Date {}: isWorkingDay=false ({})", currentDate, currentDayOfWeek);
-            }
-            currentDate = currentDate.plusDays(1);
-        }
-
-        if (!attendances.isEmpty()) {
-            log.info("[DEBUG] ===== SAVING {} ATTENDANCE(S) AFTER APPROVAL =====", attendances.size());
-            attendanceRepository.saveAll(attendances);
-            log.info("[DEBUG] ===== ATTENDANCE(S) SAVED SUCCESSFULLY =====");
-            log.info("Generated {} attendance(s) for assignment {} after approval", attendances.size(), assignmentId);
-        } else {
-            log.info("[DEBUG] No new attendances to generate");
-        }
+        return attendanceRepository.save(attendance);
     }
 
     private AssignmentVerificationResponse mapToVerificationResponse(AssignmentVerification verification) {
         Assignment assignment = verification.getAssignment();
         Employee employee = assignment.getEmployee();
-        log.info("assignment :{}", assignment.getId());
-        log.info("employee : {}", employee.getId());
+        
         return AssignmentVerificationResponse.builder()
                 .id(verification.getId())
                 .assignmentId(assignment.getId())
@@ -662,115 +555,5 @@ public class VerificationServiceImpl implements VerificationService {
                 .imageQualityScore(image.getImageQualityScore())
                 .createdAt(image.getCreatedAt())
                 .build();
-    }
-    
-    @Override
-    @Transactional
-    public void processAutoApprovals() {
-        log.info("Starting auto-approval process...");
-        
-        List<AssignmentVerification> verificationsToApprove = 
-            verificationRepository.findVerificationsForAutoApproval();
-        
-        log.info("Found {} verifications eligible for auto-approval", verificationsToApprove.size());
-        
-        for (AssignmentVerification verification : verificationsToApprove) {
-            try {
-                log.info("Auto-approving verification: id={}, assignmentId={}, attempts={}/{}", 
-                    verification.getId(), 
-                    verification.getAssignment().getId(),
-                    verification.getCurrentAttempts(),
-                    verification.getMaxAttempts());
-                
-                verification.setStatus(VerificationStatus.AUTO_APPROVED);
-                verification.setAutoApprovedAt(LocalDateTime.now());
-                verificationRepository.save(verification);
-
-                // Business rule: auto-approved (max attempts reached) should also disable image verification on contract
-                Contract contract = verification.getAssignment() != null ? verification.getAssignment().getContract() : null;
-                if (contract != null) {
-                    log.info("[DEBUG] Disabling verification for contract after auto-approval: {}", contract.getId());
-                    contract.setRequiresImageVerification(false);
-                    contractRepository.save(contract);
-                }
-                
-                // FIXED: Generate ALL remaining attendances after auto-approval
-                log.info("[DEBUG] Generating all remaining attendances after auto-approval");
-                generateAllRemainingAttendances(verification.getAssignment().getId());
-                
-                log.info("Successfully auto-approved verification: {}", verification.getId());
-            } catch (Exception e) {
-                log.error("Failed to auto-approve verification: {}", verification.getId(), e);
-            }
-        }
-        
-        log.info("Auto-approval process completed. Approved: {}", verificationsToApprove.size());
-    }
-
-    @Override
-    @Transactional
-    public void syncContractVerificationState(Contract contract, boolean requiresVerification) {
-        log.info("[DEBUG] syncContractVerificationState called for contract={}, requiresVerification={}", contract.getId(), requiresVerification);
-        
-        List<Assignment> activeAssignments = assignmentRepository.findByContractId(contract.getId()).stream()
-            .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS || a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.SCHEDULED)
-            .collect(Collectors.toList());
-
-        LocalDateTime now = LocalDateTime.now();
-        LocalDate targetDate = LocalDate.now();
-
-        for (Assignment assignment : activeAssignments) {
-            try {
-                if (requiresVerification) {
-                    // False -> True
-                    log.info("[DEBUG] Processing False -> True for assignment {}", assignment.getId());
-                    // 1. Ensure verification exists
-                    AssignmentVerification verification = verificationRepository.findByAssignmentId(assignment.getId())
-                            .orElseGet(() -> createVerificationRequirement(assignment, "CONTRACT_SETTING"));
-                    
-                    // 2. Clear future attendances
-                    attendanceRepository.deleteByAssignmentIdAndDateAfter(assignment.getId(), targetDate);
-                    
-                    // 3. Update today's attendance (if exists)
-                    Optional<Attendance> todayAttendance = attendanceRepository.findByAssignmentAndEmployeeAndDate(
-                            assignment.getId(), assignment.getEmployee().getId(), targetDate);
-                    
-                    if (todayAttendance.isPresent()) {
-                        Attendance att = todayAttendance.get();
-                        if (att.getAssignmentVerification() == null) {
-                            att.setAssignmentVerification(verification);
-                            attendanceRepository.save(att);
-                        }
-                    }
-                    
-                    // 4. Update assignment's workDays count
-                    Long workDaysCount = attendanceRepository.countAttendancesByAssignment(assignment.getId());
-                    assignment.setWorkDays(workDaysCount != null ? workDaysCount.intValue() : 0);
-                    assignmentRepository.save(assignment);
-                    
-                } else {
-                    // True -> False
-                    log.info("[DEBUG] Processing True -> False for assignment {}", assignment.getId());
-                    // 1. Complete pending verifications
-                    verificationRepository.findByAssignmentId(assignment.getId()).ifPresent(verification -> {
-                        if (verification.getStatus() == VerificationStatus.PENDING || verification.getStatus() == VerificationStatus.IN_PROGRESS) {
-                            verification.setStatus(VerificationStatus.APPROVED);
-                            verification.setAutoApprovedAt(now);
-                            verificationRepository.save(verification);
-                        }
-                    });
-                    
-                    // 2. Generate remaining attendances
-                    generateAllRemainingAttendances(assignment.getId());
-                    
-                    // 3. Update assignment workDays
-                    Long workDaysCount = attendanceRepository.countAttendancesByAssignment(assignment.getId());
-                    assignment.setWorkDays(workDaysCount != null ? workDaysCount.intValue() : 0);
-                    assignmentRepository.save(assignment);
-                }
-            } catch (Exception e) {
-                log.error("[DEBUG] Failed to sync verification state for assignment {}: {}", assignment.getId(), e.getMessage(), e);
-            }
-        }
     }
 }
