@@ -1,15 +1,14 @@
 package com.company.company_clean_hub_be.entity;
 
-public enum VerificationStatus {
-    PENDING("Chờ xác minh"),
-    IN_PROGRESS("Đang chụp ảnh"),
-    APPROVED("Đã duyệt"),
-    AUTO_APPROVED("Tự động duyệt sau 5 lần"),
+public enum WorkScheduleStatus {
+    SCHEDULED("Chờ chụp ảnh"),
+    VERIFIED("Đã chụp ảnh/đã duyệt"),
+    MISSED("Không chụp ảnh"),
     CANCELLED("Đã hủy");
 
     private final String description;
 
-    VerificationStatus(String description) {
+    WorkScheduleStatus(String description) {
         this.description = description;
     }
 

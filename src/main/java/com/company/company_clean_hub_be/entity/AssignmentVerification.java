@@ -79,6 +79,16 @@ public class AssignmentVerification {
     @Column(name = "auto_approved_at")
     private LocalDateTime autoApprovedAt;
 
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column(name = "cancelled_reason", length = 500)
+    private String cancelledReason;
+
+    @Column(name = "transition_to_contract_mode")
+    @Builder.Default
+    private Boolean transitionToContractMode = false;
+
     @OneToMany(mappedBy = "assignmentVerification", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
