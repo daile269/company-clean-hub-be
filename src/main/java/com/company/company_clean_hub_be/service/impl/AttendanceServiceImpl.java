@@ -28,8 +28,13 @@ import com.company.company_clean_hub_be.exception.ResourceNotFoundException;
 import com.company.company_clean_hub_be.service.AttendanceService;
 import com.company.company_clean_hub_be.service.FileStorageService;
 import com.company.company_clean_hub_be.service.VerificationService;
+import com.company.company_clean_hub_be.service.WorkScheduleService;
 import com.company.company_clean_hub_be.repository.AssignmentVerificationRepository;
+import com.company.company_clean_hub_be.repository.WorkScheduleRepository;
 import com.company.company_clean_hub_be.entity.AssignmentVerification;
+import com.company.company_clean_hub_be.entity.WorkSchedule;
+import com.company.company_clean_hub_be.entity.WorkScheduleReason;
+import com.company.company_clean_hub_be.entity.WorkScheduleStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -60,6 +65,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final FileStorageService fileStorageService;
     private final VerificationService verificationService;
     private final AssignmentVerificationRepository assignmentVerificationRepository;
+    private final WorkScheduleService workScheduleService;
+    private final WorkScheduleRepository workScheduleRepository;
 
     @Override
     public AttendanceResponse createAttendance(AttendanceRequest request) {
@@ -106,6 +113,10 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .build();
 
         Attendance savedAttendance = attendanceRepository.save(attendance);
+        
+        // Sync with work_schedule if exists
+        workScheduleService.syncAttendanceCreation(savedAttendance.getId());
+        
         log.info("createAttendance completed by {}: attendanceId={}", username, savedAttendance.getId());
         return mapToResponse(savedAttendance);
     }
@@ -343,6 +354,12 @@ public class AttendanceServiceImpl implements AttendanceService {
                 }
                 attendance.setUpdatedAt(LocalDateTime.now());
                 attendanceRepository.save(attendance);
+
+                // Sync with work_schedule if exists
+                User user = userRepository.findByUsername(username).orElse(null);
+                if (user != null) {
+                        workScheduleService.syncAttendanceDeletion(attendance.getId(), user.getId());
+                }
 
                 // Tái tính workDays của assignment
                 Assignment assignment = attendance.getAssignment();
@@ -588,62 +605,42 @@ public class AttendanceServiceImpl implements AttendanceService {
         
         if (!requiresVerification) {
             // No verification needed, generate all attendances normally
+            log.info("No verification required, generating attendances directly");
             return autoGenerateAttendances(request);
         }
 
-        // Verification required - only generate first day
+        log.info("Verification required, creating work schedules instead of attendances");
+
+        // Determine reason for work schedule
+        boolean isNewEmployee = verificationService.isEmployeeNew(employee.getId());
+        WorkScheduleReason reason = isNewEmployee ? 
+            WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION : 
+            WorkScheduleReason.CONTRACT_REQUIREMENT;
+
+        // Get or create verification requirement (only for new employees)
+        AssignmentVerification verification = null;
+        if (isNewEmployee) {
+            verification = getOrCreateVerification(assignment);
+        }
+
+        // Create work schedules for the month
         YearMonth yearMonth = YearMonth.of(request.getYear(), request.getMonth());
         LocalDate startDate = yearMonth.atDay(1);
-        
-        List<LocalDate> excludeDates = request.getExcludeDates() != null ? 
-                request.getExcludeDates() : new ArrayList<>();
+        LocalDate endDate = yearMonth.atEndOfMonth();
 
-        // Find first working day
-        LocalDate firstWorkingDay = findFirstWorkingDay(startDate, yearMonth.atEndOfMonth(), excludeDates);
-        
-        if (firstWorkingDay == null) {
-            log.warn("No working days found in month {}/{}", request.getMonth(), request.getYear());
-            return new ArrayList<>();
-        }
+        List<WorkSchedule> workSchedules = workScheduleService.createWorkSchedulesForAssignment(
+            assignment,
+            reason,
+            verification != null ? verification.getId() : null,
+            startDate,
+            endDate
+        );
 
-        // Generate only first day attendance
-        List<Attendance> attendances = new ArrayList<>();
-        
-        boolean alreadyExists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
-                request.getAssignmentId(),
-                request.getEmployeeId(), 
-                firstWorkingDay
-        ).isPresent();
+        log.info("Created {} work schedules for assignment {}", workSchedules.size(), assignment.getId());
 
-        if (!alreadyExists) {
-            // Get or create verification requirement
-            AssignmentVerification verification = getOrCreateVerification(assignment);
-            
-            Attendance attendance = Attendance.builder()
-                    .assignment(assignment)
-                    .employee(employee)
-                    .date(firstWorkingDay)
-                    .workHours(java.math.BigDecimal.valueOf(8))
-                    .bonus(java.math.BigDecimal.ZERO)
-                    .penalty(java.math.BigDecimal.ZERO)
-                    .supportCost(java.math.BigDecimal.ZERO)
-                    .isOvertime(false)
-                    .deleted(false)
-                    .overtimeAmount(java.math.BigDecimal.ZERO)
-                    .assignmentVerification(verification)
-                    .createdAt(LocalDateTime.now())
-                    .updatedAt(LocalDateTime.now())
-                    .build();
-            
-            attendances.add(attendance);
-        }
-
-        List<Attendance> savedAttendances = attendanceRepository.saveAll(attendances);
-        log.info("autoGenerateAttendancesWithVerification completed: createdCount={} (verification required)", savedAttendances.size());
-
-        return savedAttendances.stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+        // Return empty list since no attendances are created yet
+        // Attendances will be created when photos are captured
+        return new ArrayList<>();
     }
     @Override
     @Transactional

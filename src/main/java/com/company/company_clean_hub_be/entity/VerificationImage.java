@@ -40,8 +40,7 @@ public class VerificationImage {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assignment_verification_id", nullable = false)
-    @NotNull
+    @JoinColumn(name = "assignment_verification_id", nullable = true)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     @JsonIgnore

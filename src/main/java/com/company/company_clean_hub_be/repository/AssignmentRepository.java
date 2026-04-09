@@ -204,6 +204,11 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
         Long countAssignmentsByEmployee(
                         @Param("employeeId") Long employeeId);
 
+        @Query("SELECT COUNT(a) FROM Assignment a WHERE a.employee.id = :employeeId AND a.id <> :excludeId")
+        Long countAssignmentsByEmployeeExcluding(
+                        @Param("employeeId") Long employeeId,
+                        @Param("excludeId") Long excludeId);
+
         @Query("SELECT COUNT(a) FROM Assignment a WHERE a.employee.id = :employeeId AND a.contract.id = :contractId AND a.status IN ('IN_PROGRESS', 'COMPLETED')")
         Long countCompletedAssignmentsByEmployeeAndContract(
                         @Param("employeeId") Long employeeId,

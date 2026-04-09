@@ -48,9 +48,9 @@ public class ContractServiceImpl implements ContractService {
         private final AssignmentHistoryRepository assignmentHistoryRepository;
         private final AttendanceRepository attendanceRepository;
         private final ContractDocumentService contractDocumentService;
+        private final com.company.company_clean_hub_be.service.VerificationService verificationService;
         private final InvoiceRepository invoiceRepository;
         private final RatingRepository ratingRepository;
-        private final com.company.company_clean_hub_be.service.VerificationService verificationService;
 
         @Override
         public List<ContractResponse> getAllContracts() {
