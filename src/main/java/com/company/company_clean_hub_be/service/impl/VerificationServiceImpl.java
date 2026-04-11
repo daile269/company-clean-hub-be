@@ -556,4 +556,18 @@ public class VerificationServiceImpl implements VerificationService {
                 .createdAt(image.getCreatedAt())
                 .build();
     }
+    
+    @Override
+    public boolean isAttendancePhoto(VerificationImage image) {
+        // Ảnh chấm công: có liên kết với attendance_id
+        // Được chụp để chấm công hàng ngày
+        return image.getAttendance() != null;
+    }
+    
+    @Override
+    public boolean isVerificationImage(VerificationImage image) {
+        // Ảnh xác minh: có liên kết với assignment_verification_id
+        // Được chụp để xác minh nhân viên mới hoặc theo yêu cầu hợp đồng
+        return image.getAssignmentVerification() != null;
+    }
 }

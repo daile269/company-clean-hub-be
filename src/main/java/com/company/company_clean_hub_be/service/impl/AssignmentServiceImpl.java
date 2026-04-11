@@ -230,6 +230,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .contract(contract)
                                 .scope(scope)
                                 .startDate(request.getStartDate())
+                                .endDate(calculateEndDate(request, assignmentTypeParsed)) // Thêm logic tính endDate
                                 .status(finalStatus)
                                 .salaryAtTime(request.getSalaryAtTime())
                                 .workingDaysPerWeek(workingDays)
@@ -243,12 +244,13 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 Assignment savedAssignment = assignmentRepository.save(assignment);
 
-                log.info("[DEBUG] Assignment saved: id={}, employee={}, contract={}, status={}, startDate={}",
+                log.info("[DEBUG] Assignment saved: id={}, employee={}, contract={}, status={}, startDate={}, endDate={}",
                                 savedAssignment.getId(),
                                 savedAssignment.getEmployee().getId(),
                                 savedAssignment.getContract() != null ? savedAssignment.getContract().getId() : null,
                                 finalStatus,
-                                request.getStartDate());
+                                request.getStartDate(),
+                                savedAssignment.getEndDate());
 
                 // CRITICAL FIX: Kiểm tra verification TRƯỚC khi sinh attendance
                 boolean requiresVerification = false;
@@ -310,11 +312,21 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 }
 
                                 // Tính end date cho work_schedules
-                                YearMonth yearMonth = YearMonth.from(request.getStartDate());
-                                LocalDate endDate = yearMonth.atEndOfMonth();
-                                if (contract != null && contract.getEndDate() != null
-                                                && contract.getEndDate().isBefore(endDate)) {
-                                        endDate = contract.getEndDate();
+                                // Priority 1: assignment.endDate (SUPPORT worker với ngày cụ thể)
+                                // Priority 2: contract.endDate
+                                // Priority 3: cuối tháng
+                                LocalDate endDate;
+                                if (savedAssignment.getEndDate() != null) {
+                                        endDate = savedAssignment.getEndDate();
+                                        log.info("[DEBUG] Using assignment.endDate for work_schedules: {}", endDate);
+                                } else {
+                                        YearMonth yearMonth = YearMonth.from(request.getStartDate());
+                                        endDate = yearMonth.atEndOfMonth();
+                                        if (contract != null && contract.getEndDate() != null
+                                                        && contract.getEndDate().isBefore(endDate)) {
+                                                endDate = contract.getEndDate();
+                                        }
+                                        log.info("[DEBUG] Using contract/month endDate for work_schedules: {}", endDate);
                                 }
 
                                 // Xác định reason
@@ -1789,6 +1801,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                 // ===== CRITICAL: CHECK VERIFICATION FIRST =====
                 boolean requiresVerification = verificationService.requiresVerification(assignment);
                 log.info("[DEBUG] Assignment {} requires verification: {}", assignment.getId(), requiresVerification);
+                log.info("[DEBUG] Assignment details: startDate={}, endDate={}, contractType={}", 
+                        assignment.getStartDate(), assignment.getEndDate(), 
+                        assignment.getContract() != null ? assignment.getContract().getContractType() : "NULL");
 
                 if (requiresVerification) {
                         log.info("[DEBUG] Creating work_schedules instead of attendances for assignment {}", assignment.getId());
@@ -1815,9 +1830,20 @@ public class AssignmentServiceImpl implements AssignmentService {
                         YearMonth yearMonth = YearMonth.from(startDate);
                         LocalDate endDate = yearMonth.atEndOfMonth();
                         
-                        Contract contract = assignment.getContract();
-                        if (contract != null && contract.getEndDate() != null && contract.getEndDate().isBefore(endDate)) {
-                                endDate = contract.getEndDate();
+                        // Priority 1: Assignment endDate (for support workers with specific period)
+                        if (assignment.getEndDate() != null) {
+                                endDate = assignment.getEndDate();
+                                log.info("[DEBUG] Using assignment endDate: {}", endDate);
+                        }
+                        // Priority 2: Contract endDate (if before calculated endDate)
+                        else {
+                                Contract contract = assignment.getContract();
+                                if (contract != null && contract.getEndDate() != null && contract.getEndDate().isBefore(endDate)) {
+                                        endDate = contract.getEndDate();
+                                        log.info("[DEBUG] Using contract endDate: {}", endDate);
+                                } else {
+                                        log.info("[DEBUG] Using month endDate: {}", endDate);
+                                }
                         }
                         
                         // Create work_schedules instead of attendances
@@ -1843,31 +1869,46 @@ public class AssignmentServiceImpl implements AssignmentService {
                         contract != null ? contract.getContractType() : "NULL");
                 List<Attendance> attendances = new ArrayList<>();
 
-                // Nếu là hợp đồng ONE_TIME, chỉ tạo 1 attendance ngày đầu tiên
+                // Nếu là hợp đồng ONE_TIME, tạo attendance cho từng ngày làm việc trong khoảng thời gian assignment
                 if (contract != null && contract.getContractType() == ContractType.ONE_TIME) {
-                        log.info("[DEBUG] Contract type is ONE_TIME, creating only 1 attendance");
-                        boolean alreadyExists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
-                                        freshAssignment.getId(),
-                                        freshAssignment.getEmployee().getId(),
-                                        startDate).isPresent();
+                        log.info("[DEBUG] Contract type is ONE_TIME, creating attendances for assignment period");
+                        
+                        // Với ONE_TIME, tạo attendance cho tất cả ngày làm việc trong khoảng startDate -> endDate của assignment
+                        LocalDate assignmentEndDate = freshAssignment.getEndDate() != null ? 
+                                freshAssignment.getEndDate() : startDate; // Nếu không có endDate, chỉ làm 1 ngày
+                        
+                        List<java.time.DayOfWeek> workingDays = freshAssignment.getWorkingDaysPerWeek().stream()
+                                        .map(day -> java.time.DayOfWeek.valueOf(day.name()))
+                                        .collect(Collectors.toList());
+                        
+                        LocalDate currentDate = startDate;
+                        while (!currentDate.isAfter(assignmentEndDate)) {
+                                if (workingDays.contains(currentDate.getDayOfWeek())) {
+                                        boolean alreadyExists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                                                        freshAssignment.getId(),
+                                                        freshAssignment.getEmployee().getId(),
+                                                        currentDate).isPresent();
 
-                        if (!alreadyExists) {
-                                Attendance attendance = Attendance.builder()
-                                                .employee(freshAssignment.getEmployee())
-                                                .assignment(freshAssignment)
-                                                .date(startDate)
-                                                .deleted(false)
-                                                .workHours(java.math.BigDecimal.valueOf(8))
-                                                .bonus(java.math.BigDecimal.ZERO)
-                                                .penalty(java.math.BigDecimal.ZERO)
-                                                .supportCost(java.math.BigDecimal.ZERO)
-                                                .isOvertime(false)
-                                                .overtimeAmount(java.math.BigDecimal.ZERO)
-                                                .description("Tự động tạo từ phân công (Hợp đồng 1 lần)")
-                                                .createdAt(LocalDateTime.now())
-                                                .updatedAt(LocalDateTime.now())
-                                                .build();
-                                attendances.add(attendance);
+                                        if (!alreadyExists) {
+                                                Attendance attendance = Attendance.builder()
+                                                                .employee(freshAssignment.getEmployee())
+                                                                .assignment(freshAssignment)
+                                                                .date(currentDate)
+                                                                .deleted(false)
+                                                                .workHours(java.math.BigDecimal.valueOf(8))
+                                                                .bonus(java.math.BigDecimal.ZERO)
+                                                                .penalty(java.math.BigDecimal.ZERO)
+                                                                .supportCost(java.math.BigDecimal.ZERO)
+                                                                .isOvertime(false)
+                                                                .overtimeAmount(java.math.BigDecimal.ZERO)
+                                                                .description("Tự động tạo từ phân công (Hợp đồng 1 lần)")
+                                                                .createdAt(LocalDateTime.now())
+                                                                .updatedAt(LocalDateTime.now())
+                                                                .build();
+                                                attendances.add(attendance);
+                                        }
+                                }
+                                currentDate = currentDate.plusDays(1);
                         }
                 } else {
                         YearMonth yearMonth = YearMonth.from(startDate);
@@ -1931,16 +1972,16 @@ public class AssignmentServiceImpl implements AssignmentService {
                         freshAssignment.setWorkDays(attendances.size());
 
                         // Tính plannedDays:
-                        // - Nếu hợp đồng là ONE_TIME -> plannedDays = 1
+                        // - Nếu hợp đồng là ONE_TIME -> plannedDays = số ngày làm việc thực tế trong khoảng assignment
                         // - Ngược lại -> plannedDays tính theo lịch làm việc của cả tháng
-                        // (1..endOfMonth)
-                        YearMonth ym = YearMonth.from(startDate);
-                        LocalDate monthStart = ym.atDay(1);
-                        LocalDate monthEnd = ym.atEndOfMonth();
-
                         if (contract != null && contract.getContractType() == ContractType.ONE_TIME) {
-                                freshAssignment.setPlannedDays(1);
+                                // Với ONE_TIME, plannedDays = số attendance đã tạo
+                                freshAssignment.setPlannedDays(attendances.size());
                         } else {
+                                YearMonth ym = YearMonth.from(startDate);
+                                LocalDate monthStart = ym.atDay(1);
+                                LocalDate monthEnd = ym.atEndOfMonth();
+                                
                                 LocalDate periodStart = monthStart;
                                 LocalDate periodEnd = monthEnd;
 
@@ -2553,5 +2594,20 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         newContract.getId());
                         log.info("[NOTIFY][WORK_TIME_CONFLICT] ✅ Sent successfully to userId={}", manager.getId());
                 }
+        }
+
+        /**
+         * Tính toán endDate cho assignment dựa trên type và request
+         */
+        private LocalDate calculateEndDate(AssignmentRequest request, AssignmentType assignmentType) {
+                // Với SUPPORT assignment, endDate = ngày cuối cùng trong dates array
+                if (assignmentType == AssignmentType.SUPPORT && request.getDates() != null && !request.getDates().isEmpty()) {
+                        return request.getDates().stream()
+                                .max(LocalDate::compareTo)
+                                .orElse(request.getStartDate());
+                }
+                
+                // Với các loại khác, không set endDate (null) - sẽ dùng contract endDate hoặc unlimited
+                return null;
         }
 }
