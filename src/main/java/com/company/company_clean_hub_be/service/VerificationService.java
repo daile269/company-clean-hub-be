@@ -9,6 +9,7 @@ import com.company.company_clean_hub_be.dto.response.AssignmentVerificationRespo
 import com.company.company_clean_hub_be.dto.response.VerificationImageResponse;
 import com.company.company_clean_hub_be.entity.Assignment;
 import com.company.company_clean_hub_be.entity.AssignmentVerification;
+import com.company.company_clean_hub_be.entity.VerificationImage;
 
 public interface VerificationService {
 
@@ -43,4 +44,9 @@ public interface VerificationService {
 
     // Sync state
     void syncContractVerificationState(com.company.company_clean_hub_be.entity.Contract contract, boolean requiresVerification);
+    
+    // Image type classification
+    boolean isAttendancePhoto(VerificationImage image);
+    
+    boolean isVerificationImage(VerificationImage image);
 }

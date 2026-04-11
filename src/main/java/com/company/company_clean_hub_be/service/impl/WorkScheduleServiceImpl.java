@@ -347,6 +347,13 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         // Create attendance
         Attendance attendance = createAttendanceFromSchedule(schedule);
         schedule.setAttendance(attendance);
+        
+        // Link verification image to attendance for attendance photos
+        if (image != null && attendance != null) {
+            image.setAttendance(attendance);
+            imageRepository.save(image);
+        }
+        
         schedule.setLastSyncedAt(LocalDateTime.now());
         schedule.setSyncNote("Attendance created from photo capture");
 
@@ -797,9 +804,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             String imageUrl = fileStorageService.getSecureUrl(publicId);
 
             VerificationImage image = VerificationImage.builder()
-                .assignmentVerification(schedule.getAssignmentVerification())
+                .assignmentVerification(schedule.getAssignmentVerification()) // For verification purposes
                 .employee(schedule.getEmployee())
-                .attendance(null) // Will be set later
+                .attendance(null) // Will be linked to attendance after attendance is created (for attendance photo tracking)
                 .cloudinaryPublicId(publicId)
                 .cloudinaryUrl(imageUrl)
                 .latitude(request.getLatitude())
