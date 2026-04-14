@@ -269,11 +269,14 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         savedAssignment.getId(), requiresVerification);
 
                         if (requiresVerification) {
-                                boolean isNewEmployee = verificationService
-                                                .isEmployeeNew(savedAssignment.getEmployee().getId());
+                                // Dùng cùng logic với requiresVerification(): đếm assignment khác (loại trừ assignment vừa tạo)
+                                // KHÔNG dùng verificationService.isEmployeeNew() vì method đó dùng logic khác (đếm verification đã duyệt)
+                                Long otherAssignments = assignmentRepository.countAssignmentsByEmployeeExcluding(
+                                                savedAssignment.getEmployee().getId(), savedAssignment.getId());
+                                boolean isNewEmployee = otherAssignments == 0;
                                 verificationReason = isNewEmployee ? "NEW_EMPLOYEE" : "CONTRACT_SETTING";
-                                log.info("[DEBUG] Verification required: assignmentId={}, reason={}, isNewEmployee={}",
-                                                savedAssignment.getId(), verificationReason, isNewEmployee);
+                                log.info("[DEBUG] Verification required: assignmentId={}, reason={}, isNewEmployee={}, otherAssignments={}",
+                                                savedAssignment.getId(), verificationReason, isNewEmployee, otherAssignments);
                         } else {
                                 log.info("[DEBUG] Verification NOT required - will generate all attendances normally");
                         }

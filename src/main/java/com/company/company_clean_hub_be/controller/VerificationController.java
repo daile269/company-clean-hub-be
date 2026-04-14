@@ -97,6 +97,16 @@ public class VerificationController {
         return ApiResponse.success("Từ chối xác minh thành công", verification, HttpStatus.OK.value());
     }
 
+    @PutMapping("/{verificationId}/bypass-approve")
+    public ApiResponse<AssignmentVerificationResponse> bypassApproveVerification(
+            @PathVariable Long verificationId,
+            @RequestBody(required = false) String notes,
+            Principal principal) {
+        AssignmentVerificationResponse verification = verificationService.bypassApproveVerification(
+                verificationId, notes, principal.getName());
+        return ApiResponse.success("Duyệt bỏ qua xác minh thành công", verification, HttpStatus.OK.value());
+    }
+
     @GetMapping("/{verificationId}/can-capture")
     public ApiResponse<Boolean> canCaptureImage(@PathVariable Long verificationId) {
         boolean canCapture = verificationService.canCaptureImage(verificationId);

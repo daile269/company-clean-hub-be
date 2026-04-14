@@ -190,8 +190,34 @@ public class VerificationServiceImpl implements VerificationService {
     }
 
     @Override
+    @Transactional
+    public AssignmentVerificationResponse bypassApproveVerification(Long verificationId, String notes, String approverUsername) {
+        log.info("Bypass-approving verification: id={}, approver={}", verificationId, approverUsername);
+
+        AssignmentVerification verification = verificationRepository.findById(verificationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Verification not found: " + verificationId));
+
+        if (verification.isCompleted()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Verification already completed");
+        }
+
+        User approver = userRepository.findByUsername(approverUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + approverUsername));
+
+        verification.setStatus(VerificationStatus.BYPASS_APPROVED);
+        verification.setApprovedBy(approver);
+        verification.setApprovedAt(LocalDateTime.now());
+        verificationRepository.save(verification);
+
+        // Reuse the same post-approval work schedule logic
+        handleVerificationApproval(verification);
+
+        log.info("Bypass-approved verification: {}", verificationId);
+        return mapToVerificationResponse(verification);
+    }
+
+    @Override
     public boolean requiresVerification(Assignment assignment) {
-        log.info("Checking if assignment requires verification: assignmentId={}", assignment.getId());
         
         // Condition 1: Completely new employee (never had any OTHER assignment)
         // Pass assignment.getId() to exclude the current assignment from the count
@@ -326,6 +352,24 @@ public class VerificationServiceImpl implements VerificationService {
             workScheduleRepository.saveAll(schedules);
             
             // Create future work schedules with CONTRACT_REQUIREMENT
+            // Start from tomorrow (rest of current month) then next month onwards
+            LocalDate tomorrow = LocalDate.now().plusDays(1);
+            LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
+
+            // Rest of current month (if any days remain)
+            if (!tomorrow.isAfter(endOfCurrentMonth)) {
+                workScheduleService.createWorkSchedulesForAssignment(
+                    verification.getAssignment(),
+                    WorkScheduleReason.CONTRACT_REQUIREMENT,
+                    null,
+                    tomorrow,
+                    endOfCurrentMonth
+                );
+                log.info("Created CONTRACT_REQUIREMENT schedules for rest of current month: {} to {}",
+                    tomorrow, endOfCurrentMonth);
+            }
+
+            // Next month
             LocalDate nextMonth = LocalDate.now().plusMonths(1);
             LocalDate endOfNextMonth = nextMonth.withDayOfMonth(nextMonth.lengthOfMonth());
             workScheduleService.createWorkSchedulesForAssignment(
@@ -542,7 +586,7 @@ public class VerificationServiceImpl implements VerificationService {
     private VerificationImageResponse mapToImageResponse(VerificationImage image) {
         return VerificationImageResponse.builder()
                 .id(image.getId())
-                .verificationId(image.getAssignmentVerification().getId())
+                .verificationId(image.getAssignmentVerification() != null ? image.getAssignmentVerification().getId() : null)
                 .employeeId(image.getEmployee().getId())
                 .attendanceId(image.getAttendance() != null ? image.getAttendance().getId() : null)
                 .cloudinaryPublicId(image.getCloudinaryPublicId())

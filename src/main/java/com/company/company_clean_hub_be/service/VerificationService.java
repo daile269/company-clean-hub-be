@@ -32,6 +32,8 @@ public interface VerificationService {
 
     AssignmentVerificationResponse rejectVerification(Long verificationId, String reason, String approverUsername);
 
+    AssignmentVerificationResponse bypassApproveVerification(Long verificationId, String notes, String approverUsername);
+
     // Helper methods
     boolean requiresVerification(Assignment assignment);
 

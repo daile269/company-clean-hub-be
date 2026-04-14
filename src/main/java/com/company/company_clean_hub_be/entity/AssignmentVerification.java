@@ -117,7 +117,9 @@ public class AssignmentVerification {
 
     // Helper methods
     public boolean isCompleted() {
-        return status == VerificationStatus.APPROVED || status == VerificationStatus.AUTO_APPROVED;
+        return status == VerificationStatus.APPROVED 
+            || status == VerificationStatus.AUTO_APPROVED
+            || status == VerificationStatus.BYPASS_APPROVED;
     }
 
     public boolean canCapture() {
