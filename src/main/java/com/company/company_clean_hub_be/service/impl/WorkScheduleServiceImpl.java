@@ -472,8 +472,8 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 boolean requiresVerification = requiresVerification(assignment);
                 
                 if (requiresVerification) {
-                    // Determine reason
-                    boolean isNewEmployee = isEmployeeNew(assignment.getEmployee().getId());
+                    // Determine reason — exclude this assignment (already in DB) from the count
+                    boolean isNewEmployee = isEmployeeNew(assignment.getEmployee().getId(), assignment.getId());
                     WorkScheduleReason reason = isNewEmployee ? 
                         WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION : 
                         WorkScheduleReason.CONTRACT_REQUIREMENT;
@@ -518,8 +518,8 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
     
     private boolean requiresVerification(Assignment assignment) {
-        // Check if employee is completely new
-        if (isEmployeeNew(assignment.getEmployee().getId())) {
+        // Exclude the assignment itself from the count — it is already persisted at this point
+        if (isEmployeeNew(assignment.getEmployee().getId(), assignment.getId())) {
             return true;
         }
         
@@ -532,8 +532,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         return false;
     }
     
-    private boolean isEmployeeNew(Long employeeId) {
-        Long totalAssignments = assignmentRepository.countAssignmentsByEmployee(employeeId);
+    private boolean isEmployeeNew(Long employeeId, Long excludeAssignmentId) {
+        Long totalAssignments = excludeAssignmentId != null
+                ? assignmentRepository.countAssignmentsByEmployeeExcluding(employeeId, excludeAssignmentId)
+                : assignmentRepository.countAssignmentsByEmployee(employeeId);
         return totalAssignments == 0;
     }
 
@@ -573,6 +575,12 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         workScheduleRepository.save(schedule);
         log.info("Created attendance for missed work schedule: {}", id);
 
+        // If NEW_EMPLOYEE_VERIFICATION, increment attempts and check auto-approve
+        if (schedule.getReason() == WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION
+                && schedule.getAssignmentVerification() != null) {
+            checkAndAutoApprove(schedule.getAssignmentVerification().getId());
+        }
+
         return mapToResponse(schedule);
     }
 
@@ -610,7 +618,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .orElseThrow(() -> new ResourceNotFoundException("Assignment not found: " + assignmentId));
         
         if (requiresVerification(assignment)) {
-            boolean isNewEmployee = isEmployeeNew(assignment.getEmployee().getId());
+            boolean isNewEmployee = isEmployeeNew(assignment.getEmployee().getId(), assignment.getId());
             WorkScheduleReason reason = isNewEmployee ? 
                 WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION : 
                 WorkScheduleReason.CONTRACT_REQUIREMENT;
@@ -678,7 +686,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .orElseThrow(() -> new ResourceNotFoundException("New assignment not found: " + newAssignmentId));
         
         if (requiresVerification(newAssignment)) {
-            boolean isNewEmployee = isEmployeeNew(newAssignment.getEmployee().getId());
+            boolean isNewEmployee = isEmployeeNew(newAssignment.getEmployee().getId(), newAssignment.getId());
             WorkScheduleReason reason = isNewEmployee ? 
                 WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION : 
                 WorkScheduleReason.CONTRACT_REQUIREMENT;
