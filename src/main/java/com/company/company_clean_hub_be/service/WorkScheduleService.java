@@ -20,6 +20,14 @@ public interface WorkScheduleService {
         LocalDate toDate
     );
 
+    // Create work schedules for specific dates (dùng cho SUPPORT assignment)
+    List<WorkSchedule> createWorkSchedulesForDates(
+        Assignment assignment,
+        WorkScheduleReason reason,
+        Long verificationId,
+        List<LocalDate> dates
+    );
+
     // Get work schedules
     List<WorkScheduleResponse> getWorkSchedulesByAssignment(Long assignmentId);
     
