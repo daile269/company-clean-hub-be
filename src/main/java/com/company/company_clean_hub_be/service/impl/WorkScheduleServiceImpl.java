@@ -124,8 +124,47 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
 
     @Override
-    public List<WorkScheduleResponse> getWorkSchedulesByAssignment(Long assignmentId) {
-        List<WorkSchedule> schedules = workScheduleRepository.findByAssignmentId(assignmentId);
+    @Transactional
+    public List<WorkSchedule> createWorkSchedulesForDates(
+            Assignment assignment,
+            WorkScheduleReason reason,
+            Long verificationId,
+            List<LocalDate> dates) {
+
+        log.info("Creating work schedules for specific dates: assignmentId={}, reason={}, dates={}",
+            assignment.getId(), reason, dates);
+
+        List<WorkSchedule> schedules = new ArrayList<>();
+        AssignmentVerification verification = null;
+
+        if (verificationId != null) {
+            verification = verificationRepository.findById(verificationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Verification not found: " + verificationId));
+        }
+
+        for (LocalDate date : dates) {
+            boolean alreadyExists = workScheduleRepository
+                .existsByAssignmentIdAndScheduledDate(assignment.getId(), date);
+            if (!alreadyExists) {
+                WorkSchedule schedule = WorkSchedule.builder()
+                    .assignment(assignment)
+                    .employee(assignment.getEmployee())
+                    .scheduledDate(date)
+                    .status(WorkScheduleStatus.SCHEDULED)
+                    .reason(reason)
+                    .assignmentVerification(verification)
+                    .build();
+                schedules.add(schedule);
+            }
+        }
+
+        List<WorkSchedule> saved = workScheduleRepository.saveAll(schedules);
+        log.info("Created {} work schedules for specific dates, assignment {}", saved.size(), assignment.getId());
+        return saved;
+    }
+
+    @Override
+    public List<WorkScheduleResponse> getWorkSchedulesByAssignment(Long assignmentId) {        List<WorkSchedule> schedules = workScheduleRepository.findByAssignmentId(assignmentId);
         return schedules.stream()
             .map(this::mapToResponse)
             .collect(Collectors.toList());

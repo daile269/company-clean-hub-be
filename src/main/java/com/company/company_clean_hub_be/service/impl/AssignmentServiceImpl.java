@@ -339,22 +339,79 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 : WorkScheduleReason.CONTRACT_REQUIREMENT;
 
                                 // Tạo work_schedules thay vì attendances
+                                // SUPPORT: tạo đúng theo từng ngày trong request.getDates()
+                                // NEW_EMPLOYEE + transitionToContractMode: 5 ngày đầu = NEW_EMPLOYEE_VERIFICATION, còn lại = CONTRACT_REQUIREMENT
+                                // CONTRACT_REQUIREMENT only: toàn bộ = CONTRACT_REQUIREMENT
                                 try {
-                                        workScheduleService.createWorkSchedulesForAssignment(
-                                                        savedAssignment,
-                                                        wsReason,
-                                                        verification != null ? verification.getId() : null,
-                                                        request.getStartDate(),
-                                                        endDate);
-                                        log.info("[DEBUG] Created work_schedules for assignmentId={} from {} to {}",
-                                                        savedAssignment.getId(), request.getStartDate(), endDate);
+                                        if (assignmentTypeParsed == AssignmentType.SUPPORT
+                                                        && request.getDates() != null
+                                                        && !request.getDates().isEmpty()) {
+                                                // SUPPORT: tạo đúng theo ngày được chọn
+                                                workScheduleService.createWorkSchedulesForDates(
+                                                                savedAssignment,
+                                                                wsReason,
+                                                                verification != null ? verification.getId() : null,
+                                                                request.getDates());
+                                                log.info("[DEBUG] Created work_schedules for SUPPORT assignmentId={} on dates={}",
+                                                                savedAssignment.getId(), request.getDates());
+
+                                        } else if (isNewEmployee) {
+                                                // NEW_EMPLOYEE: chỉ 5 ngày làm việc đầu tiên = NEW_EMPLOYEE_VERIFICATION
+                                                int maxAttempts = verification != null ? verification.getMaxAttempts() : 5;
+                                                List<LocalDate> verificationDates = getFirstNWorkingDays(
+                                                                request.getStartDate(), endDate,
+                                                                savedAssignment.getWorkingDaysPerWeek(), maxAttempts);
+
+                                                workScheduleService.createWorkSchedulesForDates(
+                                                                savedAssignment,
+                                                                WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION,
+                                                                verification != null ? verification.getId() : null,
+                                                                verificationDates);
+                                                log.info("[DEBUG] Created {} NEW_EMPLOYEE_VERIFICATION work_schedules for assignmentId={}",
+                                                                verificationDates.size(), savedAssignment.getId());
+
+                                                // Nếu hợp đồng bật verification → tạo thêm CONTRACT_REQUIREMENT cho phần còn lại
+                                                boolean transitionToContract = verification != null
+                                                                && Boolean.TRUE.equals(verification.getTransitionToContractMode());
+                                                if (transitionToContract && !verificationDates.isEmpty()) {
+                                                        LocalDate afterVerification = verificationDates
+                                                                        .get(verificationDates.size() - 1)
+                                                                        .plusDays(1);
+                                                        if (!afterVerification.isAfter(endDate)) {
+                                                                workScheduleService.createWorkSchedulesForAssignment(
+                                                                                savedAssignment,
+                                                                                WorkScheduleReason.CONTRACT_REQUIREMENT,
+                                                                                null,
+                                                                                afterVerification,
+                                                                                endDate);
+                                                                log.info("[DEBUG] Created CONTRACT_REQUIREMENT work_schedules from {} to {} for assignmentId={}",
+                                                                                afterVerification, endDate, savedAssignment.getId());
+                                                        }
+                                                }
+
+                                        } else {
+                                                // CONTRACT_REQUIREMENT only (nhân viên cũ, hợp đồng bật verifi)
+                                                workScheduleService.createWorkSchedulesForAssignment(
+                                                                savedAssignment,
+                                                                WorkScheduleReason.CONTRACT_REQUIREMENT,
+                                                                null,
+                                                                request.getStartDate(),
+                                                                endDate);
+                                                log.info("[DEBUG] Created CONTRACT_REQUIREMENT work_schedules for assignmentId={} from {} to {}",
+                                                                savedAssignment.getId(), request.getStartDate(), endDate);
+                                        }
                                 } catch (Exception e) {
                                         log.error("[DEBUG] Error creating work_schedules: {}", e.getMessage(), e);
                                 }
 
-                                // plannedDays = số ngày làm việc trong tháng (theo lịch), workDays = 0 (chưa chấm)
-                                if (workingDays != null && !workingDays.isEmpty()) {
-                                        YearMonth ym = YearMonth.from(request.getStartDate());
+                                // plannedDays = số ngày trong dates (SUPPORT) hoặc ngày làm việc theo lịch
+                                if (assignmentTypeParsed == AssignmentType.SUPPORT
+                                                && request.getDates() != null
+                                                && !request.getDates().isEmpty()) {
+                                        savedAssignment.setPlannedDays(request.getDates().size());
+                                        savedAssignment.setWorkDays(0);
+                                        assignmentRepository.save(savedAssignment);
+                                } else if (workingDays != null && !workingDays.isEmpty()) {
                                         int planned = countWorkingDaysBetween(workingDays, request.getStartDate(), endDate);
                                         savedAssignment.setPlannedDays(planned);
                                         savedAssignment.setWorkDays(0);
@@ -2014,6 +2071,24 @@ public class AssignmentServiceImpl implements AssignmentService {
                         cur = cur.plusDays(1);
                 }
                 return count;
+        }
+
+        /**
+         * Lấy N ngày làm việc đầu tiên trong khoảng [start, end] theo lịch workingDays.
+         * Dùng để xác định đúng 5 ngày cần chụp ảnh xác minh nhân viên mới.
+         */
+        private List<LocalDate> getFirstNWorkingDays(LocalDate start, LocalDate end,
+                        List<java.time.DayOfWeek> workingDays, int n) {
+                List<LocalDate> result = new ArrayList<>();
+                if (start == null || end == null || workingDays == null || workingDays.isEmpty() || n <= 0)
+                        return result;
+                LocalDate cur = start;
+                while (!cur.isAfter(end) && result.size() < n) {
+                        if (workingDays.contains(cur.getDayOfWeek()))
+                                result.add(cur);
+                        cur = cur.plusDays(1);
+                }
+                return result;
         }
 
         // ==================== LỊCH SỬ ĐIỀU ĐỘNG ====================
