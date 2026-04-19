@@ -7,8 +7,11 @@ import com.company.company_clean_hub_be.entity.Attendance;
 import com.company.company_clean_hub_be.entity.Contract;
 import com.company.company_clean_hub_be.entity.AssignmentScope;
 import com.company.company_clean_hub_be.entity.ContractType;
+import com.company.company_clean_hub_be.entity.WorkScheduleReason;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
+import com.company.company_clean_hub_be.repository.AssignmentVerificationRepository;
 import com.company.company_clean_hub_be.repository.AttendanceRepository;
+import com.company.company_clean_hub_be.service.WorkScheduleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -31,6 +34,8 @@ public class AssignmentScheduler {
 
     private final AssignmentRepository assignmentRepository;
     private final AttendanceRepository attendanceRepository;
+    private final WorkScheduleService workScheduleService;
+    private final AssignmentVerificationRepository verificationRepository;
 
     /**
      * Chạy lúc 1h sáng hàng ngày để cập nhật trạng thái các phân công tạm thời đã qua
@@ -321,6 +326,72 @@ public class AssignmentScheduler {
                         savedAssignment.getId(), month, year, 
                         savedAssignment.getEmployee().getName(),
                         savedAssignment.getAssignmentType());
+
+                // === FIX: Skip Attendance generation for contracts requiring image verification ===
+                // Thay vào đó tạo WorkSchedule để nhân viên phải chụp ảnh mới có ngày công
+                boolean requiresImageVerification = !isCompany 
+                        && contract != null 
+                        && Boolean.TRUE.equals(contract.getRequiresImageVerification());
+
+                if (requiresImageVerification) {
+                    log.info("Contract ID {} yêu cầu chụp ảnh xác thực, bỏ qua sinh Attendance tự động cho Assignment ID {}. " +
+                             "Tạo WorkSchedule thay thế.", contract.getId(), savedAssignment.getId());
+
+                    // Tính endDate cho assignment mới
+                    LocalDate endOfMonth = currentMonth.atEndOfMonth();
+                    LocalDate endDate = endOfMonth;
+                    if (contract.getEndDate() != null && contract.getEndDate().isBefore(endDate)) {
+                        endDate = contract.getEndDate();
+                    }
+
+                    // Xác định reason và verificationId
+                    Long verificationId = null;
+                    WorkScheduleReason wsReason;
+                    Long employeeAssignmentCount = assignmentRepository.countAssignmentsByEmployeeExcluding(
+                            savedAssignment.getEmployee().getId(), savedAssignment.getId());
+                    if (employeeAssignmentCount == 0) {
+                        // Nhân viên mới
+                        wsReason = WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION;
+                        verificationId = verificationRepository
+                                .findByAssignmentId(oldAssignment.getId())
+                                .map(v -> v.getId())
+                                .orElse(null);
+                    } else {
+                        wsReason = WorkScheduleReason.CONTRACT_REQUIREMENT;
+                    }
+
+                    // Tạo WorkSchedule cho assignment mới
+                    workScheduleService.createWorkSchedulesForAssignment(
+                            savedAssignment, wsReason, verificationId,
+                            firstDayOfMonth, endDate);
+
+                    // Tính plannedDays
+                    List<?> workingDays = contract.getWorkingDaysPerWeek();
+                    if (workingDays != null && !workingDays.isEmpty()) {
+                        int plannedDaysForMonth = 0;
+                        LocalDate tempDate = firstDayOfMonth;
+                        while (!tempDate.isAfter(endDate)) {
+                            String dayName = tempDate.getDayOfWeek().name();
+                            for (Object day : workingDays) {
+                                if (day.toString().equals(dayName)) {
+                                    plannedDaysForMonth++;
+                                    break;
+                                }
+                            }
+                            tempDate = tempDate.plusDays(1);
+                        }
+                        savedAssignment.setPlannedDays(plannedDaysForMonth);
+                    }
+
+                    savedAssignment.setWorkDays(0);
+                    savedAssignment.setUpdatedAt(LocalDateTime.now());
+                    assignmentRepository.save(savedAssignment);
+
+                    log.info("✓ Đã tạo WorkSchedule và cập nhật workDays=0, plannedDays={} cho Assignment ID {} (requiresImageVerification=true)",
+                            savedAssignment.getPlannedDays(), savedAssignment.getId());
+                    continue; // Skip phần sinh Attendance bên dưới
+                }
+                // === END FIX ===
 
                 // Xác định ngày kết thúc: min của (cuối tháng, ngày hết hạn hợp đồng/assignment nếu có)
                 LocalDate endOfMonth = currentMonth.atEndOfMonth();

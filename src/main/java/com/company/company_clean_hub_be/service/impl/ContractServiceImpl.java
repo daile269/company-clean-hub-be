@@ -15,6 +15,7 @@ import com.company.company_clean_hub_be.repository.InvoiceRepository;
 import com.company.company_clean_hub_be.repository.RatingRepository;
 import com.company.company_clean_hub_be.repository.AssignmentHistoryRepository;
 import com.company.company_clean_hub_be.repository.AttendanceRepository;
+import com.company.company_clean_hub_be.repository.WorkScheduleRepository;
 import com.company.company_clean_hub_be.entity.ContractDocument;
 import com.company.company_clean_hub_be.service.ContractDocumentService;
 import com.company.company_clean_hub_be.repository.ContractRepository;
@@ -47,6 +48,7 @@ public class ContractServiceImpl implements ContractService {
         private final AssignmentRepository assignmentRepository;
         private final AssignmentHistoryRepository assignmentHistoryRepository;
         private final AttendanceRepository attendanceRepository;
+        private final WorkScheduleRepository workScheduleRepository;
         private final ContractDocumentService contractDocumentService;
         private final com.company.company_clean_hub_be.service.VerificationService verificationService;
         private final InvoiceRepository invoiceRepository;
@@ -202,6 +204,7 @@ public class ContractServiceImpl implements ContractService {
                 // delete related assignment history rows, then delete assignments
                 List<Assignment> assignments = assignmentRepository.findByContractId(id);
                 for (Assignment a : assignments) {
+                        workScheduleRepository.deleteByAssignmentId(a.getId());
                         attendanceRepository.deleteByAssignmentId(a.getId());
 
                         // Remove histories referencing this assignment (old or new)

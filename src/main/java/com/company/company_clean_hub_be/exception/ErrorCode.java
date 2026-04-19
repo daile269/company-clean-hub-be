@@ -34,6 +34,7 @@ public enum ErrorCode {
     ASSIGNMENT_ALREADY_EXISTS(400,
             "Nhân viên này đã được phân công phụ trách khách hàng này và đang ở trạng thái hoạt động"),
     REPLACED_EMPLOYEE_NO_ATTENDANCE(400, "Người bị thay không có chấm công vào ngày này"),
+    EMPLOYEE_ALREADY_WORKED(400, "Nhân viên này đã đi làm và chụp ảnh check-in, không thể thay thế"),
     REPLACED_EMPLOYEE_DUPLICATE(400, "Người bị thay không được trùng với người làm thay"),
     REPLACEMENT_EMPLOYEE_HAS_ATTENDANCE(400, "Người thay đã phụ trách khách hàng vào ngày này"),
     NO_ATTENDANCE_DATA(400, "Không tìm thấy dữ liệu chấm công cho nhân viên trong thời gian yêu cầu"),
