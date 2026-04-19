@@ -40,6 +40,7 @@ import com.company.company_clean_hub_be.repository.WorkScheduleRepository;
 import com.company.company_clean_hub_be.service.FileStorageService;
 import com.company.company_clean_hub_be.service.VerificationService;
 import com.company.company_clean_hub_be.service.WorkScheduleService;
+import com.company.company_clean_hub_be.service.AssignmentMetricsService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,6 +64,7 @@ public class VerificationServiceImpl implements VerificationService {
     private final WorkScheduleRepository workScheduleRepository;
     private final WorkScheduleService workScheduleService;
     private final FileStorageService fileStorageService;
+    private final AssignmentMetricsService assignmentMetricsService;
 
     @Override
     @Transactional
@@ -335,38 +337,35 @@ public class VerificationServiceImpl implements VerificationService {
             // Transition to CONTRACT_REQUIREMENT mode
             log.info("Transitioning to CONTRACT_REQUIREMENT mode for verification: {}", verification.getId());
             
-            // Create attendances for all SCHEDULED and MISSED schedules
-            for (WorkSchedule schedule : schedules) {
-                if (schedule.getStatus() == WorkScheduleStatus.SCHEDULED || 
-                    schedule.getStatus() == WorkScheduleStatus.MISSED) {
-                    
-                    if (schedule.getAttendance() == null) {
-                        Attendance attendance = createAttendanceFromSchedule(schedule);
-                        schedule.setAttendance(attendance);
-                    }
-                    schedule.setStatus(WorkScheduleStatus.VERIFIED);
-                    schedule.setSyncNote("Approved - transitioning to contract mode");
-                    schedule.setLastSyncedAt(LocalDateTime.now());
-                }
-            }
+            // For contracts with image verification:
+            // - Keep SCHEDULED/MISSED verification schedules as-is (employee still needs to capture photos)
+            // - Only VERIFIED schedules already have attendance (employee captured photo)
+            // - Bypass only means "skip approval", NOT "skip photo capture"
+            // Do NOT delete or cancel verification schedules — employee must still capture photos for those days
+            // Just save any status changes for VERIFIED ones
             workScheduleRepository.saveAll(schedules);
             
-            // Create future work schedules with CONTRACT_REQUIREMENT
-            // Start from tomorrow (rest of current month) then next month onwards
-            LocalDate tomorrow = LocalDate.now().plusDays(1);
+            // Find the last verification schedule date to know where CONTRACT_REQUIREMENT should start
+            LocalDate lastVerificationDate = schedules.stream()
+                .map(WorkSchedule::getScheduledDate)
+                .max(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+            
+            // Create CONTRACT_REQUIREMENT starting from the day AFTER the last verification schedule
+            LocalDate contractRequirementStart = lastVerificationDate.plusDays(1);
+            
+            // Rest of current month (from after last verification day)
             LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
-
-            // Rest of current month (if any days remain)
-            if (!tomorrow.isAfter(endOfCurrentMonth)) {
+            if (!contractRequirementStart.isAfter(endOfCurrentMonth)) {
                 workScheduleService.createWorkSchedulesForAssignment(
                     verification.getAssignment(),
                     WorkScheduleReason.CONTRACT_REQUIREMENT,
                     null,
-                    tomorrow,
+                    contractRequirementStart,
                     endOfCurrentMonth
                 );
                 log.info("Created CONTRACT_REQUIREMENT schedules for rest of current month: {} to {}",
-                    tomorrow, endOfCurrentMonth);
+                    contractRequirementStart, endOfCurrentMonth);
             }
 
             // Next month
@@ -381,10 +380,11 @@ public class VerificationServiceImpl implements VerificationService {
             );
             
         } else {
-            // No transition - complete verification
+            // No transition - complete verification (contract doesn't require verification)
             log.info("Completing verification without transition: {}", verification.getId());
             
             // Create attendances for ALL schedules (SCHEDULED + MISSED)
+            // This includes both NEW_EMPLOYEE_VERIFICATION and AUTO_ATTENDANCE schedules
             for (WorkSchedule schedule : schedules) {
                 if (schedule.getAttendance() == null) {
                     Attendance attendance = createAttendanceFromSchedule(schedule);
@@ -395,9 +395,40 @@ public class VerificationServiceImpl implements VerificationService {
                 schedule.setLastSyncedAt(LocalDateTime.now());
             }
             workScheduleRepository.saveAll(schedules);
+            log.info("Created attendances for {} work schedules (including AUTO_ATTENDANCE)", schedules.size());
             
-            // No more work schedules needed - will generate attendances directly
+            // Generate AUTO_ATTENDANCE work schedules for REST OF CURRENT MONTH ONLY
+            // Future months will be handled by VerificationScheduler.generateMonthlyWorkSchedules()
+            LocalDate tomorrow = LocalDate.now().plusDays(1);
+            LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
+            
+            // Respect contract end date if it falls before end of current month
+            Contract contract = verification.getAssignment().getContract();
+            if (contract != null && contract.getEndDate() != null && contract.getEndDate().isBefore(endOfCurrentMonth)) {
+                endOfCurrentMonth = contract.getEndDate();
+            }
+            
+            // Only create schedules if there are remaining days in current month
+            if (!tomorrow.isAfter(endOfCurrentMonth)) {
+                List<WorkSchedule> currentMonthSchedules = workScheduleService.createWorkSchedulesForAssignment(
+                    verification.getAssignment(),
+                    WorkScheduleReason.AUTO_ATTENDANCE,
+                    null,
+                    tomorrow,
+                    endOfCurrentMonth
+                );
+                log.info("Created {} AUTO_ATTENDANCE schedules for rest of current month: {} to {}. " +
+                         "Future months will be handled by VerificationScheduler.generateMonthlyWorkSchedules()",
+                    currentMonthSchedules.size(), tomorrow, endOfCurrentMonth);
+            } else {
+                log.info("No remaining days in current month (tomorrow={}, endOfMonth={}). " +
+                         "Future months will be handled by VerificationScheduler.generateMonthlyWorkSchedules()",
+                    tomorrow, endOfCurrentMonth);
+            }
         }
+        
+        // Update assignment metrics after approval
+        assignmentMetricsService.updateAssignmentMetrics(verification.getAssignment().getId());
     }
 
     private void handleContractVerificationEnabled(Assignment assignment) {

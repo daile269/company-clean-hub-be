@@ -86,6 +86,13 @@ public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Long
     @Query("SELECT ws FROM WorkSchedule ws WHERE ws.assignment.id = :assignmentId AND ws.scheduledDate > :date")
     List<WorkSchedule> findByAssignmentIdAndScheduledDateAfter(@Param("assignmentId") Long assignmentId, @Param("date") LocalDate date);
 
+    // Find schedules from date onwards (inclusive) by assignment and status
+    @Query("SELECT ws FROM WorkSchedule ws WHERE ws.assignment.id = :assignmentId AND ws.scheduledDate >= :date AND ws.status = :status")
+    List<WorkSchedule> findByAssignmentIdAndScheduledDateFromAndStatus(
+        @Param("assignmentId") Long assignmentId,
+        @Param("date") LocalDate date,
+        @Param("status") WorkScheduleStatus status);
+
     // Delete by assignment (for cleanup)
     void deleteByAssignmentId(Long assignmentId);
 }

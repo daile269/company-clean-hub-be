@@ -23,9 +23,13 @@ import com.company.company_clean_hub_be.entity.Role;
 import com.company.company_clean_hub_be.entity.User;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
+import com.company.company_clean_hub_be.entity.WorkSchedule;
+import com.company.company_clean_hub_be.entity.WorkScheduleReason;
+import com.company.company_clean_hub_be.entity.WorkScheduleStatus;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
+import com.company.company_clean_hub_be.repository.WorkScheduleRepository;
 import com.company.company_clean_hub_be.service.EmployeeService;
 
 import lombok.RequiredArgsConstructor;
@@ -43,6 +47,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         private final com.company.company_clean_hub_be.service.NotificationService notificationService;
         private final com.company.company_clean_hub_be.repository.AssignmentRepository assignmentRepository;
         private final com.company.company_clean_hub_be.repository.AttendanceRepository attendanceRepository;
+        private final WorkScheduleRepository workScheduleRepository;
 
         @Override
         public String generateEmployeeCode(EmploymentType employmentType) {
@@ -547,6 +552,17 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 
                                 log.info("Updating workDays for assignmentId={} to {}", asn.getId(), newWorkDays);
                                 asn.setWorkDays(newWorkDays);
+
+                                // Delete SCHEDULED WorkSchedule records from resignDate onwards
+                                List<WorkSchedule> scheduledWsList = workScheduleRepository
+                                    .findByAssignmentIdAndScheduledDateFromAndStatus(
+                                        asn.getId(), resignDate, WorkScheduleStatus.SCHEDULED);
+                                log.info("Found {} SCHEDULED WorkSchedule records to delete for assignmentId={} from {}",
+                                    scheduledWsList.size(), asn.getId(), resignDate);
+                                for (WorkSchedule ws : scheduledWsList) {
+                                        workScheduleRepository.delete(ws);
+                                }
+
                                 assignmentRepository.save(asn);
                         }
                 }
@@ -601,6 +617,31 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 
                                 log.info("Restoring workDays for assignmentId={} to {}", asn.getId(), newWorkDays);
                                 asn.setWorkDays(newWorkDays);
+
+                                // Recreate WorkSchedule records for restored attendances
+                                int recreatedWsCount = 0;
+                                List<com.company.company_clean_hub_be.entity.Attendance> restoredAtts =
+                                        attendanceRepository.findByAssignmentId(asn.getId());
+                                for (com.company.company_clean_hub_be.entity.Attendance att : restoredAtts) {
+                                        if (att.getDeleted() == null || !att.getDeleted()) {
+                                                java.util.Optional<WorkSchedule> existingWs = workScheduleRepository
+                                                        .findByAssignmentIdAndScheduledDate(asn.getId(), att.getDate());
+                                                if (existingWs.isEmpty()) {
+                                                        WorkSchedule ws = WorkSchedule.builder()
+                                                                .assignment(asn)
+                                                                .employee(employee)
+                                                                .scheduledDate(att.getDate())
+                                                                .status(WorkScheduleStatus.SCHEDULED)
+                                                                .reason(WorkScheduleReason.AUTO_ATTENDANCE)
+                                                                .attendance(att)
+                                                                .build();
+                                                        workScheduleRepository.save(ws);
+                                                        recreatedWsCount++;
+                                                }
+                                        }
+                                }
+                                log.info("Recreated {} WorkSchedule records for assignmentId={}", recreatedWsCount, asn.getId());
+
                                 assignmentRepository.save(asn);
                         }
                 }

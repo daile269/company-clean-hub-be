@@ -29,6 +29,7 @@ import com.company.company_clean_hub_be.service.AttendanceService;
 import com.company.company_clean_hub_be.service.FileStorageService;
 import com.company.company_clean_hub_be.service.VerificationService;
 import com.company.company_clean_hub_be.service.WorkScheduleService;
+import com.company.company_clean_hub_be.service.AssignmentMetricsService;
 import com.company.company_clean_hub_be.repository.AssignmentVerificationRepository;
 import com.company.company_clean_hub_be.repository.WorkScheduleRepository;
 import com.company.company_clean_hub_be.entity.AssignmentVerification;
@@ -67,6 +68,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final AssignmentVerificationRepository assignmentVerificationRepository;
     private final WorkScheduleService workScheduleService;
     private final WorkScheduleRepository workScheduleRepository;
+    private final AssignmentMetricsService assignmentMetricsService;
 
     @Override
     public AttendanceResponse createAttendance(AttendanceRequest request) {
@@ -116,6 +118,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         
         // Sync with work_schedule if exists
         workScheduleService.syncAttendanceCreation(savedAttendance.getId());
+        
+        // Update assignment metrics
+        assignmentMetricsService.updateAssignmentMetrics(savedAttendance.getAssignment().getId());
         
         log.info("createAttendance completed by {}: attendanceId={}", username, savedAttendance.getId());
         return mapToResponse(savedAttendance);
@@ -179,6 +184,12 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         // Lưu tất cả chấm công
         List<Attendance> savedAttendances = attendanceRepository.saveAll(attendances);
+        
+        // Update assignment metrics after bulk creation
+        if (!savedAttendances.isEmpty()) {
+            assignmentMetricsService.updateAssignmentMetrics(assignment.getId());
+        }
+        
         log.info("autoGenerateAttendances completed: createdCount={}", savedAttendances.size());
 
         return savedAttendances.stream()
@@ -301,7 +312,18 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setDescription(request.getDescription());
         attendance.setUpdatedAt(LocalDateTime.now());
 
+        // Track old assignment for metrics update
+        Assignment oldAssignment = attendance.getAssignment();
+        boolean assignmentChanged = !oldAssignment.getId().equals(assignment.getId());
+
         Attendance updatedAttendance = attendanceRepository.save(attendance);
+        
+        // Update metrics for both old and new assignment if changed
+        if (assignmentChanged) {
+            assignmentMetricsService.updateAssignmentMetrics(oldAssignment.getId());
+        }
+        assignmentMetricsService.updateAssignmentMetrics(assignment.getId());
+        
         log.info("updateAttendance completed by {}: id={}", username, updatedAttendance.getId());
         return mapToResponse(updatedAttendance);
     }
@@ -364,9 +386,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 // Tái tính workDays của assignment
                 Assignment assignment = attendance.getAssignment();
                 if (assignment != null) {
-                        int month = date.getMonthValue();
-                        int year = date.getYear();
-                        recalculateAssignmentWorkDays(assignment, month, year);
+                        assignmentMetricsService.updateAssignmentMetrics(assignment.getId());
                 }
 
                 log.info("softDeleteAttendance completed by {}: attendanceId={}", username, attendance.getId());
@@ -397,10 +417,8 @@ public class AttendanceServiceImpl implements AttendanceService {
 
                 // Tái tính workDays của assignment
                 Assignment assignment = attendance.getAssignment();
-                if (assignment != null && attendance.getDate() != null) {
-                        int month = attendance.getDate().getMonthValue();
-                        int year = attendance.getDate().getYear();
-                        recalculateAssignmentWorkDays(assignment, month, year);
+                if (assignment != null) {
+                        assignmentMetricsService.updateAssignmentMetrics(assignment.getId());
                 }
 
                 log.info("restoreAttendance completed by {}: id={}", username, id);
@@ -435,9 +453,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 // Tái tính workDays của assignment
                 Assignment assignment = attendance.getAssignment();
                 if (assignment != null) {
-                        int month = date.getMonthValue();
-                        int year = date.getYear();
-                        recalculateAssignmentWorkDays(assignment, month, year);
+                        assignmentMetricsService.updateAssignmentMetrics(assignment.getId());
                 }
 
                 log.info("restoreByDateContractEmployee completed by {}: attendanceId={}", username, attendance.getId());
@@ -681,6 +697,10 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .build();
 
         Attendance saved = attendanceRepository.save(attendance);
+        
+        // Update assignment metrics
+        assignmentMetricsService.updateAssignmentMetrics(assignment.getId());
+        
         log.info("Generated single attendance: {}", saved.getId());
         
         return mapToResponse(saved);
@@ -731,6 +751,10 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         if (!attendances.isEmpty()) {
             attendanceRepository.saveAll(attendances);
+            
+            // Update assignment metrics after bulk creation
+            assignmentMetricsService.updateAssignmentMetrics(assignmentId);
+            
             log.info("Generated {} remaining attendances for assignment {}", attendances.size(), assignmentId);
         }
     }

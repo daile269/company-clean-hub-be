@@ -7,6 +7,7 @@ import com.company.company_clean_hub_be.entity.*;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.*;
+import com.company.company_clean_hub_be.service.AssignmentMetricsService;
 import com.company.company_clean_hub_be.service.AssignmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +50,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         private final com.company.company_clean_hub_be.service.WorkScheduleService workScheduleService;
         private final com.company.company_clean_hub_be.repository.WorkScheduleRepository workScheduleRepository;
         private final com.company.company_clean_hub_be.repository.VerificationImageRepository imageRepository;
+        private final AssignmentMetricsService assignmentMetricsService;
 
         @Override
         public List<AssignmentResponse> getAllAssignments() {
@@ -370,22 +372,36 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 log.info("[DEBUG] Created {} NEW_EMPLOYEE_VERIFICATION work_schedules for assignmentId={}",
                                                                 verificationDates.size(), savedAssignment.getId());
 
-                                                // Nếu hợp đồng bật verification → tạo thêm CONTRACT_REQUIREMENT cho phần còn lại
+                                                // Kiểm tra hợp đồng có bật verification không
                                                 boolean transitionToContract = verification != null
                                                                 && Boolean.TRUE.equals(verification.getTransitionToContractMode());
-                                                if (transitionToContract && !verificationDates.isEmpty()) {
+                                                
+                                                if (!verificationDates.isEmpty()) {
                                                         LocalDate afterVerification = verificationDates
                                                                         .get(verificationDates.size() - 1)
                                                                         .plusDays(1);
                                                         if (!afterVerification.isAfter(endDate)) {
-                                                                workScheduleService.createWorkSchedulesForAssignment(
-                                                                                savedAssignment,
-                                                                                WorkScheduleReason.CONTRACT_REQUIREMENT,
-                                                                                null,
-                                                                                afterVerification,
-                                                                                endDate);
-                                                                log.info("[DEBUG] Created CONTRACT_REQUIREMENT work_schedules from {} to {} for assignmentId={}",
-                                                                                afterVerification, endDate, savedAssignment.getId());
+                                                                if (transitionToContract) {
+                                                                        // Hợp đồng BẬT verification → tạo work_schedules CONTRACT_REQUIREMENT
+                                                                        workScheduleService.createWorkSchedulesForAssignment(
+                                                                                        savedAssignment,
+                                                                                        WorkScheduleReason.CONTRACT_REQUIREMENT,
+                                                                                        null,
+                                                                                        afterVerification,
+                                                                                        endDate);
+                                                                        log.info("[DEBUG] Created CONTRACT_REQUIREMENT work_schedules from {} to {} for assignmentId={}",
+                                                                                        afterVerification, endDate, savedAssignment.getId());
+                                                                } else {
+                                                                        // Hợp đồng KHÔNG bật verification → tạo work_schedules AUTO_ATTENDANCE
+                                                                        workScheduleService.createWorkSchedulesForAssignment(
+                                                                                        savedAssignment,
+                                                                                        WorkScheduleReason.AUTO_ATTENDANCE,
+                                                                                        null,
+                                                                                        afterVerification,
+                                                                                        endDate);
+                                                                        log.info("[DEBUG] Created AUTO_ATTENDANCE work_schedules from {} to {} for assignmentId={}",
+                                                                                        afterVerification, endDate, savedAssignment.getId());
+                                                                }
                                                         }
                                                 }
 
@@ -1040,6 +1056,8 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 List<AttendanceResponse> createdAttendances = new ArrayList<>();
                 List<AttendanceResponse> deletedAttendances = new ArrayList<>();
+                List<WorkScheduleResponse> createdWorkSchedules = new ArrayList<>();
+                List<WorkScheduleResponse> deletedWorkSchedules = new ArrayList<>();
 
                 // Để lưu vào history
                 Assignment oldAssignment = null;
@@ -1050,6 +1068,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                         System.out.println("\n--- Xử lý ngày: " + date + " ---");
 
                         List<Attendance> foundDeletedAttendances = new ArrayList<>();
+                        WorkSchedule foundWorkSchedule = null;
 
                         // Nếu có replacedAssignmentId, CHỈ tìm attendance trong assignment đó
                         if (request.getReplacedAssignmentId() != null) {
@@ -1061,9 +1080,18 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         System.out.println("✓ Tìm thấy attendance từ replacedAssignmentId: "
                                                         + request.getReplacedAssignmentId());
                                 } else {
-                                        System.out.println("❌ LỖI: Không tìm thấy attendance cho assignmentId: "
-                                                        + request.getReplacedAssignmentId() + " vào ngày " + date);
-                                        throw new AppException(ErrorCode.REPLACED_EMPLOYEE_NO_ATTENDANCE);
+                                        // Check for WorkSchedule if no Attendance found
+                                        Optional<WorkSchedule> wsOpt = workScheduleRepository.findByAssignmentIdAndScheduledDate(
+                                                        request.getReplacedAssignmentId(), date);
+                                        if (wsOpt.isPresent()) {
+                                                foundWorkSchedule = wsOpt.get();
+                                                System.out.println("✓ Tìm thấy WorkSchedule từ replacedAssignmentId: "
+                                                                + request.getReplacedAssignmentId());
+                                        } else {
+                                                System.out.println("❌ LỖI: Không tìm thấy attendance hoặc WorkSchedule cho assignmentId: "
+                                                                + request.getReplacedAssignmentId() + " vào ngày " + date);
+                                                throw new AppException(ErrorCode.REPLACED_EMPLOYEE_NO_ATTENDANCE);
+                                        }
                                 }
                         } else {
                                 // Không có replacedAssignmentId: tìm theo active assignment
@@ -1086,15 +1114,165 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         foundDeletedAttendances = attendanceRepository.findAllByEmployeeAndDate(
                                                         request.getReplacedEmployeeId(), date);
                                 }
+
+                                // If still no Attendance found, check for WorkSchedule
+                                if (foundDeletedAttendances.isEmpty()) {
+                                        System.out.println("→ Không tìm thấy attendance, kiểm tra WorkSchedule");
+                                        List<WorkSchedule> workSchedules = workScheduleRepository.findByEmployeeIdAndDateRange(
+                                                        request.getReplacedEmployeeId(), date, date);
+                                        if (!workSchedules.isEmpty()) {
+                                                foundWorkSchedule = workSchedules.get(0);
+                                                System.out.println("✓ Tìm thấy WorkSchedule cho employee vào ngày " + date);
+                                        }
+                                }
                         }
 
                         System.out.println("Attendance(s) của người bị thay (ID " + request.getReplacedEmployeeId()
                                         + ") vào ngày " + date + ": "
                                         + (foundDeletedAttendances.isEmpty() ? "KHÔNG CÓ"
                                                         : ("CÓ(" + foundDeletedAttendances.size() + ")")));
+                        System.out.println("WorkSchedule của người bị thay: " + (foundWorkSchedule != null ? "CÓ" : "KHÔNG CÓ"));
 
-                        if (foundDeletedAttendances.isEmpty()) {
-                                System.out.println("❌ LỖI: Người bị thay không có attendance vào ngày này");
+                        // Task 3.2: Check if employee has already worked (has Attendance)
+                        // If Attendance exists, it means the employee has already worked (either auto-generated or photo-captured)
+                        // For contracts with image verification, Attendance is only created after photo capture
+                        // So if Attendance exists for such contracts, the employee has definitely worked
+                        if (!foundDeletedAttendances.isEmpty()) {
+                                // Check if this is for a contract with image verification
+                                Attendance attendance = foundDeletedAttendances.get(0);
+                                Assignment assignment = attendance.getAssignment();
+                                if (assignment != null && assignment.getContract() != null 
+                                                && assignment.getContract().getRequiresImageVerification() != null
+                                                && assignment.getContract().getRequiresImageVerification()) {
+                                        // For contracts with image verification, Attendance means photo was captured
+                                        System.out.println("❌ LỖI: Nhân viên đã chụp ảnh check-in, không thể thay thế");
+                                        throw new AppException(ErrorCode.EMPLOYEE_ALREADY_WORKED);
+                                }
+                        }
+
+                        // Task 3.3 & 3.4: Handle WorkSchedule-based reassignment
+                        if (foundWorkSchedule != null && foundDeletedAttendances.isEmpty()) {
+                                System.out.println("→ Xử lý điều động dựa trên WorkSchedule");
+                                
+                                Assignment replacedAssignmentEntity = foundWorkSchedule.getAssignment();
+                                
+                                // Lưu lại old assignment cho history (lần đầu tiên)
+                                if (oldAssignment == null) {
+                                        oldAssignment = replacedAssignmentEntity;
+                                }
+
+                                // Tạo temporary assignment
+                                LocalDate today = LocalDate.now();
+                                AssignmentStatus tempStatus = date.isAfter(today) ? AssignmentStatus.SCHEDULED
+                                                : AssignmentStatus.IN_PROGRESS;
+
+                                Assignment temporaryAssignment = Assignment.builder()
+                                                .employee(replacementEmployee)
+                                                .contract(replacedAssignmentEntity.getContract())
+                                                .assignmentType(AssignmentType.TEMPORARY)
+                                                .workDays(1)
+                                                .plannedDays(1)
+                                                .salaryAtTime(request.getSalaryAtTime())
+                                                .startDate(date)
+                                                .status(tempStatus)
+                                                .description(request.getDescription() != null
+                                                                ? request.getDescription()
+                                                                : "Điều động tạm thời")
+                                                .createdAt(LocalDateTime.now())
+                                                .updatedAt(LocalDateTime.now())
+                                                .build();
+
+                                Assignment savedTemporaryAssignment = assignmentRepository.save(temporaryAssignment);
+                                System.out.println("✓ Đã tạo temporary assignment ID: " + savedTemporaryAssignment.getId());
+
+                                // Lưu lại new assignment cho history (lần đầu tiên)
+                                if (newAssignment == null) {
+                                        newAssignment = savedTemporaryAssignment;
+                                }
+
+                                // Task 3.5: Save deleted WorkSchedule to response
+                                WorkScheduleResponse deletedWsResponse = mapWorkScheduleToResponse(foundWorkSchedule);
+                                deletedWorkSchedules.add(deletedWsResponse);
+
+                                // Delete old WorkSchedule
+                                workScheduleRepository.delete(foundWorkSchedule);
+                                log.info("Deleted old WorkSchedule id={} for replacedEmployeeId={} on date={}",
+                                                foundWorkSchedule.getId(), request.getReplacedEmployeeId(), date);
+
+                                // If the deleted WorkSchedule was NEW_EMPLOYEE_VERIFICATION, create a replacement
+                                // verification day so the new employee still completes 5 days of verification
+                                if (foundWorkSchedule.getReason() == com.company.company_clean_hub_be.entity.WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION
+                                                && foundWorkSchedule.getAssignmentVerification() != null) {
+                                        // Find the last verification WorkSchedule date for this employee's assignment
+                                        List<WorkSchedule> verificationSchedules = workScheduleRepository
+                                                        .findByAssignmentIdAndReason(replacedAssignmentEntity.getId(),
+                                                                        com.company.company_clean_hub_be.entity.WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION);
+                                        LocalDate lastVerificationDate = verificationSchedules.stream()
+                                                        .map(WorkSchedule::getScheduledDate)
+                                                        .max(LocalDate::compareTo)
+                                                        .orElse(date);
+
+                                        // Find the next working day after the last verification date
+                                        List<java.time.DayOfWeek> workingDays = replacedAssignmentEntity.getWorkingDaysPerWeek();
+                                        if (workingDays == null || workingDays.isEmpty()) {
+                                                workingDays = java.util.Arrays.asList(
+                                                        java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY,
+                                                        java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY,
+                                                        java.time.DayOfWeek.FRIDAY, java.time.DayOfWeek.SATURDAY);
+                                        }
+                                        LocalDate nextDay = lastVerificationDate.plusDays(1);
+                                        while (!workingDays.contains(nextDay.getDayOfWeek())) {
+                                                nextDay = nextDay.plusDays(1);
+                                        }
+
+                                        // Only create if not already exists
+                                        if (!workScheduleRepository.existsByAssignmentIdAndScheduledDate(
+                                                        replacedAssignmentEntity.getId(), nextDay)) {
+                                                WorkSchedule compensationSchedule = WorkSchedule.builder()
+                                                                .assignment(replacedAssignmentEntity)
+                                                                .employee(replacedEmployee)
+                                                                .scheduledDate(nextDay)
+                                                                .status(com.company.company_clean_hub_be.entity.WorkScheduleStatus.SCHEDULED)
+                                                                .reason(com.company.company_clean_hub_be.entity.WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION)
+                                                                .assignmentVerification(foundWorkSchedule.getAssignmentVerification())
+                                                                .build();
+                                                workScheduleRepository.save(compensationSchedule);
+                                                log.info("Created compensation NEW_EMPLOYEE_VERIFICATION WorkSchedule for employeeId={} on date={} (replacing reassigned date={})",
+                                                                replacedEmployee.getId(), nextDay, date);
+                                        }
+                                }
+
+                                // Recalculate plannedDays on the replaced Assignment after WorkSchedule deletion
+                                assignmentMetricsService.updateAssignmentMetrics(replacedAssignmentEntity.getId());
+
+                                // Create new WorkSchedule for replacement employee
+                                WorkSchedule newWorkSchedule = WorkSchedule.builder()
+                                                .assignment(savedTemporaryAssignment)
+                                                .employee(replacementEmployee)
+                                                .scheduledDate(date)
+                                                .status(com.company.company_clean_hub_be.entity.WorkScheduleStatus.SCHEDULED)
+                                                .reason(com.company.company_clean_hub_be.entity.WorkScheduleReason.REASSIGNMENT)
+                                                .assignmentVerification(foundWorkSchedule.getAssignmentVerification())
+                                                .createdAt(LocalDateTime.now())
+                                                .updatedAt(LocalDateTime.now())
+                                                .build();
+
+                                WorkSchedule savedWorkSchedule = workScheduleRepository.save(newWorkSchedule);
+                                log.info("Created new WorkSchedule id={} for replacementEmployeeId={} on date={}",
+                                                savedWorkSchedule.getId(), request.getReplacementEmployeeId(), date);
+
+                                WorkScheduleResponse createdWsResponse = mapWorkScheduleToResponse(savedWorkSchedule);
+                                createdWorkSchedules.add(createdWsResponse);
+
+                                // Set correct metrics on the new temporary Assignment from WorkSchedule records
+                                assignmentMetricsService.updateAssignmentMetrics(savedTemporaryAssignment.getId());
+
+                                continue; // Skip to next date
+                        }
+
+                        // Task 3.6: Only throw error if neither Attendance nor WorkSchedule found
+                        if (foundDeletedAttendances.isEmpty() && foundWorkSchedule == null) {
+                                System.out.println("❌ LỖI: Người bị thay không có attendance hoặc WorkSchedule vào ngày này");
                                 throw new AppException(ErrorCode.REPLACED_EMPLOYEE_NO_ATTENDANCE);
                         }
 
@@ -1235,10 +1413,20 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                         monthEnd)
                                         .size();
 
-                        replacedAssignmentEntity.setWorkDays(replacedWorkDays);
-                        assignmentRepository.save(replacedAssignmentEntity);
-                        log.info("Updated workDays for assignmentId={} -> {}", replacedAssignmentEntity.getId(),
-                                        replacedWorkDays);
+                        // Fetch fresh entity to avoid collection merge issues
+                        try {
+                                Assignment freshReplacedAssignment = assignmentRepository.findById(replacedAssignmentEntity.getId()).orElse(null);
+                                if (freshReplacedAssignment != null) {
+                                        freshReplacedAssignment.setWorkDays(replacedWorkDays);
+                                        assignmentRepository.save(freshReplacedAssignment);
+                                        log.info("Updated workDays for assignmentId={} -> {}", freshReplacedAssignment.getId(),
+                                                        replacedWorkDays);
+                                }
+                        } catch (UnsupportedOperationException e) {
+                                // Hibernate collection merge issue - workDays will be recalculated by scheduled job
+                                log.warn("Could not update workDays for assignmentId={} due to collection merge issue, will be recalculated later",
+                                                replacedAssignmentEntity.getId());
+                        }
                 }
 
                 // Lưu lịch sử điều động
@@ -1286,24 +1474,29 @@ public class AssignmentServiceImpl implements AssignmentService {
                         System.out.println("Tổng công người bị thay (ID " + request.getReplacedEmployeeId() + "): "
                                         + replacedTotal);
 
-                        log.info("temporaryReassignment result: created={}, deleted={} (replacementTotal={}, replacedTotal={})",
-                                        createdAttendances.size(), deletedAttendances.size(), replacementTotal,
-                                        replacedTotal);
+                        log.info("temporaryReassignment result: created={}, deleted={}, createdWS={}, deletedWS={} (replacementTotal={}, replacedTotal={})",
+                                        createdAttendances.size(), deletedAttendances.size(), 
+                                        createdWorkSchedules.size(), deletedWorkSchedules.size(),
+                                        replacementTotal, replacedTotal);
 
+                        int totalProcessed = createdAttendances.size() + createdWorkSchedules.size();
+                        
                         return TemporaryAssignmentResponse.builder()
                                         .createdAttendances(createdAttendances)
                                         .deletedAttendances(deletedAttendances)
+                                        .createdWorkSchedules(createdWorkSchedules)
+                                        .deletedWorkSchedules(deletedWorkSchedules)
                                         .replacementEmployeeTotalDays(replacementTotal)
                                         .replacedEmployeeTotalDays(replacedTotal)
-                                        .processedDaysCount(createdAttendances.size())
+                                        .processedDaysCount(totalProcessed)
                                         .message(String.format(
                                                         "Điều động thành công %d ngày: %s (+%d công, tổng: %d) thay %s (-%d công, tổng: %d)",
-                                                        createdAttendances.size(),
+                                                        totalProcessed,
                                                         replacementEmployee.getName(),
-                                                        createdAttendances.size(),
+                                                        totalProcessed,
                                                         replacementTotal,
                                                         replacedEmployee.getName(),
-                                                        deletedAttendances.size(),
+                                                        createdAttendances.size() + deletedWorkSchedules.size(),
                                                         replacedTotal))
                                         .build();
                 }
@@ -1312,6 +1505,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                 return TemporaryAssignmentResponse.builder()
                                 .createdAttendances(createdAttendances)
                                 .deletedAttendances(deletedAttendances)
+                                .createdWorkSchedules(createdWorkSchedules)
+                                .deletedWorkSchedules(deletedWorkSchedules)
                                 .replacementEmployeeTotalDays(0)
                                 .replacedEmployeeTotalDays(0)
                                 .processedDaysCount(0)
@@ -1770,6 +1965,36 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .description(attendance.getDescription())
                                 .createdAt(attendance.getCreatedAt())
                                 .updatedAt(attendance.getUpdatedAt())
+                                .build();
+        }
+
+        private WorkScheduleResponse mapWorkScheduleToResponse(WorkSchedule workSchedule) {
+                Assignment assignment = workSchedule.getAssignment();
+                Employee employee = workSchedule.getEmployee();
+                Contract contract = assignment != null ? assignment.getContract() : null;
+                
+                return WorkScheduleResponse.builder()
+                                .id(workSchedule.getId())
+                                .assignmentId(assignment != null ? assignment.getId() : null)
+                                .employeeId(employee != null ? employee.getId() : null)
+                                .employeeName(employee != null ? employee.getName() : null)
+                                .contractId(contract != null ? contract.getId() : null)
+                                .scheduledDate(workSchedule.getScheduledDate())
+                                .status(workSchedule.getStatus())
+                                .reason(workSchedule.getReason())
+                                .assignmentVerificationId(workSchedule.getAssignmentVerification() != null 
+                                                ? workSchedule.getAssignmentVerification().getId() : null)
+                                .verificationImageId(workSchedule.getVerificationImage() != null 
+                                                ? workSchedule.getVerificationImage().getId() : null)
+                                .attendanceId(workSchedule.getAttendance() != null 
+                                                ? workSchedule.getAttendance().getId() : null)
+                                .photoCapturedAt(workSchedule.getPhotoCapturedAt())
+                                .canCapturePhoto(workSchedule.canCapturePhoto())
+                                .attendanceDeleted(workSchedule.getAttendanceDeleted())
+                                .syncNote(workSchedule.getSyncNote())
+                                .lastSyncedAt(workSchedule.getLastSyncedAt())
+                                .createdAt(workSchedule.getCreatedAt())
+                                .updatedAt(workSchedule.getUpdatedAt())
                                 .build();
         }
 

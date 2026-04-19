@@ -32,6 +32,7 @@ import com.company.company_clean_hub_be.repository.VerificationImageRepository;
 import com.company.company_clean_hub_be.repository.WorkScheduleRepository;
 import com.company.company_clean_hub_be.service.FileStorageService;
 import com.company.company_clean_hub_be.service.WorkScheduleService;
+import com.company.company_clean_hub_be.service.AssignmentMetricsService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +49,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     private final EmployeeRepository employeeRepository;
     private final VerificationImageRepository imageRepository;
     private final FileStorageService fileStorageService;
+    private final AssignmentMetricsService assignmentMetricsService;
 
     @Override
     @Transactional
@@ -101,11 +103,17 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             if (isWorkingDay) {
                 // Check if already exists
                 if (!workScheduleRepository.existsByAssignmentIdAndScheduledDate(assignment.getId(), currentDate)) {
+                    // Past dates → MISSED (employee didn't capture photo, manager can create attendance manually)
+                    // Today and future → SCHEDULED (waiting for photo capture)
+                    WorkScheduleStatus status = currentDate.isBefore(LocalDate.now()) 
+                        ? WorkScheduleStatus.MISSED 
+                        : WorkScheduleStatus.SCHEDULED;
+                    
                     WorkSchedule schedule = WorkSchedule.builder()
                         .assignment(assignment)
                         .employee(assignment.getEmployee())
                         .scheduledDate(currentDate)
-                        .status(WorkScheduleStatus.SCHEDULED)
+                        .status(status)
                         .reason(reason)
                         .assignmentVerification(verification)
                         .build();
@@ -146,11 +154,15 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             boolean alreadyExists = workScheduleRepository
                 .existsByAssignmentIdAndScheduledDate(assignment.getId(), date);
             if (!alreadyExists) {
+                WorkScheduleStatus status = date.isBefore(LocalDate.now()) 
+                    ? WorkScheduleStatus.MISSED 
+                    : WorkScheduleStatus.SCHEDULED;
+                
                 WorkSchedule schedule = WorkSchedule.builder()
                     .assignment(assignment)
                     .employee(assignment.getEmployee())
                     .scheduledDate(date)
-                    .status(WorkScheduleStatus.SCHEDULED)
+                    .status(status)
                     .reason(reason)
                     .assignmentVerification(verification)
                     .build();
@@ -400,25 +412,13 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
         log.info("Photo captured successfully for work schedule: {}", schedule.getId());
 
-        // Update assignment workDays (+1 for this capture)
-        try {
-            Assignment assignment = schedule.getAssignment();
-            if (assignment != null) {
-                int currentWorkDays = assignment.getWorkDays() != null ? assignment.getWorkDays() : 0;
-                assignment.setWorkDays(currentWorkDays + 1);
-                assignmentRepository.save(assignment);
-            }
-        } catch (Exception e) {
-            log.error("Failed to update workDays for assignment: {}", e.getMessage());
-        }
-
         // Check auto-approval if NEW_EMPLOYEE_VERIFICATION
         if (schedule.getReason() == WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION && 
             schedule.getAssignmentVerification() != null) {
             checkAndAutoApprove(schedule.getAssignmentVerification().getId());
-        } else if (schedule.getReason() == WorkScheduleReason.CONTRACT_REQUIREMENT) {
-            // CONTRACT_REQUIREMENT: no auto-approve needed, but update plannedDays if not set
-            updateAssignmentDaysAfterApproval(schedule.getAssignment().getId());
+        } else {
+            // For CONTRACT_REQUIREMENT and AUTO_ATTENDANCE: update metrics immediately
+            assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
         }
 
         return mapToResponse(schedule);
@@ -455,6 +455,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             schedule.setLastSyncedAt(LocalDateTime.now());
             workScheduleRepository.save(schedule);
             
+            // Update assignment metrics after attendance deletion
+            assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
+            
             log.info("Synced work schedule {} with attendance deletion", schedule.getId());
         });
     }
@@ -475,6 +478,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             schedule.setSyncNote("Attendance created manually");
             schedule.setLastSyncedAt(LocalDateTime.now());
             workScheduleRepository.save(schedule);
+            
+            // Update assignment metrics after attendance creation
+            assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
             
             log.info("Synced work schedule {} with attendance creation", schedule.getId());
         });
@@ -589,6 +595,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         schedule.setLastSyncedAt(LocalDateTime.now());
 
         workScheduleRepository.save(schedule);
+        
+        // Update assignment metrics after cancellation
+        assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
+        
         log.info("Cancelled work schedule: {}", id);
 
         return mapToResponse(schedule);
@@ -618,6 +628,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         if (schedule.getReason() == WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION
                 && schedule.getAssignmentVerification() != null) {
             checkAndAutoApprove(schedule.getAssignmentVerification().getId());
+        } else {
+            // For CONTRACT_REQUIREMENT and AUTO_ATTENDANCE: update metrics
+            assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
         }
 
         return mapToResponse(schedule);
@@ -784,58 +797,41 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 verification.setAutoApprovedAt(LocalDateTime.now());
                 verificationRepository.save(verification);
 
-                // Create attendances for all remaining SCHEDULED work_schedules
+                // Check if this is a transition-to-contract verification (HĐ bật xác thực hình ảnh)
+                boolean isTransitionToContract = Boolean.TRUE.equals(verification.getTransitionToContractMode());
+
+                // Handle remaining SCHEDULED work_schedules
                 List<WorkSchedule> remainingSchedules = workScheduleRepository
                     .findByVerificationIdAndStatusIn(verificationId,
                         List.of(WorkScheduleStatus.SCHEDULED));
 
-                for (WorkSchedule ws : remainingSchedules) {
-                    try {
-                        Attendance att = createAttendanceFromSchedule(ws);
-                        ws.setAttendance(att);
-                        ws.setStatus(WorkScheduleStatus.VERIFIED);
-                        ws.setLastSyncedAt(LocalDateTime.now());
-                        ws.setSyncNote("Auto-approved: attendance created");
-                        workScheduleRepository.save(ws);
-                    } catch (Exception e) {
-                        log.error("Failed to create attendance for schedule {}: {}", ws.getId(), e.getMessage());
+                if (isTransitionToContract) {
+                    // For verification contracts: keep remaining SCHEDULED schedules
+                    // Employee still needs to capture photos for those days
+                    // Bypass/auto-approve only means "skip approval", not "skip photo capture"
+                    log.info("Auto-approved verification {} - keeping {} remaining SCHEDULED schedules (employee must still capture photos)", 
+                        verificationId, remainingSchedules.size());
+                } else {
+                    // For non-verification contracts: create attendance for remaining days (existing behavior)
+                    for (WorkSchedule ws : remainingSchedules) {
+                        try {
+                            Attendance att = createAttendanceFromSchedule(ws);
+                            ws.setAttendance(att);
+                            ws.setStatus(WorkScheduleStatus.VERIFIED);
+                            ws.setLastSyncedAt(LocalDateTime.now());
+                            ws.setSyncNote("Auto-approved: attendance created");
+                            workScheduleRepository.save(ws);
+                        } catch (Exception e) {
+                            log.error("Failed to create attendance for schedule {}: {}", ws.getId(), e.getMessage());
+                        }
                     }
+                    log.info("Auto-approved verification {} and created {} attendances", 
+                        verificationId, remainingSchedules.size());
                 }
 
-                log.info("Auto-approved verification {} and created {} attendances", 
-                    verificationId, remainingSchedules.size());
-
                 // Update workDays and plannedDays on the assignment
-                updateAssignmentDaysAfterApproval(verification.getAssignment().getId());
+                assignmentMetricsService.updateAssignmentMetrics(verification.getAssignment().getId());
             }
-        }
-    }
-
-    private void updateAssignmentDaysAfterApproval(Long assignmentId) {        try {
-            Assignment assignment = assignmentRepository.findById(assignmentId).orElse(null);
-            if (assignment == null) return;
-
-            // workDays = total VERIFIED work_schedules (each has an attendance)
-            List<WorkSchedule> allVerified = workScheduleRepository.findByAssignmentId(assignmentId)
-                .stream()
-                .filter(ws -> ws.getStatus() == WorkScheduleStatus.VERIFIED)
-                .collect(java.util.stream.Collectors.toList());
-            int workDays = allVerified.size();
-
-            // plannedDays = total work_schedules for this assignment (VERIFIED + SCHEDULED + MISSED)
-            // i.e. all non-CANCELLED schedules
-            int plannedDays = (int) workScheduleRepository.findByAssignmentId(assignmentId)
-                .stream()
-                .filter(ws -> ws.getStatus() != WorkScheduleStatus.CANCELLED)
-                .count();
-
-            assignment.setWorkDays(workDays);
-            assignment.setPlannedDays(plannedDays);
-            assignmentRepository.save(assignment);
-
-            log.info("Updated assignment {}: workDays={}, plannedDays={}", assignmentId, workDays, plannedDays);
-        } catch (Exception e) {
-            log.error("Failed to update assignment days for assignmentId={}: {}", assignmentId, e.getMessage());
         }
     }
 

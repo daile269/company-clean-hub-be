@@ -15,6 +15,8 @@ public class TemporaryAssignmentResponse {
 
     private List<AttendanceResponse> createdAttendances;
     private List<AttendanceResponse> deletedAttendances;
+    private List<WorkScheduleResponse> createdWorkSchedules;
+    private List<WorkScheduleResponse> deletedWorkSchedules;
     private String message;
     private Integer replacementEmployeeTotalDays;
     private Integer replacedEmployeeTotalDays;
