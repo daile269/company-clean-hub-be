@@ -416,10 +416,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         if (schedule.getReason() == WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION && 
             schedule.getAssignmentVerification() != null) {
             checkAndAutoApprove(schedule.getAssignmentVerification().getId());
-        } else {
-            // For CONTRACT_REQUIREMENT and AUTO_ATTENDANCE: update metrics immediately
-            assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
         }
+        
+        // Always update metrics after photo capture (workDays should increase)
+        assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
 
         return mapToResponse(schedule);
     }
