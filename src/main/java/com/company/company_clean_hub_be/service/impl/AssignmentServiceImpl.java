@@ -1245,24 +1245,55 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 // Recalculate plannedDays on the replaced Assignment after WorkSchedule deletion
                                 assignmentMetricsService.updateAssignmentMetrics(replacedAssignmentEntity.getId());
 
-                                // Create new WorkSchedule for replacement employee
-                                WorkSchedule newWorkSchedule = WorkSchedule.builder()
-                                                .assignment(savedTemporaryAssignment)
-                                                .employee(replacementEmployee)
-                                                .scheduledDate(date)
-                                                .status(com.company.company_clean_hub_be.entity.WorkScheduleStatus.SCHEDULED)
-                                                .reason(com.company.company_clean_hub_be.entity.WorkScheduleReason.REASSIGNMENT)
-                                                .assignmentVerification(foundWorkSchedule.getAssignmentVerification())
-                                                .createdAt(LocalDateTime.now())
-                                                .updatedAt(LocalDateTime.now())
-                                                .build();
+                                // Check if contract requires image verification
+                                boolean contractRequiresVerification = replacedAssignmentEntity.getContract() != null
+                                                && Boolean.TRUE.equals(replacedAssignmentEntity.getContract().getRequiresImageVerification());
 
-                                WorkSchedule savedWorkSchedule = workScheduleRepository.save(newWorkSchedule);
-                                log.info("Created new WorkSchedule id={} for replacementEmployeeId={} on date={}",
-                                                savedWorkSchedule.getId(), request.getReplacementEmployeeId(), date);
+                                if (contractRequiresVerification) {
+                                        // Contract requires photo → create WorkSchedule for replacement (must capture photo)
+                                        WorkSchedule newWorkSchedule = WorkSchedule.builder()
+                                                        .assignment(savedTemporaryAssignment)
+                                                        .employee(replacementEmployee)
+                                                        .scheduledDate(date)
+                                                        .status(com.company.company_clean_hub_be.entity.WorkScheduleStatus.SCHEDULED)
+                                                        .reason(com.company.company_clean_hub_be.entity.WorkScheduleReason.REASSIGNMENT)
+                                                        .createdAt(LocalDateTime.now())
+                                                        .updatedAt(LocalDateTime.now())
+                                                        .build();
 
-                                WorkScheduleResponse createdWsResponse = mapWorkScheduleToResponse(savedWorkSchedule);
-                                createdWorkSchedules.add(createdWsResponse);
+                                        WorkSchedule savedWorkSchedule = workScheduleRepository.save(newWorkSchedule);
+                                        log.info("Created new WorkSchedule id={} for replacementEmployeeId={} on date={} (contract requires verification)",
+                                                        savedWorkSchedule.getId(), request.getReplacementEmployeeId(), date);
+
+                                        WorkScheduleResponse createdWsResponse = mapWorkScheduleToResponse(savedWorkSchedule);
+                                        createdWorkSchedules.add(createdWsResponse);
+                                } else {
+                                        // Contract does NOT require photo → create Attendance directly for replacement
+                                        Attendance newAttendance = Attendance.builder()
+                                                        .employee(replacementEmployee)
+                                                        .assignment(savedTemporaryAssignment)
+                                                        .date(date)
+                                                        .workHours(java.math.BigDecimal.valueOf(8))
+                                                        .bonus(java.math.BigDecimal.ZERO)
+                                                        .penalty(java.math.BigDecimal.ZERO)
+                                                        .supportCost(java.math.BigDecimal.ZERO)
+                                                        .deleted(false)
+                                                        .isOvertime(false)
+                                                        .overtimeAmount(java.math.BigDecimal.ZERO)
+                                                        .description(request.getDescription() != null
+                                                                        ? request.getDescription()
+                                                                        : "Điều động thay thế ngày " + date)
+                                                        .createdAt(LocalDateTime.now())
+                                                        .updatedAt(LocalDateTime.now())
+                                                        .build();
+
+                                        Attendance savedAttendance = attendanceRepository.save(newAttendance);
+                                        log.info("Created new Attendance id={} for replacementEmployeeId={} on date={} (contract does not require verification)",
+                                                        savedAttendance.getId(), request.getReplacementEmployeeId(), date);
+
+                                        AttendanceResponse createdAttendanceResponse = mapAttendanceToResponse(savedAttendance);
+                                        createdAttendances.add(createdAttendanceResponse);
+                                }
 
                                 // Set correct metrics on the new temporary Assignment from WorkSchedule records
                                 assignmentMetricsService.updateAssignmentMetrics(savedTemporaryAssignment.getId());

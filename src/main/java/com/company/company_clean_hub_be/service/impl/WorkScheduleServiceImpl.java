@@ -610,8 +610,11 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         WorkSchedule schedule = workScheduleRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Work schedule not found: " + id));
 
-        if (schedule.getStatus() != WorkScheduleStatus.MISSED) {
-            throw new AppException(ErrorCode.INVALID_REQUEST, "Work schedule is not in MISSED status");
+        if (schedule.getStatus() != WorkScheduleStatus.MISSED 
+                && !(schedule.getStatus() == WorkScheduleStatus.SCHEDULED 
+                     && schedule.getScheduledDate().isBefore(LocalDate.now()))) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, 
+                "Work schedule must be MISSED or SCHEDULED with past date to create attendance manually");
         }
 
         // Create attendance
