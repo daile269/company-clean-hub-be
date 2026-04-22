@@ -80,19 +80,26 @@ public class VerificationServiceImpl implements VerificationService {
 
         VerificationReason reason = VerificationReason.valueOf(reasonStr);
 
+        // Calculate maxAttempts based on previous verified schedules across all assignments
+        Long previousVerifiedCount = workScheduleRepository.countVerifiedSchedulesByEmployeeAndReason(
+                assignment.getEmployee().getId(), WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION);
+        int maxAttempts = Math.max(1, 5 - previousVerifiedCount.intValue());
+        log.info("Calculated maxAttempts for employee {}: {} (previousVerified={})",
+                assignment.getEmployee().getId(), maxAttempts, previousVerifiedCount);
+
         AssignmentVerification verification = AssignmentVerification.builder()
                 .assignment(assignment)
                 .reason(reason)
                 .status(VerificationStatus.PENDING)
-                .maxAttempts(5)
+                .maxAttempts(maxAttempts)
                 .currentAttempts(0)
                 .transitionToContractMode(assignment.getContract() != null && 
                     Boolean.TRUE.equals(assignment.getContract().getRequiresImageVerification()))
                 .build();
 
         AssignmentVerification saved = verificationRepository.save(verification);
-        log.info("Created verification requirement: id={}, transitionToContractMode={}", 
-            saved.getId(), saved.getTransitionToContractMode());
+        log.info("Created verification requirement: id={}, maxAttempts={}, transitionToContractMode={}", 
+            saved.getId(), saved.getMaxAttempts(), saved.getTransitionToContractMode());
         
         return saved;
     }
@@ -221,11 +228,41 @@ public class VerificationServiceImpl implements VerificationService {
     @Override
     public boolean requiresVerification(Assignment assignment) {
         
+        // Condition 0: Check if employee has started but NOT completed 5 NEW_EMPLOYEE_VERIFICATION photos
+        // This MUST be checked BEFORE completed verification count, because bypass approval
+        // counts as "completed" but the employee may not have actually taken 5 photos yet.
+        Long verifiedNewEmployeeCount = workScheduleRepository.countVerifiedSchedulesByEmployeeAndReason(
+                assignment.getEmployee().getId(), WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION);
+        if (verifiedNewEmployeeCount > 0 && verifiedNewEmployeeCount < 5) {
+            log.info("Assignment {} requires verification: employee {} has {} verified NEW_EMPLOYEE_VERIFICATION (< 5), needs to continue",
+                    assignment.getId(), assignment.getEmployee().getId(), verifiedNewEmployeeCount);
+            return true;
+        }
+
+        // Check approved verification — if employee already has an approved verification
+        // AND has completed 5+ photos, no new verification is needed
+        Long completedCount = verificationRepository.countCompletedVerificationsByEmployee(
+                assignment.getEmployee().getId());
+        if (completedCount > 0 && verifiedNewEmployeeCount >= 5) {
+            log.info("Assignment {} does NOT require verification: employee {} has {} approved verification(s) and {} verified photos (>= 5)",
+                    assignment.getId(), assignment.getEmployee().getId(), completedCount, verifiedNewEmployeeCount);
+            return false;
+        }
+
         // Condition 1: Completely new employee (never had any OTHER assignment)
         // Pass assignment.getId() to exclude the current assignment from the count
         if (isEmployeeCompletelyNew(assignment.getEmployee().getId(), assignment.getId())) {
             log.info("Assignment {} requires verification: NEW_EMPLOYEE", assignment.getId());
             return true;
+        }
+
+        // If employee has completed verification(s) but verifiedNewEmployeeCount == 0,
+        // it means they were approved/bypassed without any NEW_EMPLOYEE_VERIFICATION photos
+        // (edge case). Still treat as completed.
+        if (completedCount > 0) {
+            log.info("Assignment {} does NOT require verification: employee {} has {} approved verification(s)",
+                    assignment.getId(), assignment.getEmployee().getId(), completedCount);
+            return false;
         }
 
         // Condition 2: Contract setting
@@ -383,8 +420,7 @@ public class VerificationServiceImpl implements VerificationService {
             // No transition - complete verification (contract doesn't require verification)
             log.info("Completing verification without transition: {}", verification.getId());
             
-            // Create attendances for ALL schedules (SCHEDULED + MISSED)
-            // This includes both NEW_EMPLOYEE_VERIFICATION and AUTO_ATTENDANCE schedules
+            // Create attendances for ALL verification schedules (SCHEDULED + MISSED)
             for (WorkSchedule schedule : schedules) {
                 if (schedule.getAttendance() == null) {
                     Attendance attendance = createAttendanceFromSchedule(schedule);
@@ -395,31 +431,113 @@ public class VerificationServiceImpl implements VerificationService {
                 schedule.setLastSyncedAt(LocalDateTime.now());
             }
             workScheduleRepository.saveAll(schedules);
-            log.info("Created attendances for {} work schedules (including AUTO_ATTENDANCE)", schedules.size());
+            log.info("Created attendances for {} verification work schedules", schedules.size());
             
-            // Generate AUTO_ATTENDANCE work schedules for REST OF CURRENT MONTH ONLY
-            // Future months will be handled by VerificationScheduler.generateMonthlyWorkSchedules()
+            // Create attendance for gap period: [assignmentStartDate, firstVerificationDate - 1]
+            // This handles the case where employee was assigned mid-month but assignment.startDate
+            // is at the beginning of the month (e.g. contract start). The verification WorkSchedules
+            // only start from the actual assignment creation date, leaving a gap.
+            Assignment gapAssignment = verification.getAssignment();
+            if (!schedules.isEmpty() && gapAssignment.getStartDate() != null) {
+                LocalDate firstVerificationDate = schedules.stream()
+                        .map(WorkSchedule::getScheduledDate)
+                        .min(LocalDate::compareTo)
+                        .orElse(null);
+                if (firstVerificationDate != null && gapAssignment.getStartDate().isBefore(firstVerificationDate)) {
+                    LocalDate gapStart = gapAssignment.getStartDate();
+                    LocalDate gapEnd = firstVerificationDate.minusDays(1);
+                    List<java.time.DayOfWeek> gapWorkingDays = gapAssignment.getWorkingDaysPerWeek();
+                    if (gapWorkingDays != null && !gapWorkingDays.isEmpty() && !gapStart.isAfter(gapEnd)) {
+                        List<Attendance> gapAttendances = new ArrayList<>();
+                        LocalDate gapCurrent = gapStart;
+                        while (!gapCurrent.isAfter(gapEnd)) {
+                            if (gapWorkingDays.contains(gapCurrent.getDayOfWeek())) {
+                                boolean exists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                                        gapAssignment.getId(), gapAssignment.getEmployee().getId(), gapCurrent).isPresent();
+                                if (!exists) {
+                                    gapAttendances.add(Attendance.builder()
+                                            .assignment(gapAssignment)
+                                            .employee(gapAssignment.getEmployee())
+                                            .date(gapCurrent)
+                                            .workHours(java.math.BigDecimal.valueOf(8))
+                                            .deleted(false)
+                                            .bonus(java.math.BigDecimal.ZERO)
+                                            .penalty(java.math.BigDecimal.ZERO)
+                                            .supportCost(java.math.BigDecimal.ZERO)
+                                            .isOvertime(false)
+                                            .overtimeAmount(java.math.BigDecimal.ZERO)
+                                            .description("Tự động tạo khi approve verification (gap trước ngày bắt đầu verification)")
+                                            .createdAt(LocalDateTime.now())
+                                            .updatedAt(LocalDateTime.now())
+                                            .build());
+                                }
+                            }
+                            gapCurrent = gapCurrent.plusDays(1);
+                        }
+                        if (!gapAttendances.isEmpty()) {
+                            attendanceRepository.saveAll(gapAttendances);
+                            log.info("Created {} gap attendances for period before verification: {} to {} for assignmentId={}",
+                                    gapAttendances.size(), gapStart, gapEnd, gapAssignment.getId());
+                        }
+                    }
+                }
+            }
+
+            // Create attendance DIRECTLY for remaining working days in current month
+            // (instead of creating AUTO_ATTENDANCE WorkSchedules)
             LocalDate tomorrow = LocalDate.now().plusDays(1);
             LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
             
             // Respect contract end date if it falls before end of current month
-            Contract contract = verification.getAssignment().getContract();
+            Assignment assignment = verification.getAssignment();
+            Contract contract = assignment.getContract();
             if (contract != null && contract.getEndDate() != null && contract.getEndDate().isBefore(endOfCurrentMonth)) {
                 endOfCurrentMonth = contract.getEndDate();
             }
             
-            // Only create schedules if there are remaining days in current month
+            // Only create attendance if there are remaining days in current month
             if (!tomorrow.isAfter(endOfCurrentMonth)) {
-                List<WorkSchedule> currentMonthSchedules = workScheduleService.createWorkSchedulesForAssignment(
-                    verification.getAssignment(),
-                    WorkScheduleReason.AUTO_ATTENDANCE,
-                    null,
-                    tomorrow,
-                    endOfCurrentMonth
-                );
-                log.info("Created {} AUTO_ATTENDANCE schedules for rest of current month: {} to {}. " +
-                         "Future months will be handled by VerificationScheduler.generateMonthlyWorkSchedules()",
-                    currentMonthSchedules.size(), tomorrow, endOfCurrentMonth);
+                List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek();
+                if (workingDays != null && !workingDays.isEmpty()) {
+                    LocalDate current = tomorrow;
+                    List<Attendance> toCreate = new ArrayList<>();
+                    while (!current.isAfter(endOfCurrentMonth)) {
+                        if (workingDays.contains(current.getDayOfWeek())) {
+                            boolean exists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                                assignment.getId(), assignment.getEmployee().getId(), current).isPresent();
+                            if (!exists) {
+                                toCreate.add(Attendance.builder()
+                                    .assignment(assignment)
+                                    .employee(assignment.getEmployee())
+                                    .date(current)
+                                    .workHours(java.math.BigDecimal.valueOf(8))
+                                    .deleted(false)
+                                    .bonus(java.math.BigDecimal.ZERO)
+                                    .penalty(java.math.BigDecimal.ZERO)
+                                    .supportCost(java.math.BigDecimal.ZERO)
+                                    .isOvertime(false)
+                                    .overtimeAmount(java.math.BigDecimal.ZERO)
+                                    .description("Tự động tạo khi approve verification (không cần xác minh hình ảnh)")
+                                    .createdAt(LocalDateTime.now())
+                                    .updatedAt(LocalDateTime.now())
+                                    .build());
+                            }
+                        }
+                        current = current.plusDays(1);
+                    }
+                    if (!toCreate.isEmpty()) {
+                        attendanceRepository.saveAll(toCreate);
+                        int newWorkDays = (assignment.getWorkDays() != null ? assignment.getWorkDays() : 0) + toCreate.size();
+                        assignment.setWorkDays(newWorkDays);
+                        // No explicit save needed — entity is managed within @Transactional,
+                        // Hibernate dirty checking will flush the workDays update automatically
+                        log.info("Created {} attendances directly for remaining working days: {} to {}. " +
+                                 "Future months will be handled by VerificationScheduler.generateMonthlyWorkSchedules()",
+                            toCreate.size(), tomorrow, endOfCurrentMonth);
+                    }
+                } else {
+                    log.info("No working days configured for assignment {}", assignment.getId());
+                }
             } else {
                 log.info("No remaining days in current month (tomorrow={}, endOfMonth={}). " +
                          "Future months will be handled by VerificationScheduler.generateMonthlyWorkSchedules()",
@@ -427,6 +545,60 @@ public class VerificationServiceImpl implements VerificationService {
             }
         }
         
+        // === GAP PERIOD ATTENDANCE ===
+        // Khi assignmentStartDate > contractStartDate, tạo attendance trực tiếp
+        // cho các ngày làm việc trong khoảng [contractStartDate, assignmentStartDate - 1]
+        // Chỉ tạo SAU KHI verification được approve/bypass
+        Assignment assignment = verification.getAssignment();
+        Contract contract = assignment.getContract();
+        if (contract != null && assignment.getStartDate() != null 
+                && assignment.getStartDate().isAfter(contract.getStartDate())) {
+            List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek();
+            if (workingDays != null && !workingDays.isEmpty()) {
+                LocalDate gapStart = contract.getStartDate();
+                LocalDate gapEnd = assignment.getStartDate().minusDays(1);
+                log.info("[DEBUG] Gap period detected after verification approval: [{}, {}] for assignmentId={}",
+                        gapStart, gapEnd, assignment.getId());
+
+                List<Attendance> gapAttendances = new ArrayList<>();
+                LocalDate current = gapStart;
+                while (!current.isAfter(gapEnd)) {
+                    if (workingDays.contains(current.getDayOfWeek())) {
+                        boolean alreadyExists = attendanceRepository
+                                .findByAssignmentAndEmployeeAndDate(
+                                        assignment.getId(),
+                                        assignment.getEmployee().getId(),
+                                        current)
+                                .isPresent();
+                        if (!alreadyExists) {
+                            gapAttendances.add(Attendance.builder()
+                                    .employee(assignment.getEmployee())
+                                    .assignment(assignment)
+                                    .date(current)
+                                    .workHours(java.math.BigDecimal.valueOf(8))
+                                    .deleted(false)
+                                    .bonus(java.math.BigDecimal.ZERO)
+                                    .penalty(java.math.BigDecimal.ZERO)
+                                    .supportCost(java.math.BigDecimal.ZERO)
+                                    .isOvertime(false)
+                                    .overtimeAmount(java.math.BigDecimal.ZERO)
+                                    .description("Tự động tạo khi approve verification (gap period trước ngày bắt đầu)")
+                                    .createdAt(LocalDateTime.now())
+                                    .updatedAt(LocalDateTime.now())
+                                    .build());
+                        }
+                    }
+                    current = current.plusDays(1);
+                }
+
+                if (!gapAttendances.isEmpty()) {
+                    attendanceRepository.saveAll(gapAttendances);
+                    log.info("[DEBUG] Created {} gap period attendances for assignmentId={} from {} to {}",
+                            gapAttendances.size(), assignment.getId(), gapStart, gapEnd);
+                }
+            }
+        }
+
         // Update assignment metrics after approval
         assignmentMetricsService.updateAssignmentMetrics(verification.getAssignment().getId());
     }

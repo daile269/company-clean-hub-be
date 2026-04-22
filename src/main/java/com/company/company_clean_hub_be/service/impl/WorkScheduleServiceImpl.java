@@ -815,7 +815,8 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                     log.info("Auto-approved verification {} - keeping {} remaining SCHEDULED schedules (employee must still capture photos)", 
                         verificationId, remainingSchedules.size());
                 } else {
-                    // For non-verification contracts: create attendance for remaining days (existing behavior)
+                    // For non-verification contracts: create attendance for remaining SCHEDULED WorkSchedules
+                    int scheduledAttendanceCount = 0;
                     for (WorkSchedule ws : remainingSchedules) {
                         try {
                             Attendance att = createAttendanceFromSchedule(ws);
@@ -824,12 +825,68 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                             ws.setLastSyncedAt(LocalDateTime.now());
                             ws.setSyncNote("Auto-approved: attendance created");
                             workScheduleRepository.save(ws);
+                            scheduledAttendanceCount++;
                         } catch (Exception e) {
                             log.error("Failed to create attendance for schedule {}: {}", ws.getId(), e.getMessage());
                         }
                     }
-                    log.info("Auto-approved verification {} and created {} attendances", 
-                        verificationId, remainingSchedules.size());
+                    log.info("Auto-approved verification {} and created {} attendances from existing schedules", 
+                        verificationId, scheduledAttendanceCount);
+
+                    // Also create attendance DIRECTLY for working days that don't have WorkSchedule
+                    // (days outside verification period that were missed by createAssignment)
+                    Assignment assignment = verification.getAssignment();
+                    LocalDate tomorrow = LocalDate.now().plusDays(1);
+                    LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
+
+                    // Respect contract end date if it falls before end of current month
+                    com.company.company_clean_hub_be.entity.Contract contract = assignment.getContract();
+                    if (contract != null && contract.getEndDate() != null && contract.getEndDate().isBefore(endOfCurrentMonth)) {
+                        endOfCurrentMonth = contract.getEndDate();
+                    }
+
+                    if (!tomorrow.isAfter(endOfCurrentMonth)) {
+                        List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek();
+                        if (workingDays != null && !workingDays.isEmpty()) {
+                            LocalDate current = tomorrow;
+                            List<Attendance> directAttendances = new ArrayList<>();
+                            while (!current.isAfter(endOfCurrentMonth)) {
+                                if (workingDays.contains(current.getDayOfWeek())) {
+                                    // Check attendance doesn't already exist
+                                    boolean exists = attendanceRepository.findByAssignmentAndEmployeeAndDate(
+                                        assignment.getId(), assignment.getEmployee().getId(), current).isPresent();
+                                    if (!exists) {
+                                        directAttendances.add(Attendance.builder()
+                                            .assignment(assignment)
+                                            .employee(assignment.getEmployee())
+                                            .date(current)
+                                            .workHours(java.math.BigDecimal.valueOf(8))
+                                            .deleted(false)
+                                            .bonus(java.math.BigDecimal.ZERO)
+                                            .penalty(java.math.BigDecimal.ZERO)
+                                            .supportCost(java.math.BigDecimal.ZERO)
+                                            .isOvertime(false)
+                                            .overtimeAmount(java.math.BigDecimal.ZERO)
+                                            .description("Tự động tạo khi auto-approve verification (không cần xác minh hình ảnh)")
+                                            .createdAt(LocalDateTime.now())
+                                            .updatedAt(LocalDateTime.now())
+                                            .build());
+                                    }
+                                }
+                                current = current.plusDays(1);
+                            }
+                            if (!directAttendances.isEmpty()) {
+                                attendanceRepository.saveAll(directAttendances);
+                                log.info("Auto-approved verification {} - created {} additional attendances directly for working days without WorkSchedule: {} to {}",
+                                    verificationId, directAttendances.size(), tomorrow, endOfCurrentMonth);
+                            }
+                        } else {
+                            log.info("No working days configured for assignment {}", assignment.getId());
+                        }
+                    } else {
+                        log.info("No remaining days in current month for auto-approve (tomorrow={}, endOfMonth={})",
+                            tomorrow, endOfCurrentMonth);
+                    }
                 }
 
                 // Update workDays and plannedDays on the assignment
