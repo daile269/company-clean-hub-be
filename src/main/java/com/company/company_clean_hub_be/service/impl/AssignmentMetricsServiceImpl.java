@@ -1,14 +1,18 @@
 package com.company.company_clean_hub_be.service.impl;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.company.company_clean_hub_be.entity.Assignment;
+import com.company.company_clean_hub_be.entity.Attendance;
 import com.company.company_clean_hub_be.entity.WorkSchedule;
 import com.company.company_clean_hub_be.entity.WorkScheduleStatus;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
+import com.company.company_clean_hub_be.repository.AttendanceRepository;
 import com.company.company_clean_hub_be.repository.WorkScheduleRepository;
 import com.company.company_clean_hub_be.service.AssignmentMetricsService;
 
@@ -22,6 +26,7 @@ public class AssignmentMetricsServiceImpl implements AssignmentMetricsService {
 
     private final AssignmentRepository assignmentRepository;
     private final WorkScheduleRepository workScheduleRepository;
+    private final AttendanceRepository attendanceRepository;
 
     @Override
     @Transactional
@@ -33,19 +38,30 @@ public class AssignmentMetricsServiceImpl implements AssignmentMetricsService {
                 return;
             }
 
-            // workDays = total VERIFIED work_schedules (each has an attendance)
-            List<WorkSchedule> allVerified = workScheduleRepository.findByAssignmentId(assignmentId)
-                .stream()
+            // workDays = VERIFIED work_schedules + standalone attendances (no WorkSchedule)
+            List<WorkSchedule> allSchedules = workScheduleRepository.findByAssignmentId(assignmentId);
+            int verifiedSchedules = (int) allSchedules.stream()
                 .filter(ws -> ws.getStatus() == WorkScheduleStatus.VERIFIED)
-                .collect(java.util.stream.Collectors.toList());
-            int workDays = allVerified.size();
+                .count();
 
-            // plannedDays = total work_schedules for this assignment (VERIFIED + SCHEDULED + MISSED)
-            // i.e. all non-CANCELLED schedules
-            int plannedDays = (int) workScheduleRepository.findByAssignmentId(assignmentId)
-                .stream()
+            // Count standalone attendances (attendance records without a corresponding WorkSchedule)
+            List<Attendance> allAttendances = attendanceRepository.findByAssignmentId(assignmentId);
+            Set<Long> wsAttendanceIds = allSchedules.stream()
+                .filter(ws -> ws.getAttendance() != null)
+                .map(ws -> ws.getAttendance().getId())
+                .collect(Collectors.toSet());
+            int standaloneAttendances = (int) allAttendances.stream()
+                .filter(a -> a.getDeleted() == null || !a.getDeleted())
+                .filter(a -> !wsAttendanceIds.contains(a.getId()))
+                .count();
+
+            int workDays = verifiedSchedules + standaloneAttendances;
+
+            // plannedDays = non-CANCELLED work_schedules + standalone attendances
+            int plannedSchedules = (int) allSchedules.stream()
                 .filter(ws -> ws.getStatus() != WorkScheduleStatus.CANCELLED)
                 .count();
+            int plannedDays = plannedSchedules + standaloneAttendances;
 
             assignment.setWorkDays(workDays);
             assignment.setPlannedDays(plannedDays);

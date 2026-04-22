@@ -23,7 +23,7 @@ public interface AssignmentVerificationRepository extends JpaRepository<Assignme
     @Query("SELECT av FROM AssignmentVerification av WHERE av.assignment.employee.id = :employeeId AND av.status IN :statuses")
     List<AssignmentVerification> findByEmployeeIdAndStatusIn(@Param("employeeId") Long employeeId, @Param("statuses") List<VerificationStatus> statuses);
 
-    @Query("SELECT COUNT(av) FROM AssignmentVerification av WHERE av.assignment.employee.id = :employeeId AND av.status IN ('APPROVED', 'AUTO_APPROVED')")
+    @Query("SELECT COUNT(av) FROM AssignmentVerification av WHERE av.assignment.employee.id = :employeeId AND av.status IN ('APPROVED', 'AUTO_APPROVED', 'BYPASS_APPROVED')")
     Long countCompletedVerificationsByEmployee(@Param("employeeId") Long employeeId);
 
     @Query("SELECT av FROM AssignmentVerification av WHERE (av.status = 'PENDING' OR av.status = 'IN_PROGRESS') AND av.reason = 'NEW_EMPLOYEE'")
