@@ -545,59 +545,9 @@ public class VerificationServiceImpl implements VerificationService {
             }
         }
         
-        // === GAP PERIOD ATTENDANCE ===
-        // Khi assignmentStartDate > contractStartDate, tạo attendance trực tiếp
-        // cho các ngày làm việc trong khoảng [contractStartDate, assignmentStartDate - 1]
-        // Chỉ tạo SAU KHI verification được approve/bypass
-        Assignment assignment = verification.getAssignment();
-        Contract contract = assignment.getContract();
-        if (contract != null && assignment.getStartDate() != null 
-                && assignment.getStartDate().isAfter(contract.getStartDate())) {
-            List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek();
-            if (workingDays != null && !workingDays.isEmpty()) {
-                LocalDate gapStart = contract.getStartDate();
-                LocalDate gapEnd = assignment.getStartDate().minusDays(1);
-                log.info("[DEBUG] Gap period detected after verification approval: [{}, {}] for assignmentId={}",
-                        gapStart, gapEnd, assignment.getId());
-
-                List<Attendance> gapAttendances = new ArrayList<>();
-                LocalDate current = gapStart;
-                while (!current.isAfter(gapEnd)) {
-                    if (workingDays.contains(current.getDayOfWeek())) {
-                        boolean alreadyExists = attendanceRepository
-                                .findByAssignmentAndEmployeeAndDate(
-                                        assignment.getId(),
-                                        assignment.getEmployee().getId(),
-                                        current)
-                                .isPresent();
-                        if (!alreadyExists) {
-                            gapAttendances.add(Attendance.builder()
-                                    .employee(assignment.getEmployee())
-                                    .assignment(assignment)
-                                    .date(current)
-                                    .workHours(java.math.BigDecimal.valueOf(8))
-                                    .deleted(false)
-                                    .bonus(java.math.BigDecimal.ZERO)
-                                    .penalty(java.math.BigDecimal.ZERO)
-                                    .supportCost(java.math.BigDecimal.ZERO)
-                                    .isOvertime(false)
-                                    .overtimeAmount(java.math.BigDecimal.ZERO)
-                                    .description("Tự động tạo khi approve verification (gap period trước ngày bắt đầu)")
-                                    .createdAt(LocalDateTime.now())
-                                    .updatedAt(LocalDateTime.now())
-                                    .build());
-                        }
-                    }
-                    current = current.plusDays(1);
-                }
-
-                if (!gapAttendances.isEmpty()) {
-                    attendanceRepository.saveAll(gapAttendances);
-                    log.info("[DEBUG] Created {} gap period attendances for assignmentId={} from {} to {}",
-                            gapAttendances.size(), assignment.getId(), gapStart, gapEnd);
-                }
-            }
-        }
+        // NOTE: GAP PERIOD ATTENDANCE (contractStartDate → assignmentStartDate) đã bị xóa.
+        // Nhân viên chỉ có attendance từ assignment.startDate trở đi.
+        // Gap từ assignment.startDate → firstVerificationDate đã được xử lý ở trên (trong non-transition path).
 
         // Update assignment metrics after approval
         assignmentMetricsService.updateAssignmentMetrics(verification.getAssignment().getId());
