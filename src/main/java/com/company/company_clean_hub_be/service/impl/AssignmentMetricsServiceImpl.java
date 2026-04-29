@@ -16,6 +16,7 @@ import com.company.company_clean_hub_be.repository.AttendanceRepository;
 import com.company.company_clean_hub_be.repository.WorkScheduleRepository;
 import com.company.company_clean_hub_be.service.AssignmentMetricsService;
 
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,6 +28,7 @@ public class AssignmentMetricsServiceImpl implements AssignmentMetricsService {
     private final AssignmentRepository assignmentRepository;
     private final WorkScheduleRepository workScheduleRepository;
     private final AttendanceRepository attendanceRepository;
+    private final EntityManager entityManager;
 
     @Override
     @Transactional
@@ -38,34 +40,58 @@ public class AssignmentMetricsServiceImpl implements AssignmentMetricsService {
                 return;
             }
 
-            // workDays = VERIFIED work_schedules + standalone attendances (no WorkSchedule)
+            // Flush pending changes so queries below see the latest state
+            entityManager.flush();
+
+            // workDays = VERIFIED work_schedules (with attendance not deleted) + standalone attendances (no WorkSchedule)
             List<WorkSchedule> allSchedules = workScheduleRepository.findByAssignmentId(assignmentId);
+            
+            // Only count VERIFIED WorkSchedules that still have valid attendance (not deleted)
             int verifiedSchedules = (int) allSchedules.stream()
                 .filter(ws -> ws.getStatus() == WorkScheduleStatus.VERIFIED)
+                .filter(ws -> ws.getAttendanceDeleted() == null || !ws.getAttendanceDeleted())
                 .count();
 
             // Count standalone attendances (attendance records without a corresponding WorkSchedule)
             List<Attendance> allAttendances = attendanceRepository.findByAssignmentId(assignmentId);
+            
+            // Build set of attendance IDs that have WorkSchedule (including deleted ones)
+            // We need to check both current link and attendanceDeleted flag
             Set<Long> wsAttendanceIds = allSchedules.stream()
                 .filter(ws -> ws.getAttendance() != null)
                 .map(ws -> ws.getAttendance().getId())
                 .collect(Collectors.toSet());
-            int standaloneAttendances = (int) allAttendances.stream()
+            
+            // Also find attendances that were unlinked (attendanceDeleted = true)
+            // by matching date between WorkSchedule and Attendance
+            Set<java.time.LocalDate> wsScheduledDates = allSchedules.stream()
+                .filter(ws -> ws.getAttendanceDeleted() != null && ws.getAttendanceDeleted())
+                .map(ws -> ws.getScheduledDate())
+                .collect(Collectors.toSet());
+            
+            // For workDays: only count non-deleted standalone attendances
+            int standaloneAttendancesForWork = (int) allAttendances.stream()
                 .filter(a -> a.getDeleted() == null || !a.getDeleted())
                 .filter(a -> !wsAttendanceIds.contains(a.getId()))
+                .filter(a -> !wsScheduledDates.contains(a.getDate())) // Exclude if has WorkSchedule by date
                 .count();
 
-            int workDays = verifiedSchedules + standaloneAttendances;
+            int workDays = verifiedSchedules + standaloneAttendancesForWork;
+
+            // For plannedDays: count ALL standalone attendances (including deleted)
+            // but exclude those that have WorkSchedule (to avoid double counting)
+            int standaloneAttendancesForPlanned = (int) allAttendances.stream()
+                .filter(a -> !wsAttendanceIds.contains(a.getId()))
+                .filter(a -> !wsScheduledDates.contains(a.getDate())) // Exclude if has WorkSchedule by date
+                .count();
 
             // plannedDays = non-CANCELLED work_schedules + standalone attendances
             int plannedSchedules = (int) allSchedules.stream()
                 .filter(ws -> ws.getStatus() != WorkScheduleStatus.CANCELLED)
                 .count();
-            int plannedDays = plannedSchedules + standaloneAttendances;
+            int plannedDays = plannedSchedules + standaloneAttendancesForPlanned;
 
-            assignment.setWorkDays(workDays);
-            assignment.setPlannedDays(plannedDays);
-            assignmentRepository.save(assignment);
+            assignmentRepository.updateMetrics(assignmentId, workDays, plannedDays);
 
             log.info("Updated assignment metrics: assignmentId={}, workDays={}, plannedDays={}", 
                 assignmentId, workDays, plannedDays);

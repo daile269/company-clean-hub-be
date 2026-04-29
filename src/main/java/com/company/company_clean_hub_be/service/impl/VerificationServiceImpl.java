@@ -203,7 +203,7 @@ public class VerificationServiceImpl implements VerificationService {
     public AssignmentVerificationResponse bypassApproveVerification(Long verificationId, String notes, String approverUsername) {
         log.info("Bypass-approving verification: id={}, approver={}", verificationId, approverUsername);
 
-        AssignmentVerification verification = verificationRepository.findById(verificationId)
+        AssignmentVerification verification = verificationRepository.findByIdWithEmployee(verificationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Verification not found: " + verificationId));
 
         if (verification.isCompleted()) {

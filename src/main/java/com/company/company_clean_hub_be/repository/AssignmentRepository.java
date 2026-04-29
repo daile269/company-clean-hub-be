@@ -4,6 +4,7 @@ import com.company.company_clean_hub_be.entity.AssignmentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 
 import com.company.company_clean_hub_be.entity.Assignment;
 import org.springframework.data.jpa.repository.Query;
@@ -213,6 +214,13 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
         Long countCompletedAssignmentsByEmployeeAndContract(
                         @Param("employeeId") Long employeeId,
                         @Param("contractId") Long contractId);
+
+        @Modifying(clearAutomatically = true, flushAutomatically = true)
+        @Query("UPDATE Assignment a SET a.workDays = :workDays, a.plannedDays = :plannedDays WHERE a.id = :assignmentId")
+        void updateMetrics(
+                        @Param("assignmentId") Long assignmentId,
+                        @Param("workDays") int workDays,
+                        @Param("plannedDays") int plannedDays);
 
         // Tìm assignment có contract giao thời gian (overlap) với nhân viên vào ngày cụ
         // thể
