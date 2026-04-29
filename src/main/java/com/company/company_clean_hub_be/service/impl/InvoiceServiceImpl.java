@@ -12,6 +12,7 @@ import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.InvoiceRepository;
 import com.company.company_clean_hub_be.repository.InvoiceLineRepository;
 import com.company.company_clean_hub_be.repository.AttendanceRepository;
+import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.service.InvoiceService;
 import lombok.AccessLevel;
@@ -53,6 +54,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     ContractRepository contractRepository;
     CustomerRepository customerRepository;
     AttendanceRepository attendanceRepository;
+    AssignmentRepository assignmentRepository;
     UserRepository userRepository;
 
     @Override
@@ -156,8 +158,18 @@ public class InvoiceServiceImpl implements InvoiceService {
         int attendancesCount = attendancesCountLong != null ? attendancesCountLong.intValue() : 0;
 
         // Lấy số lượng nhân viên phụ trách từ hợp đồng
+        // Nếu contract chưa set numberOfEmployees (= null hoặc 0), fallback về đếm nhân viên thực tế
         int numEmployees = contract.getNumberOfEmployees() != null ? contract.getNumberOfEmployees() : 0;
-        log.info("Contract {} - numberOfEmployees from contract: {} (attendances: {}, contractDays: {})",
+        if (numEmployees <= 0) {
+            LocalDate lastDayForCount = YearMonth.of(request.getInvoiceYear(), request.getInvoiceMonth()).atEndOfMonth();
+            Long actualEmployeeCount = assignmentRepository.countDistinctActiveEmployeesByContractBeforeExcludingType(
+                    contract.getId(), lastDayForCount,
+                    com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT);
+            numEmployees = actualEmployeeCount != null && actualEmployeeCount > 0 ? actualEmployeeCount.intValue() : 0;
+            log.info("Contract {} - numberOfEmployees not set, fallback to actual active employees: {}",
+                    contract.getId(), numEmployees);
+        }
+        log.info("Contract {} - numEmployees used: {} (attendances: {}, contractDays: {})",
             contract.getId(), numEmployees, attendancesCount, contractDays);
 
         if (totalContractPrice.compareTo(BigDecimal.ZERO) <= 0) {
@@ -369,9 +381,16 @@ public class InvoiceServiceImpl implements InvoiceService {
         LocalDate firstDayOfMonth = yearMonth.atDay(1);
         LocalDate lastDayOfMonth = yearMonth.atEndOfMonth();
 
-        // Per requirement: planned days on invoice should cover the full month
-        LocalDate periodStart = firstDayOfMonth;
-        LocalDate periodEnd = lastDayOfMonth;
+        // Use contract.startDate if it falls within this month (contract started mid-month),
+        // otherwise use the first day of the month.
+        LocalDate periodStart = (contract.getStartDate() != null && contract.getStartDate().isAfter(firstDayOfMonth))
+                ? contract.getStartDate()
+                : firstDayOfMonth;
+
+        // Use contract.endDate if it falls within this month, otherwise use last day of month.
+        LocalDate periodEnd = (contract.getEndDate() != null && contract.getEndDate().isBefore(lastDayOfMonth))
+                ? contract.getEndDate()
+                : lastDayOfMonth;
 
         if (periodStart.isAfter(periodEnd)) {
             log.info("Contract {} has no overlap with {}/{}", contract.getId(), month, year);
@@ -386,7 +405,8 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
 
         int workingDays = countWorkingDaysBetween(contract.getWorkingDaysPerWeek(), periodStart, periodEnd);
-        log.info("Contract {} working days in {}/{}: {} (period {} - {})", contract.getId(), month, year, workingDays, periodStart, periodEnd);
+        log.info("Contract {} working days in {}/{}: {} (period {} - {}, contractStart={})",
+                contract.getId(), month, year, workingDays, periodStart, periodEnd, contract.getStartDate());
         return workingDays;
     }
 

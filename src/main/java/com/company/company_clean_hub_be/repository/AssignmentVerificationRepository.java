@@ -14,6 +14,12 @@ public interface AssignmentVerificationRepository extends JpaRepository<Assignme
 
     Optional<AssignmentVerification> findByAssignmentId(Long assignmentId);
 
+    @Query("SELECT av FROM AssignmentVerification av " +
+           "JOIN FETCH av.assignment a " +
+           "JOIN FETCH a.employee " +
+           "WHERE av.id = :id")
+    Optional<AssignmentVerification> findByIdWithEmployee(@Param("id") Long id);
+
     @Query("SELECT av FROM AssignmentVerification av WHERE av.assignment.employee.id = :employeeId")
     List<AssignmentVerification> findByEmployeeId(@Param("employeeId") Long employeeId);
 
