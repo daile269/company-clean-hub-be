@@ -78,22 +78,14 @@ public class AssignmentMetricsServiceImpl implements AssignmentMetricsService {
 
             int workDays = verifiedSchedules + standaloneAttendancesForWork;
 
-            // For plannedDays: count ALL standalone attendances (including deleted)
-            // but exclude those that have WorkSchedule (to avoid double counting)
-            int standaloneAttendancesForPlanned = (int) allAttendances.stream()
-                .filter(a -> !wsAttendanceIds.contains(a.getId()))
-                .filter(a -> !wsScheduledDates.contains(a.getDate())) // Exclude if has WorkSchedule by date
-                .count();
-
-            // plannedDays = non-CANCELLED work_schedules + standalone attendances
-            int plannedSchedules = (int) allSchedules.stream()
-                .filter(ws -> ws.getStatus() != WorkScheduleStatus.CANCELLED)
-                .count();
-            int plannedDays = plannedSchedules + standaloneAttendancesForPlanned;
+            // plannedDays: giữ nguyên giá trị cũ, không tính lại.
+            // plannedDays phản ánh số ngày dự kiến làm theo lịch hợp đồng,
+            // không bị ảnh hưởng bởi việc nhân viên nghỉ phép hay xóa attendance.
+            int plannedDays = assignment.getPlannedDays() != null ? assignment.getPlannedDays() : 0;
 
             assignmentRepository.updateMetrics(assignmentId, workDays, plannedDays);
 
-            log.info("Updated assignment metrics: assignmentId={}, workDays={}, plannedDays={}", 
+            log.info("Updated assignment metrics: assignmentId={}, workDays={}, plannedDays={} (preserved)", 
                 assignmentId, workDays, plannedDays);
         } catch (Exception e) {
             log.error("Failed to update assignment metrics for assignmentId={}: {}", 
