@@ -27,6 +27,9 @@ public class InvoiceResponse {
     Integer invoiceMonth;
     Integer invoiceYear;
     Integer actualWorkingDays;
+    Integer plannedDaysInPeriod;
+    Integer numEmployees;
+    Integer absenceDays;
     BigDecimal subtotal;
     BigDecimal vatPercentage;
     BigDecimal vatAmount;

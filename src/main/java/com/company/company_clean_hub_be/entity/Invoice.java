@@ -47,8 +47,17 @@ public class Invoice {
     @Column(nullable = false)
     Integer invoiceYear;
 
-    // Số ngày làm thực tế (chỉ áp dụng cho MONTHLY_ACTUAL)
+    // Số ngày làm full tháng (mẫu số công thức)
     Integer actualWorkingDays;
+
+    // Số ngày kế hoạch theo kỳ HĐ (tính từ startDate/endDate trong tháng)
+    Integer plannedDaysInPeriod;
+
+    // Số nhân viên phụ trách
+    Integer numEmployees;
+
+    // Số ngày nghỉ trong kỳ
+    Integer absenceDays;
 
     // Tổng tiền trước VAT
     @Column(nullable = false, precision = 15, scale = 2)
