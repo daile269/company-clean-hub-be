@@ -317,7 +317,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         boolean assignmentChanged = !oldAssignment.getId().equals(assignment.getId());
 
         Attendance updatedAttendance = attendanceRepository.save(attendance);
-        
+
+        // Build response BEFORE updating metrics to avoid LazyInitializationException.
+        // updateAssignmentMetrics uses @Modifying(clearAutomatically = true) which clears
+        // the EntityManager, detaching all proxies including attendance.assignment.employee.
+        AttendanceResponse response = mapToResponse(updatedAttendance);
+
         // Update metrics for both old and new assignment if changed
         if (assignmentChanged) {
             assignmentMetricsService.updateAssignmentMetrics(oldAssignment.getId());
@@ -325,7 +330,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         assignmentMetricsService.updateAssignmentMetrics(assignment.getId());
         
         log.info("updateAttendance completed by {}: id={}", username, updatedAttendance.getId());
-        return mapToResponse(updatedAttendance);
+        return response;
     }
 
     @Override

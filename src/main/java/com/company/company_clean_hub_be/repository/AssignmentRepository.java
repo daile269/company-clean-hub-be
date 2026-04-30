@@ -215,7 +215,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
                         @Param("employeeId") Long employeeId,
                         @Param("contractId") Long contractId);
 
-        @Modifying(clearAutomatically = true, flushAutomatically = true)
+        @Modifying(flushAutomatically = true)
         @Query("UPDATE Assignment a SET a.workDays = :workDays, a.plannedDays = :plannedDays WHERE a.id = :assignmentId")
         void updateMetrics(
                         @Param("assignmentId") Long assignmentId,
