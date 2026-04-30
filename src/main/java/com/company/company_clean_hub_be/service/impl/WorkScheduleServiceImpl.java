@@ -419,9 +419,11 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         }
         
         // Always update metrics after photo capture (workDays should increase)
+        // Build response BEFORE updating metrics to avoid LazyInitializationException.
+        WorkScheduleResponse response = mapToResponse(schedule);
         assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
 
-        return mapToResponse(schedule);
+        return response;
     }
 
     @Override
@@ -597,11 +599,13 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         workScheduleRepository.save(schedule);
         
         // Update assignment metrics after cancellation
+        // Build response BEFORE updating metrics to avoid LazyInitializationException.
+        WorkScheduleResponse response = mapToResponse(schedule);
         assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
         
         log.info("Cancelled work schedule: {}", id);
 
-        return mapToResponse(schedule);
+        return response;
     }
 
     @Override
@@ -627,6 +631,11 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         workScheduleRepository.save(schedule);
         log.info("Created attendance for missed work schedule: {}", id);
 
+        // Build response BEFORE updating metrics to avoid LazyInitializationException.
+        // updateAssignmentMetrics uses @Modifying(clearAutomatically = true) which clears
+        // the EntityManager, detaching all proxies including schedule.employee.
+        WorkScheduleResponse response = mapToResponse(schedule);
+
         // If NEW_EMPLOYEE_VERIFICATION, increment attempts and check auto-approve
         if (schedule.getReason() == WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION
                 && schedule.getAssignmentVerification() != null) {
@@ -636,7 +645,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
         }
 
-        return mapToResponse(schedule);
+        return response;
     }
 
     @Override
