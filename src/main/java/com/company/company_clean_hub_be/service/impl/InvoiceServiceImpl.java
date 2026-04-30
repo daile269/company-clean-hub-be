@@ -191,6 +191,9 @@ public class InvoiceServiceImpl implements InvoiceService {
             }
         }
 
+        log.info("Contract {} - totalContractPrice: {}, recurringTotal: {}, oneTimeTotal: {}",
+            contract.getId(), totalContractPrice, recurringTotal, oneTimeTotal);
+
         BigDecimal subtotal = BigDecimal.ZERO;
         BigDecimal totalVat = BigDecimal.ZERO;
 
@@ -250,7 +253,11 @@ public class InvoiceServiceImpl implements InvoiceService {
                 }
                 BigDecimal denom = BigDecimal.valueOf((long) contractDays * numEmployees);
                 BigDecimal pricePerDayPerEmployee = recurringTotal.divide(denom, 2, RoundingMode.HALF_UP);
+                log.info("Contract {} - Calculation: denom={} (contractDays={} × numEmployees={}), pricePerDayPerEmployee={}, attendancesCount={}",
+                    contract.getId(), denom, contractDays, numEmployees, pricePerDayPerEmployee, attendancesCount);
                 BigDecimal recurringSubtotal = pricePerDayPerEmployee.multiply(BigDecimal.valueOf(attendancesCount)).setScale(2, RoundingMode.HALF_UP);
+                log.info("Contract {} - recurringSubtotal = {} × {} = {}",
+                    contract.getId(), pricePerDayPerEmployee, attendancesCount, recurringSubtotal);
 
                 // subtotal is sum of one-time full + recurring allocated by attendance
                 subtotal = oneTimeTotal.add(recurringSubtotal).setScale(2, RoundingMode.HALF_UP);
@@ -381,16 +388,9 @@ public class InvoiceServiceImpl implements InvoiceService {
         LocalDate firstDayOfMonth = yearMonth.atDay(1);
         LocalDate lastDayOfMonth = yearMonth.atEndOfMonth();
 
-        // Use contract.startDate if it falls within this month (contract started mid-month),
-        // otherwise use the first day of the month.
-        LocalDate periodStart = (contract.getStartDate() != null && contract.getStartDate().isAfter(firstDayOfMonth))
-                ? contract.getStartDate()
-                : firstDayOfMonth;
-
-        // Use contract.endDate if it falls within this month, otherwise use last day of month.
-        LocalDate periodEnd = (contract.getEndDate() != null && contract.getEndDate().isBefore(lastDayOfMonth))
-                ? contract.getEndDate()
-                : lastDayOfMonth;
+        // Per requirement: planned days on invoice should cover the full month
+        LocalDate periodStart = firstDayOfMonth;
+        LocalDate periodEnd = lastDayOfMonth;
 
         if (periodStart.isAfter(periodEnd)) {
             log.info("Contract {} has no overlap with {}/{}", contract.getId(), month, year);
@@ -405,8 +405,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
 
         int workingDays = countWorkingDaysBetween(contract.getWorkingDaysPerWeek(), periodStart, periodEnd);
-        log.info("Contract {} working days in {}/{}: {} (period {} - {}, contractStart={})",
-                contract.getId(), month, year, workingDays, periodStart, periodEnd, contract.getStartDate());
+        log.info("Contract {} working days in {}/{}: {} (period {} - {})", contract.getId(), month, year, workingDays, periodStart, periodEnd);
         return workingDays;
     }
 
