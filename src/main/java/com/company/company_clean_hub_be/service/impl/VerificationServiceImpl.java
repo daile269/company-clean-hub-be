@@ -483,9 +483,14 @@ public class VerificationServiceImpl implements VerificationService {
                 }
             }
 
-            // Create attendance DIRECTLY for remaining working days in current month
+            // Create attendance DIRECTLY for remaining working days after verification
             // (instead of creating AUTO_ATTENDANCE WorkSchedules)
-            LocalDate tomorrow = LocalDate.now().plusDays(1);
+            // Bắt đầu từ ngày sau verification cuối cùng (không phải tomorrow) để bao gồm cả ngày quá khứ
+            LocalDate lastVerificationDate = schedules.stream()
+                .map(WorkSchedule::getScheduledDate)
+                .max(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+            LocalDate afterVerification = lastVerificationDate.plusDays(1);
             LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
             
             // Respect contract end date if it falls before end of current month
@@ -495,11 +500,11 @@ public class VerificationServiceImpl implements VerificationService {
                 endOfCurrentMonth = contract.getEndDate();
             }
             
-            // Only create attendance if there are remaining days in current month
-            if (!tomorrow.isAfter(endOfCurrentMonth)) {
+            // Create attendance for all working days from after verification to end of current month
+            if (!afterVerification.isAfter(endOfCurrentMonth)) {
                 List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek();
                 if (workingDays != null && !workingDays.isEmpty()) {
-                    LocalDate current = tomorrow;
+                    LocalDate current = afterVerification;
                     List<Attendance> toCreate = new ArrayList<>();
                     while (!current.isAfter(endOfCurrentMonth)) {
                         if (workingDays.contains(current.getDayOfWeek())) {
@@ -531,17 +536,17 @@ public class VerificationServiceImpl implements VerificationService {
                         assignment.setWorkDays(newWorkDays);
                         // No explicit save needed — entity is managed within @Transactional,
                         // Hibernate dirty checking will flush the workDays update automatically
-                        log.info("Created {} attendances directly for remaining working days: {} to {}. " +
+                        log.info("Created {} attendances directly for remaining working days after verification: {} to {}. " +
                                  "Future months will be handled by VerificationScheduler.generateMonthlyWorkSchedules()",
-                            toCreate.size(), tomorrow, endOfCurrentMonth);
+                            toCreate.size(), afterVerification, endOfCurrentMonth);
                     }
                 } else {
                     log.info("No working days configured for assignment {}", assignment.getId());
                 }
             } else {
-                log.info("No remaining days in current month (tomorrow={}, endOfMonth={}). " +
+                log.info("No remaining days in current month after verification (afterVerification={}, endOfMonth={}). " +
                          "Future months will be handled by VerificationScheduler.generateMonthlyWorkSchedules()",
-                    tomorrow, endOfCurrentMonth);
+                    afterVerification, endOfCurrentMonth);
             }
         }
         
@@ -714,6 +719,13 @@ public class VerificationServiceImpl implements VerificationService {
     private AssignmentVerificationResponse mapToVerificationResponse(AssignmentVerification verification) {
         Assignment assignment = verification.getAssignment();
         Employee employee = assignment.getEmployee();
+
+        // maxAttempts hiển thị = số WorkSchedule thực tế của verification này
+        // (không phải 5 - previousVerifiedCount toàn cục, vì SUPPORT 1 ngày chỉ có 1 schedule)
+        Long actualScheduleCount = workScheduleRepository.countByVerificationId(verification.getId());
+        int displayMaxAttempts = actualScheduleCount != null && actualScheduleCount > 0
+                ? actualScheduleCount.intValue()
+                : verification.getMaxAttempts();
         
         return AssignmentVerificationResponse.builder()
                 .id(verification.getId())
@@ -724,7 +736,7 @@ public class VerificationServiceImpl implements VerificationService {
                 .contractId(assignment.getContract() != null ? assignment.getContract().getId() : null)
                 .reason(verification.getReason())
                 .status(verification.getStatus())
-                .maxAttempts(verification.getMaxAttempts())
+                .maxAttempts(displayMaxAttempts)
                 .currentAttempts(verification.getCurrentAttempts())
                 .approvedBy(verification.getApprovedBy() != null ? verification.getApprovedBy().getUsername() : null)
                 .approvedAt(verification.getApprovedAt())

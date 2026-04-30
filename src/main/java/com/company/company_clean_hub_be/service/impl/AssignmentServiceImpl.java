@@ -273,14 +273,28 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         savedAssignment.getId(), requiresVerification);
 
                         if (requiresVerification) {
-                                // Dùng cùng logic với requiresVerification(): đếm assignment khác (loại trừ assignment vừa tạo)
-                                // KHÔNG dùng verificationService.isEmployeeNew() vì method đó dùng logic khác (đếm verification đã duyệt)
-                                Long otherAssignments = assignmentRepository.countAssignmentsByEmployeeExcluding(
-                                                savedAssignment.getEmployee().getId(), savedAssignment.getId());
-                                boolean isNewEmployee = otherAssignments == 0;
-                                verificationReason = isNewEmployee ? "NEW_EMPLOYEE" : "CONTRACT_SETTING";
-                                log.info("[DEBUG] Verification required: assignmentId={}, reason={}, isNewEmployee={}, otherAssignments={}",
-                                                savedAssignment.getId(), verificationReason, isNewEmployee, otherAssignments);
+                                // Ưu tiên 1: Kiểm tra nhân viên đang dở dang xác minh nhân viên mới (đã chụp 1-4 lần)
+                                // Trường hợp này xảy ra khi nhân viên đã chụp 1-4 lần ở assignment trước (ví dụ: hỗ trợ 1 ngày)
+                                // rồi được tạo assignment mới. Dù có nhiều assignment, vẫn phải tiếp tục xác minh nhân viên mới.
+                                Long verifiedNewEmployeeCount = workScheduleRepository.countVerifiedSchedulesByEmployeeAndReason(
+                                                savedAssignment.getEmployee().getId(), WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION);
+                                boolean isInProgressNewEmployeeVerification = verifiedNewEmployeeCount > 0 && verifiedNewEmployeeCount < 5;
+
+                                if (isInProgressNewEmployeeVerification) {
+                                        // Đang dở dang xác minh nhân viên mới → luôn là NEW_EMPLOYEE
+                                        verificationReason = "NEW_EMPLOYEE";
+                                        log.info("[DEBUG] Verification required: assignmentId={}, reason=NEW_EMPLOYEE (in-progress, verifiedCount={}/5)",
+                                                        savedAssignment.getId(), verifiedNewEmployeeCount);
+                                } else {
+                                        // Ưu tiên 2: Dùng logic đếm assignment khác (loại trừ assignment vừa tạo)
+                                        // KHÔNG dùng verificationService.isEmployeeNew() vì method đó dùng logic khác (đếm verification đã duyệt)
+                                        Long otherAssignments = assignmentRepository.countAssignmentsByEmployeeExcluding(
+                                                        savedAssignment.getEmployee().getId(), savedAssignment.getId());
+                                        boolean isNewEmployee = otherAssignments == 0;
+                                        verificationReason = isNewEmployee ? "NEW_EMPLOYEE" : "CONTRACT_SETTING";
+                                        log.info("[DEBUG] Verification required: assignmentId={}, reason={}, isNewEmployee={}, otherAssignments={}",
+                                                        savedAssignment.getId(), verificationReason, isNewEmployee, otherAssignments);
+                                }
                         } else {
                                 log.info("[DEBUG] Verification NOT required - will generate all attendances normally");
                         }
@@ -360,24 +374,43 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                 savedAssignment.getId(), request.getDates());
 
                                         } else if (isNewEmployee) {
-                                                // NEW_EMPLOYEE: chỉ 5 ngày làm việc đầu tiên = NEW_EMPLOYEE_VERIFICATION
+                                                // NEW_EMPLOYEE: chỉ N ngày làm việc đầu tiên = NEW_EMPLOYEE_VERIFICATION (N = maxAttempts còn thiếu)
                                                 int maxAttempts = verification != null ? verification.getMaxAttempts() : 5;
-                                                // FIX: Sử dụng verificationStartDate = MAX(assignmentStartDate, today)
-                                                // để đảm bảo verification WorkSchedules chỉ tạo cho ngày >= assignmentStartDate
-                                                // và nhân viên chỉ cần chụp ảnh từ ngày đi làm thực tế hoặc từ hôm nay trở đi
-                                                LocalDate verificationStartDate = request.getStartDate().isAfter(today)
-                                                                ? request.getStartDate() : today;
+                                                
+                                                // Tạo verification WorkSchedules từ assignmentStartDate (không giới hạn >= today)
+                                                // để cho phép admin tạo công thủ công cho ngày quá khứ nếu cần
+                                                LocalDate verificationStartDate = request.getStartDate();
+                                                
+                                                // Tính endDate để đủ số ngày verification cần thiết
+                                                // Nếu assignment có endDate cụ thể (SUPPORT) → dùng endDate đó
+                                                // Nếu không, mở rộng sang tháng sau nếu cần để đủ maxAttempts ngày
+                                                LocalDate verificationEndDate = endDate;
                                                 List<LocalDate> verificationDates = getFirstNWorkingDays(
-                                                                verificationStartDate, endDate,
+                                                                verificationStartDate, verificationEndDate,
                                                                 savedAssignment.getWorkingDaysPerWeek(), maxAttempts);
+                                                
+                                                // Nếu không đủ ngày trong tháng hiện tại, mở rộng sang tháng sau
+                                                if (verificationDates.size() < maxAttempts) {
+                                                        LocalDate nextMonthEnd = verificationStartDate.plusMonths(1).withDayOfMonth(
+                                                                verificationStartDate.plusMonths(1).lengthOfMonth());
+                                                        if (contract != null && contract.getEndDate() != null 
+                                                                && contract.getEndDate().isBefore(nextMonthEnd)) {
+                                                                nextMonthEnd = contract.getEndDate();
+                                                        }
+                                                        verificationDates = getFirstNWorkingDays(
+                                                                verificationStartDate, nextMonthEnd,
+                                                                savedAssignment.getWorkingDaysPerWeek(), maxAttempts);
+                                                        log.info("[DEBUG] Extended verification period to next month: {} verification dates found",
+                                                                verificationDates.size());
+                                                }
 
                                                 workScheduleService.createWorkSchedulesForDates(
                                                                 savedAssignment,
                                                                 WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION,
                                                                 verification != null ? verification.getId() : null,
                                                                 verificationDates);
-                                                log.info("[DEBUG] Created {} NEW_EMPLOYEE_VERIFICATION work_schedules for assignmentId={}",
-                                                                verificationDates.size(), savedAssignment.getId());
+                                                log.info("[DEBUG] Created {} NEW_EMPLOYEE_VERIFICATION work_schedules for assignmentId={} (startDate={}, dates={})",
+                                                                verificationDates.size(), savedAssignment.getId(), verificationStartDate, verificationDates);
 
                                                 // Kiểm tra hợp đồng có bật verification không
                                                 boolean transitionToContract = verification != null
