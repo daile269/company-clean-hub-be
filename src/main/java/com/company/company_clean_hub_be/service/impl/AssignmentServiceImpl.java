@@ -469,7 +469,11 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         savedAssignment.setWorkDays(0);
                                         assignmentRepository.save(savedAssignment);
                                 } else if (workingDays != null && !workingDays.isEmpty()) {
-                                        int planned = countWorkingDaysBetween(workingDays, request.getStartDate(), endDate);
+                                        // plannedDays phải tính từ đầu tháng (không phải từ assignmentStartDate)
+                                        // để phản ánh đúng số ngày làm việc theo lịch hợp đồng trong tháng
+                                        YearMonth yearMonth = YearMonth.from(request.getStartDate());
+                                        LocalDate monthStart = yearMonth.atDay(1);
+                                        int planned = countWorkingDaysBetween(workingDays, monthStart, endDate);
                                         savedAssignment.setPlannedDays(planned);
                                         savedAssignment.setWorkDays(0);
                                         assignmentRepository.save(savedAssignment);
