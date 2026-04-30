@@ -640,10 +640,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         if (schedule.getReason() == WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION
                 && schedule.getAssignmentVerification() != null) {
             checkAndAutoApprove(schedule.getAssignmentVerification().getId());
-        } else {
-            // For CONTRACT_REQUIREMENT and AUTO_ATTENDANCE: update metrics
-            assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
         }
+        // Always update metrics to reflect the new workDays count
+        assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
 
         return response;
     }
@@ -844,8 +843,14 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
                     // Also create attendance DIRECTLY for working days that don't have WorkSchedule
                     // (days outside verification period that were missed by createAssignment)
+                    // Bắt đầu từ ngày sau verification cuối cùng (không phải tomorrow) để bao gồm cả ngày quá khứ
                     Assignment assignment = verification.getAssignment();
-                    LocalDate tomorrow = LocalDate.now().plusDays(1);
+                    List<WorkSchedule> allSchedules = workScheduleRepository.findByVerificationId(verificationId);
+                    LocalDate lastVerificationDate = allSchedules.stream()
+                        .map(WorkSchedule::getScheduledDate)
+                        .max(LocalDate::compareTo)
+                        .orElse(LocalDate.now());
+                    LocalDate afterVerification = lastVerificationDate.plusDays(1);
                     LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
 
                     // Respect contract end date if it falls before end of current month
@@ -854,10 +859,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                         endOfCurrentMonth = contract.getEndDate();
                     }
 
-                    if (!tomorrow.isAfter(endOfCurrentMonth)) {
+                    if (!afterVerification.isAfter(endOfCurrentMonth)) {
                         List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek();
                         if (workingDays != null && !workingDays.isEmpty()) {
-                            LocalDate current = tomorrow;
+                            LocalDate current = afterVerification;
                             List<Attendance> directAttendances = new ArrayList<>();
                             while (!current.isAfter(endOfCurrentMonth)) {
                                 if (workingDays.contains(current.getDayOfWeek())) {
@@ -886,15 +891,15 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                             }
                             if (!directAttendances.isEmpty()) {
                                 attendanceRepository.saveAll(directAttendances);
-                                log.info("Auto-approved verification {} - created {} additional attendances directly for working days without WorkSchedule: {} to {}",
-                                    verificationId, directAttendances.size(), tomorrow, endOfCurrentMonth);
+                                log.info("Auto-approved verification {} - created {} additional attendances directly for working days after verification: {} to {}",
+                                    verificationId, directAttendances.size(), afterVerification, endOfCurrentMonth);
                             }
                         } else {
                             log.info("No working days configured for assignment {}", assignment.getId());
                         }
                     } else {
-                        log.info("No remaining days in current month for auto-approve (tomorrow={}, endOfMonth={})",
-                            tomorrow, endOfCurrentMonth);
+                        log.info("No remaining days in current month for auto-approve (afterVerification={}, endOfMonth={})",
+                            afterVerification, endOfCurrentMonth);
                     }
                 }
 

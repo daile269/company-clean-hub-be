@@ -97,6 +97,10 @@ public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Long
     @Query("SELECT COUNT(ws) FROM WorkSchedule ws WHERE ws.employee.id = :employeeId AND ws.status = 'VERIFIED' AND ws.reason = :reason")
     Long countVerifiedSchedulesByEmployeeAndReason(@Param("employeeId") Long employeeId, @Param("reason") WorkScheduleReason reason);
 
+    // Count total schedules by verificationId (to know actual maxAttempts for this assignment)
+    @Query("SELECT COUNT(ws) FROM WorkSchedule ws WHERE ws.assignmentVerification.id = :verificationId")
+    Long countByVerificationId(@Param("verificationId") Long verificationId);
+
     // Delete by assignment (for cleanup)
     void deleteByAssignmentId(Long assignmentId);
 }
