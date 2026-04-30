@@ -379,15 +379,22 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
 
         invoice.setSubtotal(subtotal);
-        invoice.setVatAmount(totalVat);
-        
-        // Tính tổng hóa đơn và trừ tiền phạt nếu có
-        BigDecimal invoiceTotal = subtotal.add(totalVat);
-        if (request.getPenalty() != null && request.getPenalty().compareTo(BigDecimal.ZERO) > 0) {
-            invoiceTotal = invoiceTotal.subtract(request.getPenalty());
-            log.info("Applied penalty {} to invoice, total: {} -> {}", request.getPenalty(), subtotal.add(totalVat), invoiceTotal);
+
+        // Trừ penalty khỏi subtotal trước, sau đó tính VAT trên subtotal đã trừ
+        BigDecimal penaltyAmount = request.getPenalty() != null && request.getPenalty().compareTo(BigDecimal.ZERO) > 0
+                ? request.getPenalty() : BigDecimal.ZERO;
+        BigDecimal adjustedSubtotal = subtotal.subtract(penaltyAmount);
+
+        BigDecimal adjustedVat;
+        if (penaltyAmount.compareTo(BigDecimal.ZERO) > 0 && subtotal.compareTo(BigDecimal.ZERO) > 0) {
+            adjustedVat = totalVat.multiply(adjustedSubtotal).divide(subtotal, 2, RoundingMode.HALF_UP);
+            log.info("Penalty {}: subtotal {} -> {}, VAT {} -> {}", penaltyAmount, subtotal, adjustedSubtotal, totalVat, adjustedVat);
+        } else {
+            adjustedVat = totalVat;
         }
-        invoice.setTotalAmount(invoiceTotal);
+
+        invoice.setVatAmount(adjustedVat);
+        invoice.setTotalAmount(adjustedSubtotal.add(adjustedVat));
         invoice = invoiceRepository.save(invoice);
 
         log.info("Created invoice {} for contract {} - Month {}/{} by {} with {} lines", 
