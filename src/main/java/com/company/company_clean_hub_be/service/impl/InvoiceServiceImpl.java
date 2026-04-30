@@ -138,8 +138,11 @@ public class InvoiceServiceImpl implements InvoiceService {
             }
 
             BigDecimal baseAmount;
-            // For ONE_TIME and MONTHLY_FIXED contracts all services are fixed-price (do not prorate by days)
-            if (contract.getContractType() == ContractType.ONE_TIME || contract.getContractType() == ContractType.MONTHLY_FIXED) {
+            // For ONE_TIME and MONTHLY_FIXED: price is fixed monthly value
+            // For MONTHLY_ACTUAL: price is per-công unit rate (multiplication by attendance done later)
+            if (contract.getContractType() == ContractType.ONE_TIME
+                    || contract.getContractType() == ContractType.MONTHLY_FIXED
+                    || contract.getContractType() == ContractType.MONTHLY_ACTUAL) {
                 baseAmount = service.getPrice();
             } else {
                 if (service.getServiceType() == ServiceType.RECURRING) {
@@ -262,18 +265,28 @@ public class InvoiceServiceImpl implements InvoiceService {
         } else {
             // Monthly contracts: one-time services billed fully; recurring portion billed by attendance
             if (recurringTotal.compareTo(BigDecimal.ZERO) > 0) {
-                if (contractDays <= 0) {
-                    throw new AppException(ErrorCode.INVALID_ACTUAL_WORKING_DAYS);
-                }
                 if (numEmployees <= 0) {
                     throw new AppException(ErrorCode.NO_ASSIGNMENT_EMP);
                 }
-                BigDecimal denom = BigDecimal.valueOf((long) contractDays * numEmployees);
-                BigDecimal recurringSubtotal = recurringTotal
-                        .multiply(BigDecimal.valueOf(attendancesCount))
-                        .divide(denom, 2, RoundingMode.HALF_UP);
-                log.info("Contract {} - Calculation: denom={} (contractDays={} × numEmployees={}), attendancesCount={}, recurringSubtotal={}",
-                    contract.getId(), denom, contractDays, numEmployees, attendancesCount, recurringSubtotal);
+                BigDecimal recurringSubtotal;
+                if (contract.getContractType() == ContractType.MONTHLY_ACTUAL) {
+                    // price is per-công rate → total = price × attendancesCount
+                    recurringSubtotal = recurringTotal
+                            .multiply(BigDecimal.valueOf(attendancesCount))
+                            .setScale(2, RoundingMode.HALF_UP);
+                    log.info("Contract {} MONTHLY_ACTUAL - recurringTotal={}, attendancesCount={}, recurringSubtotal={}",
+                        contract.getId(), recurringTotal, attendancesCount, recurringSubtotal);
+                } else {
+                    if (contractDays <= 0) {
+                        throw new AppException(ErrorCode.INVALID_ACTUAL_WORKING_DAYS);
+                    }
+                    BigDecimal denom = BigDecimal.valueOf((long) contractDays * numEmployees);
+                    recurringSubtotal = recurringTotal
+                            .multiply(BigDecimal.valueOf(attendancesCount))
+                            .divide(denom, 2, RoundingMode.HALF_UP);
+                    log.info("Contract {} - Calculation: denom={} (contractDays={} × numEmployees={}), attendancesCount={}, recurringSubtotal={}",
+                        contract.getId(), denom, contractDays, numEmployees, attendancesCount, recurringSubtotal);
+                }
 
                 // subtotal is sum of one-time full + recurring allocated by attendance
                 subtotal = oneTimeTotal.add(recurringSubtotal).setScale(2, RoundingMode.HALF_UP);
