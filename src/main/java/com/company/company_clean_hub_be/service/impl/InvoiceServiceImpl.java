@@ -153,10 +153,6 @@ public class InvoiceServiceImpl implements InvoiceService {
             totalContractPrice = totalContractPrice.add(baseAmount);
         }
 
-        // Count attendances for this contract in the month (exclude attendances from SUPPORT assignments)
-        Long attendancesCountLong = attendanceRepository.countAttendancesByContractAndMonthYearExcludingAssignmentType(contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear(), com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT);
-        int attendancesCount = attendancesCountLong != null ? attendancesCountLong.intValue() : 0;
-
         // Lấy số lượng nhân viên phụ trách từ hợp đồng
         // Nếu contract chưa set numberOfEmployees (= null hoặc 0), fallback về đếm nhân viên thực tế
         int numEmployees = contract.getNumberOfEmployees() != null ? contract.getNumberOfEmployees() : 0;
@@ -169,8 +165,29 @@ public class InvoiceServiceImpl implements InvoiceService {
             log.info("Contract {} - numberOfEmployees not set, fallback to actual active employees: {}",
                     contract.getId(), numEmployees);
         }
-        log.info("Contract {} - numEmployees used: {} (attendances: {}, contractDays: {})",
-            contract.getId(), numEmployees, attendancesCount, contractDays);
+
+        // Số ngày kế hoạch tính từ startDate/endDate của hợp đồng trong tháng (tử số)
+        int plannedDaysInPeriod = calculatePlannedDaysInPeriod(contract, request.getInvoiceMonth(), request.getInvoiceYear());
+
+        // Tính công thực tế = công kế hoạch theo kỳ - số ngày nghỉ
+        // Ngày nghỉ = bản ghi Attendance có deleted = true, trong đúng kỳ hợp đồng (trừ SUPPORT)
+        YearMonth invoiceYm = YearMonth.of(request.getInvoiceYear(), request.getInvoiceMonth());
+        LocalDate periodStart = (contract.getStartDate() != null && contract.getStartDate().isAfter(invoiceYm.atDay(1)))
+                ? contract.getStartDate() : invoiceYm.atDay(1);
+        LocalDate periodEnd = (contract.getEndDate() != null && contract.getEndDate().isBefore(invoiceYm.atEndOfMonth()))
+                ? contract.getEndDate() : invoiceYm.atEndOfMonth();
+        Long absencesCountLong = attendanceRepository.countAbsencesByContractAndDateRangeExcludingAssignmentType(
+                contract.getId(), periodStart, periodEnd,
+                com.company.company_clean_hub_be.entity.AssignmentType.SUPPORT);
+        int absenceDays = absencesCountLong != null ? absencesCountLong.intValue() : 0;
+        int attendancesCount = Math.max(0, plannedDaysInPeriod * numEmployees - absenceDays);
+        log.info("Contract {} - numEmployees used: {} (plannedDaysInPeriod: {}, absenceDays: {}, attendancesCount: {}, contractDays: {})",
+            contract.getId(), numEmployees, plannedDaysInPeriod, absenceDays, attendancesCount, contractDays);
+
+        // Lưu công thức tính vào invoice để hiển thị
+        invoice.setPlannedDaysInPeriod(plannedDaysInPeriod);
+        invoice.setNumEmployees(numEmployees);
+        invoice.setAbsenceDays(absenceDays);
 
         if (totalContractPrice.compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("Contract {} totalContractPrice is zero for month {}/{}", contract.getId(), request.getInvoiceMonth(), request.getInvoiceYear());
@@ -252,12 +269,11 @@ public class InvoiceServiceImpl implements InvoiceService {
                     throw new AppException(ErrorCode.NO_ASSIGNMENT_EMP);
                 }
                 BigDecimal denom = BigDecimal.valueOf((long) contractDays * numEmployees);
-                BigDecimal pricePerDayPerEmployee = recurringTotal.divide(denom, 2, RoundingMode.HALF_UP);
-                log.info("Contract {} - Calculation: denom={} (contractDays={} × numEmployees={}), pricePerDayPerEmployee={}, attendancesCount={}",
-                    contract.getId(), denom, contractDays, numEmployees, pricePerDayPerEmployee, attendancesCount);
-                BigDecimal recurringSubtotal = pricePerDayPerEmployee.multiply(BigDecimal.valueOf(attendancesCount)).setScale(2, RoundingMode.HALF_UP);
-                log.info("Contract {} - recurringSubtotal = {} × {} = {}",
-                    contract.getId(), pricePerDayPerEmployee, attendancesCount, recurringSubtotal);
+                BigDecimal recurringSubtotal = recurringTotal
+                        .multiply(BigDecimal.valueOf(attendancesCount))
+                        .divide(denom, 2, RoundingMode.HALF_UP);
+                log.info("Contract {} - Calculation: denom={} (contractDays={} × numEmployees={}), attendancesCount={}, recurringSubtotal={}",
+                    contract.getId(), denom, contractDays, numEmployees, attendancesCount, recurringSubtotal);
 
                 // subtotal is sum of one-time full + recurring allocated by attendance
                 subtotal = oneTimeTotal.add(recurringSubtotal).setScale(2, RoundingMode.HALF_UP);
@@ -388,7 +404,6 @@ public class InvoiceServiceImpl implements InvoiceService {
         LocalDate firstDayOfMonth = yearMonth.atDay(1);
         LocalDate lastDayOfMonth = yearMonth.atEndOfMonth();
 
-        // Per requirement: planned days on invoice should cover the full month
         LocalDate periodStart = firstDayOfMonth;
         LocalDate periodEnd = lastDayOfMonth;
 
@@ -407,6 +422,27 @@ public class InvoiceServiceImpl implements InvoiceService {
         int workingDays = countWorkingDaysBetween(contract.getWorkingDaysPerWeek(), periodStart, periodEnd);
         log.info("Contract {} working days in {}/{}: {} (period {} - {})", contract.getId(), month, year, workingDays, periodStart, periodEnd);
         return workingDays;
+    }
+
+    private int calculatePlannedDaysInPeriod(Contract contract, int month, int year) {
+        YearMonth yearMonth = YearMonth.of(year, month);
+        LocalDate firstDayOfMonth = yearMonth.atDay(1);
+        LocalDate lastDayOfMonth = yearMonth.atEndOfMonth();
+
+        LocalDate periodStart = (contract.getStartDate() != null && contract.getStartDate().isAfter(firstDayOfMonth))
+                ? contract.getStartDate() : firstDayOfMonth;
+        LocalDate periodEnd = (contract.getEndDate() != null && contract.getEndDate().isBefore(lastDayOfMonth))
+                ? contract.getEndDate() : lastDayOfMonth;
+
+        if (periodStart.isAfter(periodEnd)) return 0;
+
+        if (contract.getWorkingDaysPerWeek() == null || contract.getWorkingDaysPerWeek().isEmpty()) {
+            return (int) (java.time.temporal.ChronoUnit.DAYS.between(periodStart, periodEnd) + 1);
+        }
+
+        int days = countWorkingDaysBetween(contract.getWorkingDaysPerWeek(), periodStart, periodEnd);
+        log.info("Contract {} planned days in period {}/{}: {} (period {} - {})", contract.getId(), month, year, days, periodStart, periodEnd);
+        return days;
     }
 
     private int countWorkingDaysBetween(List<java.time.DayOfWeek> workingDaysPerWeek, LocalDate start, LocalDate end) {
@@ -709,6 +745,9 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .invoiceMonth(invoice.getInvoiceMonth())
                 .invoiceYear(invoice.getInvoiceYear())
                 .actualWorkingDays(invoice.getActualWorkingDays())
+                .plannedDaysInPeriod(invoice.getPlannedDaysInPeriod())
+                .numEmployees(invoice.getNumEmployees())
+                .absenceDays(invoice.getAbsenceDays())
                 .subtotal(invoice.getSubtotal())
                 .vatPercentage(invoice.getVatPercentage())
                 .vatAmount(invoice.getVatAmount())

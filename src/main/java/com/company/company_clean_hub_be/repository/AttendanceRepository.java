@@ -204,6 +204,34 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                     @Param("excludedType") com.company.company_clean_hub_be.entity.AssignmentType excludedType
             );
 
+            @Query("SELECT COUNT(a) FROM Attendance a " +
+                    "JOIN a.assignment as asn " +
+                    "WHERE asn.contract.id = :contractId " +
+                    "AND a.deleted = true " +
+                    "AND (:month IS NULL OR FUNCTION('MONTH', a.date) = :month) " +
+                    "AND (:year IS NULL OR FUNCTION('YEAR', a.date) = :year) " +
+                    "AND (:excludedType IS NULL OR asn.assignmentType <> :excludedType)")
+            Long countAbsencesByContractAndMonthYearExcludingAssignmentType(
+                    @Param("contractId") Long contractId,
+                    @Param("month") Integer month,
+                    @Param("year") Integer year,
+                    @Param("excludedType") com.company.company_clean_hub_be.entity.AssignmentType excludedType
+            );
+
+            @Query("SELECT COUNT(a) FROM Attendance a " +
+                    "JOIN a.assignment as asn " +
+                    "WHERE asn.contract.id = :contractId " +
+                    "AND a.deleted = true " +
+                    "AND a.date >= :startDate " +
+                    "AND a.date <= :endDate " +
+                    "AND (:excludedType IS NULL OR asn.assignmentType <> :excludedType)")
+            Long countAbsencesByContractAndDateRangeExcludingAssignmentType(
+                    @Param("contractId") Long contractId,
+                    @Param("startDate") java.time.LocalDate startDate,
+                    @Param("endDate") java.time.LocalDate endDate,
+                    @Param("excludedType") com.company.company_clean_hub_be.entity.AssignmentType excludedType
+            );
+
         @Query("SELECT a FROM Attendance a WHERE (a.deleted IS NULL OR a.deleted = false)")
         List<Attendance> findAllActive();
 
