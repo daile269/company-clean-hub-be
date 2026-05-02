@@ -71,7 +71,11 @@ public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Long
     List<WorkSchedule> findMissedSchedules();
     
     // Find MISSED schedules by date range
-    @Query("SELECT ws FROM WorkSchedule ws WHERE ws.status = 'MISSED' AND ws.scheduledDate BETWEEN :startDate AND :endDate")
+    @Query("SELECT ws FROM WorkSchedule ws " +
+           "JOIN ws.assignment a " +
+           "WHERE ws.status = 'MISSED' " +
+           "AND ws.scheduledDate BETWEEN :startDate AND :endDate " +
+           "AND a.id IS NOT NULL")
     List<WorkSchedule> findMissedSchedulesByDateRange(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
     
     // Find MISSED schedules by employee and date range

@@ -70,10 +70,12 @@ public class VerificationScheduler {
     }
     
     /**
-     * Chạy vào 00:00 ngày 1 hàng tháng để tạo work schedules cho tháng mới
+     * Chạy vào 02:00 ngày 1 hàng tháng để tạo work schedules cho tháng mới
+     * QUAN TRỌNG: Chạy SAU AssignmentScheduler.generateMonthlyAttendances() (01:00) 
+     * để đảm bảo assignment mới đã được tạo trước
      * Chỉ tạo cho các assignment có bật verification
      */
-    @Scheduled(cron = "0 0 0 1 * *")
+    @Scheduled(cron = "0 0 2 1 * *")
     public void generateMonthlyWorkSchedules() {
         log.info("=== Starting monthly work schedule generation job ===");
         try {

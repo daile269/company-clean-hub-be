@@ -482,6 +482,37 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 // Không cần verification - sinh toàn bộ attendance như bình thường
                                 log.info("[DEBUG] ===== NO VERIFICATION REQUIRED PATH - Creating all attendances normally =====");
                                 log.info("[DEBUG] NO VERIFICATION REQUIRED - Creating all attendances normally");
+                                log.info("[DEBUG] ===== IMPORTANT: NO WorkSchedule should be created in this path =====");
+                                
+                                // Cleanup: Xóa các WorkSchedule cũ của nhân viên này (từ assignments trước)
+                                // vì nhân viên đã hoàn thành verification, không cần chụp ảnh nữa
+                                try {
+                                        List<WorkSchedule> oldSchedules = workScheduleRepository
+                                                .findByEmployeeIdAndDateRange(
+                                                        savedAssignment.getEmployee().getId(),
+                                                        LocalDate.now(),
+                                                        LocalDate.now().plusYears(1))
+                                                .stream()
+                                                .filter(ws -> ws.getStatus() == WorkScheduleStatus.SCHEDULED || 
+                                                             ws.getStatus() == WorkScheduleStatus.MISSED)
+                                                .filter(ws -> !ws.getAssignment().getId().equals(savedAssignment.getId()))
+                                                .collect(Collectors.toList());
+                                        
+                                        if (!oldSchedules.isEmpty()) {
+                                                log.info("[DEBUG] Found {} old SCHEDULED/MISSED WorkSchedules from previous assignments for employee {}", 
+                                                        oldSchedules.size(), savedAssignment.getEmployee().getId());
+                                                oldSchedules.forEach(ws -> log.info("[DEBUG]   - Deleting old WorkSchedule: id={}, assignmentId={}, date={}, status={}", 
+                                                        ws.getId(), ws.getAssignment().getId(), ws.getScheduledDate(), ws.getStatus()));
+                                                workScheduleRepository.deleteAll(oldSchedules);
+                                                log.info("[DEBUG] Deleted {} old WorkSchedules for employee {} (verification completed)", 
+                                                        oldSchedules.size(), savedAssignment.getEmployee().getId());
+                                        } else {
+                                                log.info("[DEBUG] No old WorkSchedules to clean up for employee {}", 
+                                                        savedAssignment.getEmployee().getId());
+                                        }
+                                } catch (Exception e) {
+                                        log.error("[DEBUG] Error cleaning up old WorkSchedules: {}", e.getMessage(), e);
+                                }
 
                                 // Nếu là SUPPORT: tạo chấm công theo danh sách ngày được gửi trong request
                                 if (assignmentTypeParsed == AssignmentType.SUPPORT) {
@@ -652,6 +683,18 @@ public class AssignmentServiceImpl implements AssignmentService {
                 log.info("[DEBUG] Final result: assignmentId={}, requiresVerification={}, attendancesCreated={}",
                                 savedAssignment.getId(), requiresVerification,
                                 savedAssignment.getWorkDays() != null ? savedAssignment.getWorkDays() : 0);
+                
+                // DEBUG: Kiểm tra WorkSchedule được tạo
+                List<WorkSchedule> workSchedules = workScheduleRepository.findByAssignmentId(savedAssignment.getId());
+                log.info("[DEBUG] ===== WORK SCHEDULE CHECK =====");
+                log.info("[DEBUG] WorkSchedule count for assignmentId={}: {}", savedAssignment.getId(), workSchedules.size());
+                if (!workSchedules.isEmpty()) {
+                        workSchedules.forEach(ws -> log.info("[DEBUG]   - WorkSchedule: id={}, date={}, status={}, reason={}", 
+                                ws.getId(), ws.getScheduledDate(), ws.getStatus(), ws.getReason()));
+                        log.warn("[DEBUG] ===== WARNING: WorkSchedule created but requiresVerification=false! =====");
+                } else {
+                        log.info("[DEBUG] No WorkSchedule created (correct for requiresVerification=false)");
+                }
 
                 return mapToResponse(savedAssignment);
         }
