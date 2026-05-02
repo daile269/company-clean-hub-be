@@ -3,6 +3,7 @@ package com.company.company_clean_hub_be.controller;
 import java.security.Principal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,7 @@ import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.WorkScheduleContractSummary;
 import com.company.company_clean_hub_be.dto.response.WorkScheduleResponse;
 import com.company.company_clean_hub_be.dto.response.VerificationImageResponse;
+import com.company.company_clean_hub_be.entity.Assignment;
 import com.company.company_clean_hub_be.service.WorkScheduleService;
 
 import jakarta.validation.Valid;
@@ -33,6 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 public class WorkScheduleController {
 
     private final WorkScheduleService workScheduleService;
+    private final com.company.company_clean_hub_be.repository.AssignmentRepository assignmentRepository;
 
     @GetMapping("/assignment/{assignmentId}")
     public ApiResponse<List<WorkScheduleResponse>> getByAssignment(@PathVariable Long assignmentId) {
@@ -104,7 +107,8 @@ public class WorkScheduleController {
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year) {
         
-        log.info("Getting missed schedules for month: {}, year: {}", month, year);
+        log.info("[QUERY-DEBUG] ===== getMissedSchedules called =====");
+        log.info("[QUERY-DEBUG] Parameters: month={}, year={}", month, year);
         
         LocalDate startDate;
         LocalDate endDate;
@@ -118,7 +122,12 @@ public class WorkScheduleController {
             endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
         }
         
+        log.info("[QUERY-DEBUG] Query range: {} to {}", startDate, endDate);
         List<WorkScheduleResponse> schedules = workScheduleService.getMissedSchedules(startDate, endDate);
+        log.info("[QUERY-DEBUG] Found {} missed schedules", schedules.size());
+        schedules.forEach(ws -> log.info("[QUERY-DEBUG]   - Schedule: assignmentId={}, employeeId={}, date={}, status={}, reason={}", 
+                ws.getAssignmentId(), ws.getEmployeeId(), ws.getScheduledDate(), ws.getStatus(), ws.getReason()));
+        
         return ApiResponse.success("Lấy danh sách lịch bị bỏ lỡ thành công", schedules, HttpStatus.OK.value());
     }
     
@@ -153,10 +162,41 @@ public class WorkScheduleController {
             @RequestParam(required = false) Long employeeId,
             @RequestParam(required = false) String status) {
         
-        log.info("Getting work schedules by date range: {} to {}, employeeId: {}, status: {}", 
+        log.info("[QUERY-DEBUG] ===== getByDateRange called =====");
+        log.info("[QUERY-DEBUG] Parameters: startDate={}, endDate={}, employeeId={}, status={}", 
             startDate, endDate, employeeId, status);
         
         List<WorkScheduleResponse> schedules = workScheduleService.getWorkSchedulesByDateRange(startDate, endDate, employeeId, status);
+        log.info("[QUERY-DEBUG] Found {} schedules", schedules.size());
+        
+        // Log chi tiết cho employee 233 để debug
+        List<WorkScheduleResponse> employee233Schedules = schedules.stream()
+                .filter(ws -> ws.getEmployeeId() == 233)
+                .collect(Collectors.toList());
+        if (!employee233Schedules.isEmpty()) {
+                log.info("[QUERY-DEBUG] ===== Employee 233 schedules (count={}): =====", employee233Schedules.size());
+                employee233Schedules.forEach(ws -> log.info("[QUERY-DEBUG]   - assignmentId={}, contractId={}, date={}, status={}, reason={}", 
+                        ws.getAssignmentId(), ws.getContractId(), ws.getScheduledDate(), ws.getStatus(), ws.getReason()));
+                
+                // Kiểm tra assignment 727 details
+                if (employee233Schedules.stream().anyMatch(ws -> ws.getAssignmentId() == 727)) {
+                        log.info("[QUERY-DEBUG] ===== CHECKING ASSIGNMENT 727 =====");
+                        try {
+                                Assignment a727 = assignmentRepository.findById(727L).orElse(null);
+                                if (a727 != null) {
+                                        log.info("[QUERY-DEBUG] Assignment 727: startDate={}, endDate={}, status={}, contractId={}, workDays={}, plannedDays={}",
+                                                a727.getStartDate(), a727.getEndDate(), a727.getStatus(), 
+                                                a727.getContract() != null ? a727.getContract().getId() : null,
+                                                a727.getWorkDays(), a727.getPlannedDays());
+                                } else {
+                                        log.warn("[QUERY-DEBUG] Assignment 727 NOT FOUND in database!");
+                                }
+                        } catch (Exception e) {
+                                log.error("[QUERY-DEBUG] Error checking assignment 727: {}", e.getMessage());
+                        }
+                }
+        }
+        
         return ApiResponse.success("Lấy lịch làm việc thành công", schedules, HttpStatus.OK.value());
     }
     
@@ -165,9 +205,14 @@ public class WorkScheduleController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) String status) {
         
-        log.info("Getting work schedules by date: {}, status: {}", date, status);
+        log.info("[QUERY-DEBUG] ===== getByDate called =====");
+        log.info("[QUERY-DEBUG] Parameters: date={}, status={}", date, status);
         
         List<WorkScheduleResponse> schedules = workScheduleService.getWorkSchedulesByDate(date, status);
+        log.info("[QUERY-DEBUG] Found {} schedules", schedules.size());
+        schedules.forEach(ws -> log.info("[QUERY-DEBUG]   - Schedule: assignmentId={}, employeeId={}, date={}, status={}, reason={}", 
+                ws.getAssignmentId(), ws.getEmployeeId(), ws.getScheduledDate(), ws.getStatus(), ws.getReason()));
+        
         return ApiResponse.success("Lấy lịch làm việc thành công", schedules, HttpStatus.OK.value());
     }
     

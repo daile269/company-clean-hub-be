@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.annotation.Lazy;
 
 import com.company.company_clean_hub_be.dto.request.WorkScheduleCaptureRequest;
 import com.company.company_clean_hub_be.dto.response.WorkScheduleResponse;
@@ -50,6 +51,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     private final VerificationImageRepository imageRepository;
     private final FileStorageService fileStorageService;
     private final AssignmentMetricsService assignmentMetricsService;
+    private final com.company.company_clean_hub_be.service.helper.VerificationChecker verificationChecker;
 
     @Override
     @Transactional
@@ -515,8 +517,11 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         int totalCreated = 0;
         for (Assignment assignment : activeAssignments) {
             try {
-                // Check if requires verification
-                boolean requiresVerification = requiresVerification(assignment);
+                // IMPORTANT: Use VerificationChecker.requiresVerification() - no circular dependency
+                // This checks if employee completed verification (5+ photos)
+                boolean requiresVerification = verificationChecker.requiresVerification(assignment);
+                
+                log.info("[SCHEDULER] Assignment {}: requiresVerification={}", assignment.getId(), requiresVerification);
                 
                 if (requiresVerification) {
                     // Determine reason — exclude this assignment (already in DB) from the count
@@ -564,21 +569,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         log.info("Monthly generation complete: created {} work schedules for month {}", totalCreated, month);
     }
     
-    private boolean requiresVerification(Assignment assignment) {
-        // Exclude the assignment itself from the count — it is already persisted at this point
-        if (isEmployeeNew(assignment.getEmployee().getId(), assignment.getId())) {
-            return true;
-        }
-        
-        // Check contract setting
-        if (assignment.getContract() != null && 
-            Boolean.TRUE.equals(assignment.getContract().getRequiresImageVerification())) {
-            return true;
-        }
-        
-        return false;
-    }
-    
+    // Helper method - still needed for determining reason
     private boolean isEmployeeNew(Long employeeId, Long excludeAssignmentId) {
         Long totalAssignments = excludeAssignmentId != null
                 ? assignmentRepository.countAssignmentsByEmployeeExcluding(employeeId, excludeAssignmentId)
@@ -680,7 +671,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         Assignment assignment = assignmentRepository.findById(assignmentId)
             .orElseThrow(() -> new ResourceNotFoundException("Assignment not found: " + assignmentId));
         
-        if (requiresVerification(assignment)) {
+        if (verificationChecker.requiresVerification(assignment)) {
             boolean isNewEmployee = isEmployeeNew(assignment.getEmployee().getId(), assignment.getId());
             WorkScheduleReason reason = isNewEmployee ? 
                 WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION : 
@@ -748,7 +739,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         Assignment newAssignment = assignmentRepository.findById(newAssignmentId)
             .orElseThrow(() -> new ResourceNotFoundException("New assignment not found: " + newAssignmentId));
         
-        if (requiresVerification(newAssignment)) {
+        if (verificationChecker.requiresVerification(newAssignment)) {
             boolean isNewEmployee = isEmployeeNew(newAssignment.getEmployee().getId(), newAssignment.getId());
             WorkScheduleReason reason = isNewEmployee ? 
                 WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION : 
