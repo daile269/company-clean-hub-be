@@ -493,11 +493,18 @@ public class VerificationServiceImpl implements VerificationService {
             LocalDate afterVerification = lastVerificationDate.plusDays(1);
             LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
             
-            // Respect contract end date if it falls before end of current month
+            // Respect assignment end date (for SUPPORT assignments with specific dates)
             Assignment assignment = verification.getAssignment();
+            if (assignment.getEndDate() != null && assignment.getEndDate().isBefore(endOfCurrentMonth)) {
+                endOfCurrentMonth = assignment.getEndDate();
+                log.info("Using assignment.endDate as limit: {}", endOfCurrentMonth);
+            }
+            
+            // Respect contract end date if it falls before end of current month
             Contract contract = assignment.getContract();
             if (contract != null && contract.getEndDate() != null && contract.getEndDate().isBefore(endOfCurrentMonth)) {
                 endOfCurrentMonth = contract.getEndDate();
+                log.info("Using contract.endDate as limit: {}", endOfCurrentMonth);
             }
             
             // Create attendance for all working days from after verification to end of current month
