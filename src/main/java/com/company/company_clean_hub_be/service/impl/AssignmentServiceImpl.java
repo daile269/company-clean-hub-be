@@ -377,40 +377,57 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 // NEW_EMPLOYEE: chỉ N ngày làm việc đầu tiên = NEW_EMPLOYEE_VERIFICATION (N = maxAttempts còn thiếu)
                                                 int maxAttempts = verification != null ? verification.getMaxAttempts() : 5;
                                                 
-                                                // Tạo verification WorkSchedules từ assignmentStartDate (không giới hạn >= today)
-                                                // để cho phép admin tạo công thủ công cho ngày quá khứ nếu cần
-                                                LocalDate verificationStartDate = request.getStartDate();
+                                                // Verification bắt đầu từ MAX(assignmentStartDate, today)
+                                                // Nhân viên chỉ cần verify từ hôm nay trở đi (không thể verify quá khứ)
+                                                LocalDate verificationStartDate = request.getStartDate().isAfter(today) 
+                                                                ? request.getStartDate() 
+                                                                : today;
                                                 
-                                                // Tính endDate để đủ số ngày verification cần thiết
-                                                // Nếu assignment có endDate cụ thể (SUPPORT) → dùng endDate đó
-                                                // Nếu không, mở rộng sang tháng sau nếu cần để đủ maxAttempts ngày
+                                                // Giới hạn verification trong tháng hiện tại để tránh sinh công sang tháng sau
+                                                // Monthly scheduler sẽ xử lý tháng sau
+                                                LocalDate endOfCurrentMonth = today.withDayOfMonth(today.lengthOfMonth());
+                                                
+                                                // Tính endDate cho verification period
+                                                // Bắt đầu từ endDate đã tính ở trên (có thể là cuối tháng của startDate)
                                                 LocalDate verificationEndDate = endDate;
+                                                
+                                                // CRITICAL: Nếu verificationStartDate đã được điều chỉnh sang tháng sau (today > startDate),
+                                                // thì verificationEndDate cũng phải được điều chỉnh để không nhỏ hơn verificationStartDate
+                                                if (verificationEndDate.isBefore(verificationStartDate)) {
+                                                        verificationEndDate = endOfCurrentMonth;
+                                                        log.info("[DEBUG] Adjusted verificationEndDate to current month end: {} (was {}, verificationStartDate={})",
+                                                                        endOfCurrentMonth, endDate, verificationStartDate);
+                                                }
+                                                
+                                                // Ưu tiên 1: Respect assignment endDate nếu có (cho SUPPORT assignments)
+                                                // Ưu tiên 2: Giới hạn trong tháng hiện tại
+                                                // Ưu tiên 3: Respect contract endDate
+                                                if (verificationEndDate.isAfter(endOfCurrentMonth)) {
+                                                        verificationEndDate = endOfCurrentMonth;
+                                                        log.info("[DEBUG] Limited verification period to end of current month: {} (assignment endDate was {})",
+                                                                        endOfCurrentMonth, endDate);
+                                                }
+                                                
+                                                if (contract != null && contract.getEndDate() != null 
+                                                                && contract.getEndDate().isBefore(verificationEndDate)) {
+                                                        verificationEndDate = contract.getEndDate();
+                                                        log.info("[DEBUG] Limited verification period to contract endDate: {}", contract.getEndDate());
+                                                }
+                                                
+                                                // Tạo verification dates trong giới hạn đã tính
                                                 List<LocalDate> verificationDates = getFirstNWorkingDays(
                                                                 verificationStartDate, verificationEndDate,
                                                                 savedAssignment.getWorkingDaysPerWeek(), maxAttempts);
-                                                
-                                                // Nếu không đủ ngày trong tháng hiện tại, mở rộng sang tháng sau
-                                                if (verificationDates.size() < maxAttempts) {
-                                                        LocalDate nextMonthEnd = verificationStartDate.plusMonths(1).withDayOfMonth(
-                                                                verificationStartDate.plusMonths(1).lengthOfMonth());
-                                                        if (contract != null && contract.getEndDate() != null 
-                                                                && contract.getEndDate().isBefore(nextMonthEnd)) {
-                                                                nextMonthEnd = contract.getEndDate();
-                                                        }
-                                                        verificationDates = getFirstNWorkingDays(
-                                                                verificationStartDate, nextMonthEnd,
-                                                                savedAssignment.getWorkingDaysPerWeek(), maxAttempts);
-                                                        log.info("[DEBUG] Extended verification period to next month: {} verification dates found",
-                                                                verificationDates.size());
-                                                }
 
                                                 workScheduleService.createWorkSchedulesForDates(
                                                                 savedAssignment,
                                                                 WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION,
                                                                 verification != null ? verification.getId() : null,
                                                                 verificationDates);
-                                                log.info("[DEBUG] Created {} NEW_EMPLOYEE_VERIFICATION work_schedules for assignmentId={} (startDate={}, dates={})",
-                                                                verificationDates.size(), savedAssignment.getId(), verificationStartDate, verificationDates);
+                                                log.info("[DEBUG] Created {} NEW_EMPLOYEE_VERIFICATION work_schedules for assignmentId={} " +
+                                                                "(limited to current month, startDate={}, endDate={}, dates={})",
+                                                                verificationDates.size(), savedAssignment.getId(), 
+                                                                verificationStartDate, verificationEndDate, verificationDates);
 
                                                 // Kiểm tra hợp đồng có bật verification không
                                                 boolean transitionToContract = verification != null

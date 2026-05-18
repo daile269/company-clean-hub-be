@@ -43,38 +43,41 @@ public class AssignmentMetricsServiceImpl implements AssignmentMetricsService {
             // Flush pending changes so queries below see the latest state
             entityManager.flush();
 
-            // workDays = VERIFIED work_schedules (with attendance not deleted) + standalone attendances (no WorkSchedule)
+            // workDays = VERIFIED work_schedules (with attendance not deleted) + standalone
+            // attendances (no WorkSchedule)
             List<WorkSchedule> allSchedules = workScheduleRepository.findByAssignmentId(assignmentId);
-            
-            // Only count VERIFIED WorkSchedules that still have valid attendance (not deleted)
-            int verifiedSchedules = (int) allSchedules.stream()
-                .filter(ws -> ws.getStatus() == WorkScheduleStatus.VERIFIED)
-                .filter(ws -> ws.getAttendanceDeleted() == null || !ws.getAttendanceDeleted())
-                .count();
 
-            // Count standalone attendances (attendance records without a corresponding WorkSchedule)
+            // Only count VERIFIED WorkSchedules that still have valid attendance (not
+            // deleted)
+            int verifiedSchedules = (int) allSchedules.stream()
+                    .filter(ws -> ws.getStatus() == WorkScheduleStatus.VERIFIED)
+                    .filter(ws -> ws.getAttendanceDeleted() == null || !ws.getAttendanceDeleted())
+                    .count();
+
+            // Count standalone attendances (attendance records without a corresponding
+            // WorkSchedule)
             List<Attendance> allAttendances = attendanceRepository.findByAssignmentId(assignmentId);
-            
+
             // Build set of attendance IDs that have WorkSchedule (including deleted ones)
             // We need to check both current link and attendanceDeleted flag
             Set<Long> wsAttendanceIds = allSchedules.stream()
-                .filter(ws -> ws.getAttendance() != null)
-                .map(ws -> ws.getAttendance().getId())
-                .collect(Collectors.toSet());
-            
+                    .filter(ws -> ws.getAttendance() != null)
+                    .map(ws -> ws.getAttendance().getId())
+                    .collect(Collectors.toSet());
+
             // Also find attendances that were unlinked (attendanceDeleted = true)
             // by matching date between WorkSchedule and Attendance
             Set<java.time.LocalDate> wsScheduledDates = allSchedules.stream()
-                .filter(ws -> ws.getAttendanceDeleted() != null && ws.getAttendanceDeleted())
-                .map(ws -> ws.getScheduledDate())
-                .collect(Collectors.toSet());
-            
+                    .filter(ws -> ws.getAttendanceDeleted() != null && ws.getAttendanceDeleted())
+                    .map(ws -> ws.getScheduledDate())
+                    .collect(Collectors.toSet());
+
             // For workDays: only count non-deleted standalone attendances
             int standaloneAttendancesForWork = (int) allAttendances.stream()
-                .filter(a -> a.getDeleted() == null || !a.getDeleted())
-                .filter(a -> !wsAttendanceIds.contains(a.getId()))
-                .filter(a -> !wsScheduledDates.contains(a.getDate())) // Exclude if has WorkSchedule by date
-                .count();
+                    .filter(a -> a.getDeleted() == null || !a.getDeleted())
+                    .filter(a -> !wsAttendanceIds.contains(a.getId()))
+                    .filter(a -> !wsScheduledDates.contains(a.getDate())) // Exclude if has WorkSchedule by date
+                    .count();
 
             int workDays = verifiedSchedules + standaloneAttendancesForWork;
 
@@ -85,11 +88,11 @@ public class AssignmentMetricsServiceImpl implements AssignmentMetricsService {
 
             assignmentRepository.updateMetrics(assignmentId, workDays, plannedDays);
 
-            log.info("Updated assignment metrics: assignmentId={}, workDays={}, plannedDays={} (preserved)", 
-                assignmentId, workDays, plannedDays);
+            log.info("Updated assignment metrics: assignmentId={}, workDays={}, plannedDays={} (preserved)",
+                    assignmentId, workDays, plannedDays);
         } catch (Exception e) {
-            log.error("Failed to update assignment metrics for assignmentId={}: {}", 
-                assignmentId, e.getMessage(), e);
+            log.error("Failed to update assignment metrics for assignmentId={}: {}",
+                    assignmentId, e.getMessage(), e);
         }
     }
 
