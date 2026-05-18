@@ -31,33 +31,26 @@ public class VerificationChecker {
      */
     public boolean requiresVerification(Assignment assignment) {
         
-        // Condition 0: Check if employee has started but NOT completed 5 NEW_EMPLOYEE_VERIFICATION photos
-        Long verifiedNewEmployeeCount = workScheduleRepository.countVerifiedSchedulesByEmployeeAndReason(
-                assignment.getEmployee().getId(), WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION);
-        if (verifiedNewEmployeeCount > 0 && verifiedNewEmployeeCount < 5) {
-            log.info("Assignment {} requires verification: employee {} has {} verified NEW_EMPLOYEE_VERIFICATION (< 5), needs to continue",
-                    assignment.getId(), assignment.getEmployee().getId(), verifiedNewEmployeeCount);
-            return true;
-        }
-
-        // Check approved verification — if employee already has an approved verification
-        // This includes: APPROVED, AUTO_APPROVED, BYPASS_APPROVED
+        // Check completed verification first. If employee has completed verification
+        // (BYPASS_APPROVED/APPROVED/AUTO_APPROVED), they NEVER need verification again,
+        // regardless of photo count. This ensures bypass approval is permanent.
         Long completedCount = verificationRepository.countCompletedVerificationsByEmployee(
                 assignment.getEmployee().getId());
         
-        // If employee has completed verification AND has 5+ photos, no new verification needed
-        if (completedCount > 0 && verifiedNewEmployeeCount >= 5) {
-            log.info("Assignment {} does NOT require verification: employee {} has {} approved verification(s) and {} verified photos (>= 5)",
-                    assignment.getId(), assignment.getEmployee().getId(), completedCount, verifiedNewEmployeeCount);
+        if (completedCount > 0) {
+            log.info("Assignment {} does NOT require verification: employee {} has {} completed verification(s) - bypass/approval is permanent",
+                    assignment.getId(), assignment.getEmployee().getId(), completedCount);
             return false;
         }
 
-        // If employee has completed verification but 0 photos (bypass approved without photos),
-        // still treat as completed - no new verification needed
-        if (completedCount > 0) {
-            log.info("Assignment {} does NOT require verification: employee {} has {} approved verification(s)",
-                    assignment.getId(), assignment.getEmployee().getId(), completedCount);
-            return false;
+        // Condition 0: Check if employee has started but NOT completed 5 NEW_EMPLOYEE_VERIFICATION photos
+        // This only applies to employees WITHOUT completed verification
+        Long verifiedNewEmployeeCount = workScheduleRepository.countVerifiedSchedulesByEmployeeAndReason(
+                assignment.getEmployee().getId(), WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION);
+        if (verifiedNewEmployeeCount > 0 && verifiedNewEmployeeCount < 5) {
+            log.info("Assignment {} requires verification: employee {} has {} verified NEW_EMPLOYEE_VERIFICATION (< 5), no completed verification, needs to continue",
+                    assignment.getId(), assignment.getEmployee().getId(), verifiedNewEmployeeCount);
+            return true;
         }
 
         // Condition 1: Completely new employee (never had any OTHER assignment)
