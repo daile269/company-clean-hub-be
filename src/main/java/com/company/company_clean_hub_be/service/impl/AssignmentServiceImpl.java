@@ -2906,8 +2906,12 @@ public class AssignmentServiceImpl implements AssignmentService {
                 Assignment assignment = assignmentRepository.findById(assignmentId)
                                 .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
 
-                // Validate: assignment phải đang TERMINATED
-                if (assignment.getStatus() != AssignmentStatus.TERMINATED) {
+                boolean hasScheduledTermination = (assignment.getStatus() == AssignmentStatus.IN_PROGRESS
+                                || assignment.getStatus() == AssignmentStatus.SCHEDULED)
+                                && assignment.getEndDate() != null;
+
+                // Validate: assignment phải đã kết thúc hoặc đang có lịch tạm dừng
+                if (assignment.getStatus() != AssignmentStatus.TERMINATED && !hasScheduledTermination) {
                         log.error("Cannot rollback assignment with status {}", assignment.getStatus());
                         throw new AppException(ErrorCode.INVALID_ASSIGNMENT_STATUS);
                 }
@@ -2918,9 +2922,10 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 && maxPositions != null
                                 && assignment.getAssignmentType() != AssignmentType.SUPPORT) {
                         Long activeEmployeeCount = assignmentRepository
-                                        .countDistinctActiveEmployeesByContractExcludingType(
+                                        .countDistinctActiveEmployeesByContractExcludingTypeAndAssignmentIdNot(
                                                         contract.getId(),
-                                                        AssignmentType.SUPPORT);
+                                                        AssignmentType.SUPPORT,
+                                                        assignmentId);
 
                         if (activeEmployeeCount != null && activeEmployeeCount >= maxPositions) {
                                 log.warn("[ROLLBACK_TERMINATION] Cannot rollback assignmentId={}: contractId={} is full (activeEmployees={}, maxPositions={})",
@@ -2935,13 +2940,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 if (backups == null || backups.isEmpty()) {
                         log.warn("[ROLLBACK_TERMINATION] No backups found for assignmentId={}", assignmentId);
-                        return com.company.company_clean_hub_be.dto.response.RollbackTerminationResponse.builder()
-                                        .success(false)
-                                        .restoredCount(0)
-                                        .assignmentId(assignmentId)
-                                        .employeeName(assignment.getEmployee().getName())
-                                        .message("Không tìm thấy backup attendance để khôi phục")
-                                        .build();
+                        backups = List.of();
                 }
 
                 log.info("[ROLLBACK_TERMINATION] Found {} backups to restore for assignmentId={}",
@@ -2972,17 +2971,23 @@ public class AssignmentServiceImpl implements AssignmentService {
                         restored++;
                 }
 
-                // Khôi phục assignment về IN_PROGRESS
-                assignment.setStatus(AssignmentStatus.IN_PROGRESS);
+                // Khôi phục assignment về trạng thái phù hợp với ngày bắt đầu
+                AssignmentStatus restoredStatus = assignment.getStartDate().isAfter(LocalDate.now())
+                                ? AssignmentStatus.SCHEDULED
+                                : AssignmentStatus.IN_PROGRESS;
+                assignment.setStatus(restoredStatus);
                 assignment.setEndDate(null);
 
                 // Xóa phần description về lý do kết thúc (nếu có)
                 String desc = assignment.getDescription();
-                if (desc != null && desc.contains("Kết thúc:")) {
-                        int idx = desc.lastIndexOf(" | Kết thúc:");
+                if (desc != null && (desc.contains("Kết thúc:") || desc.contains("Kết thúc (lên lịch):"))) {
+                        int idx = Math.max(
+                                        desc.lastIndexOf(" | Kết thúc:"),
+                                        desc.lastIndexOf(" | Kết thúc (lên lịch):"));
                         if (idx > 0) {
                                 assignment.setDescription(desc.substring(0, idx));
-                        } else if (desc.startsWith("Kết thúc:")) {
+                        } else if (desc.startsWith("Kết thúc:")
+                                        || desc.startsWith("Kết thúc (lên lịch):")) {
                                 assignment.setDescription("");
                         }
                 }
