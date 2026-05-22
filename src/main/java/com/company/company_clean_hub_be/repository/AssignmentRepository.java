@@ -173,6 +173,14 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
                         @Param("endDate") java.time.LocalDate endDate,
                         @Param("excludedType") com.company.company_clean_hub_be.entity.AssignmentType excludedType);
 
+        @Query("SELECT COUNT(DISTINCT a.employee.id) FROM Assignment a " +
+                        "WHERE a.contract.id = :contractId " +
+                        "AND a.status IN ('IN_PROGRESS', 'SCHEDULED') " +
+                        "AND (:excludedType IS NULL OR a.assignmentType <> :excludedType)")
+        Long countDistinctActiveEmployeesByContractExcludingType(
+                        @Param("contractId") Long contractId,
+                        @Param("excludedType") com.company.company_clean_hub_be.entity.AssignmentType excludedType);
+
         @Query("SELECT a FROM Assignment a " +
                         "WHERE a.contract.id = :contractId " +
                         "AND (:status IS NULL OR a.status = :status) " +

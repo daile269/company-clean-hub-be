@@ -2918,9 +2918,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 && maxPositions != null
                                 && assignment.getAssignmentType() != AssignmentType.SUPPORT) {
                         Long activeEmployeeCount = assignmentRepository
-                                        .countDistinctActiveEmployeesByContractBeforeExcludingType(
+                                        .countDistinctActiveEmployeesByContractExcludingType(
                                                         contract.getId(),
-                                                        LocalDate.now(),
                                                         AssignmentType.SUPPORT);
 
                         if (activeEmployeeCount != null && activeEmployeeCount >= maxPositions) {
