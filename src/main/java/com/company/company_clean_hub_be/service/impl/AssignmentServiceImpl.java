@@ -2912,6 +2912,24 @@ public class AssignmentServiceImpl implements AssignmentService {
                         throw new AppException(ErrorCode.INVALID_ASSIGNMENT_STATUS);
                 }
 
+                Contract contract = assignment.getContract();
+                Integer maxPositions = contract != null ? contract.getNumberOfEmployees() : null;
+                if (contract != null
+                                && maxPositions != null
+                                && assignment.getAssignmentType() != AssignmentType.SUPPORT) {
+                        Long activeEmployeeCount = assignmentRepository
+                                        .countDistinctActiveEmployeesByContractBeforeExcludingType(
+                                                        contract.getId(),
+                                                        LocalDate.now(),
+                                                        AssignmentType.SUPPORT);
+
+                        if (activeEmployeeCount != null && activeEmployeeCount >= maxPositions) {
+                                log.warn("[ROLLBACK_TERMINATION] Cannot rollback assignmentId={}: contractId={} is full (activeEmployees={}, maxPositions={})",
+                                                assignmentId, contract.getId(), activeEmployeeCount, maxPositions);
+                                throw new AppException(ErrorCode.ROLLBACK_TERMINATION_CONTRACT_FULL);
+                        }
+                }
+
                 // Tìm các backup attendance
                 List<com.company.company_clean_hub_be.entity.DeletedAttendanceBackup> backups = deletedAttendanceBackupRepository
                                 .findByAssignmentId(assignmentId);
