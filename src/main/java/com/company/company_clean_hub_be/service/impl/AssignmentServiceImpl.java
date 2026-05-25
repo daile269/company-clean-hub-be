@@ -1538,6 +1538,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                         // Lưu attendance bị xóa
                         AttendanceResponse deletedAttendanceResponse = mapAttendanceToResponse(deletedAttendance);
                         deletedAttendances.add(deletedAttendanceResponse);
+
+                        // Sync WorkSchedule liên kết trước khi xóa attendance
+                        // (đánh dấu attendanceDeleted=true để metrics không đếm WorkSchedule này)
+                        workScheduleRepository.findByAttendanceId(deletedAttendance.getId()).ifPresent(ws -> {
+                                ws.setAttendance(null);
+                                ws.setAttendanceDeleted(true);
+                                ws.setSyncNote("Attendance deleted by temporary reassignment at " + LocalDateTime.now());
+                                ws.setLastSyncedAt(LocalDateTime.now());
+                                workScheduleRepository.save(ws);
+                                log.info("Synced WorkSchedule id={} with attendance deletion (temporary reassignment), set attendanceDeleted=true",
+                                                ws.getId());
+                        });
+
                         attendanceRepository.delete(deletedAttendance);
                         log.info("Deleted old attendance id={} for replacedEmployeeId={} on date={}",
                                         deletedAttendance.getId(), request.getReplacedEmployeeId(), date);
