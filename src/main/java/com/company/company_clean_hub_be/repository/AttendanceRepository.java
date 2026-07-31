@@ -75,6 +75,25 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                         Pageable pageable);
 
         @Query("SELECT a FROM Attendance a " +
+                        "LEFT JOIN a.assignment asn " +
+                        "LEFT JOIN asn.employee e " +
+                        "LEFT JOIN asn.contract.customer c " +
+                        "WHERE c.id IN :customerIds " +
+                        "AND (a.deleted IS NULL OR a.deleted = false) " +
+                        "AND (:keyword IS NULL OR :keyword = '' OR " +
+                        "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(c.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+                        "AND (:month IS NULL OR MONTH(a.date) = :month) " +
+                        "AND (:year IS NULL OR YEAR(a.date) = :year)")
+        Page<Attendance> findByFiltersAndCustomerIds(
+                        @Param("keyword") String keyword,
+                        @Param("month") Integer month,
+                        @Param("year") Integer year,
+                        @Param("customerIds") List<Long> customerIds,
+                        Pageable pageable);
+
+        @Query("SELECT a FROM Attendance a " +
                         "WHERE a.assignment.employee.id = :employeeId " +
                         "AND (a.deleted IS NULL OR a.deleted = false) " +
                         "AND (:month IS NULL OR MONTH(a.date) = :month) " +

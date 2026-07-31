@@ -36,6 +36,7 @@ import java.util.ArrayList;
 public class AssignmentServiceImpl implements AssignmentService {
 
         private final AssignmentRepository assignmentRepository;
+        private final com.company.company_clean_hub_be.repository.CustomerAssignmentRepository customerAssignmentRepository;
         private final EmployeeRepository employeeRepository;
         private final CustomerRepository customerRepository;
         private final ContractRepository contractRepository;
@@ -64,7 +65,34 @@ public class AssignmentServiceImpl implements AssignmentService {
         @Override
         public PageResponse<AssignmentResponse> getAssignmentsWithFilter(String keyword, int page, int pageSize) {
                 Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
-                Page<Assignment> assignmentPage = assignmentRepository.findByFilters(keyword, pageable);
+                
+                String username = "anonymous";
+                try {
+                        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder
+                                        .getContext().getAuthentication();
+                        if (auth != null && auth.getName() != null) username = auth.getName();
+                } catch (Exception ignored) {
+                }
+                User currentUser = userRepository.findByUsername(username).orElse(null);
+
+                Page<Assignment> assignmentPage;
+                if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+                        if (assignedIds.isEmpty()) {
+                                return PageResponse.<AssignmentResponse>builder()
+                                                .content(new ArrayList<>())
+                                                .page(0)
+                                                .pageSize(pageSize)
+                                                .totalElements(0)
+                                                .totalPages(0)
+                                                .first(true)
+                                                .last(true)
+                                                .build();
+                        }
+                        assignmentPage = assignmentRepository.findByFiltersAndIds(keyword, assignedIds, pageable);
+                } else {
+                        assignmentPage = assignmentRepository.findByFilters(keyword, pageable);
+                }
 
                 List<AssignmentResponse> items = assignmentPage.getContent().stream()
                                 .map(this::mapToResponse)
@@ -1139,7 +1167,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 User currentUser = userRepository.findByUsername(username).orElse(null);
 
                 // Nếu người thực hiện là Quản lý vùng (code = 'QLV') thì chỉ được điều động
-                // thay thế từ hôm nay trở về sau; nếu là hôm nay thì chỉ được trước 08:00
+                // thay thế từ hôm nay trở về sau; nếu là hôm nay thì chỉ được trễ nhất 1 tiếng trước giờ làm quy định
                 if (currentUser != null && currentUser.getRole() != null
                                 && "QLV".equalsIgnoreCase(currentUser.getRole().getCode())) {
                         LocalDate today = LocalDate.now();
@@ -1149,10 +1177,30 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         log.warn("QLV cannot perform temporary reassignment for past date: {}", date);
                                         throw new AppException(ErrorCode.FORBIDDEN);
                                 }
-                                if (date.isEqual(today) && !now.isBefore(LocalTime.of(8, 0))) {
-                                        log.warn("QLV cannot perform temporary reassignment for today after 08:00: now={}",
-                                                        now);
-                                        throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME);
+                                if (date.isEqual(today)) {
+                                        Contract contractForDate = null;
+                                        if (request.getReplacedAssignmentId() != null) {
+                                                Assignment replacedAssignmentForContract = assignmentRepository
+                                                                .findById(request.getReplacedAssignmentId()).orElse(null);
+                                                if (replacedAssignmentForContract != null) {
+                                                        contractForDate = replacedAssignmentForContract.getContract();
+                                                }
+                                        } else {
+                                                List<Assignment> activeAssignmentsForDate = assignmentRepository
+                                                                .findActiveAssignmentsByEmployee(request.getReplacedEmployeeId(), date);
+                                                if (!activeAssignmentsForDate.isEmpty()) {
+                                                        contractForDate = activeAssignmentsForDate.get(0).getContract();
+                                                }
+                                        }
+
+                                        LocalTime workStartTime = (contractForDate != null) ? contractForDate.getWorkStartTime() : null;
+                                        LocalTime cutoffTime = (workStartTime != null) ? workStartTime.minusHours(1) : LocalTime.of(8, 0);
+
+                                        if (now.isAfter(cutoffTime)) {
+                                                log.warn("QLV cannot perform temporary reassignment for today after cutoff time: now={}, cutoffTime={}, workStartTime={}",
+                                                                now, cutoffTime, workStartTime);
+                                                throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME);
+                                        }
                                 }
                         }
                 }
@@ -3095,8 +3143,18 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 conflictContract.getWorkStartTime(), conflictContract.getWorkEndTime(),
                                 dayName);
 
-                // Gửi notification cho tất cả QLT1
-                List<User> managers = userRepository.findActiveUsersByRoleCode("QLT1");
+                // Gửi notification cho tất cả QLT1 và các QLT2 được phân công quản lý khách hàng này
+                List<User> managers = new java.util.ArrayList<>(userRepository.findActiveUsersByRoleCode("QLT1"));
+                if (newContract.getCustomer() != null) {
+                        List<com.company.company_clean_hub_be.entity.CustomerAssignment> customerAssigns = customerAssignmentRepository.findByCustomerId(newContract.getCustomer().getId());
+                        for (com.company.company_clean_hub_be.entity.CustomerAssignment ca : customerAssigns) {
+                                if (ca.getManager() != null && ca.getManager().getRole() != null && "QLT2".equalsIgnoreCase(ca.getManager().getRole().getCode())) {
+                                        if (managers.stream().noneMatch(m -> m.getId().equals(ca.getManager().getId()))) {
+                                                managers.add(ca.getManager());
+                                        }
+                                }
+                        }
+                }
                 log.warn("[NOTIFY][WORK_TIME_CONFLICT] Detected: employeeId={}, newContractId={}, conflictContractId={}, day={}",
                                 employeeId, newContract.getId(), conflictContract.getId(), conflictDay);
                 log.info("[NOTIFY][WORK_TIME_CONFLICT] Found {} manager(s) with role QLT1 to notify", managers.size());

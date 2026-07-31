@@ -37,6 +37,7 @@ public class RatingServiceImpl implements RatingService {
     private final AssignmentRepository assignmentRepository;
     private final com.company.company_clean_hub_be.service.UserService userService;
     private final com.company.company_clean_hub_be.repository.UserRepository userRepository;
+    private final com.company.company_clean_hub_be.repository.CustomerAssignmentRepository customerAssignmentRepository;
 
     @Override
     @Transactional
@@ -205,12 +206,30 @@ public class RatingServiceImpl implements RatingService {
     @Override
     public PageResponse<RatingResponse> getRatingsWithFilter(Long contractId, Long assignmentId, Long customerId, Long employeeId, int page, int pageSize) {
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, pageSize), Sort.by(Sort.Direction.DESC, "createdAt"));
+        
+        String currentUsername = userService.getCurrentUsername();
+        User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+        List<Long> assignedCustomerIds = null;
+        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            assignedCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+        }
+
+        final List<Long> finalCustomerIds = assignedCustomerIds;
+
         Specification<Rating> spec = (root, query, cb) -> {
             List<Predicate> preds = new ArrayList<>();
             if (contractId != null) preds.add(cb.equal(root.get("contract").get("id"), contractId));
             if (assignmentId != null) preds.add(cb.equal(root.get("assignment").get("id"), assignmentId));
             if (employeeId != null) preds.add(cb.equal(root.get("employee").get("id"), employeeId));
-            if (customerId != null) preds.add(cb.equal(root.get("contract").get("customer").get("id"), customerId));
+            if (customerId != null) {
+                preds.add(cb.equal(root.get("contract").get("customer").get("id"), customerId));
+            }
+            if (finalCustomerIds != null) {
+                if (finalCustomerIds.isEmpty()) {
+                    return cb.disjunction();
+                }
+                preds.add(root.get("contract").get("customer").get("id").in(finalCustomerIds));
+            }
             if (preds.isEmpty()) return cb.conjunction();
             return cb.and(preds.toArray(new Predicate[0]));
         };

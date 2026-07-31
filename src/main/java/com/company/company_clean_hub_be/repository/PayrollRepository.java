@@ -39,6 +39,29 @@ public interface PayrollRepository extends JpaRepository<Payroll, Long> {
                         @Param("isPaid") Boolean isPaid,
                         Pageable pageable);
 
+        @Query("SELECT DISTINCT p FROM Payroll p " +
+                        "LEFT JOIN p.employee e " +
+                        "JOIN p.attendances a " +
+                        "JOIN a.assignment asn " +
+                        "JOIN asn.contract c " +
+                        "JOIN c.customer cust " +
+                        "WHERE cust.id IN :customerIds " +
+                        "AND (:keyword IS NULL OR :keyword = '' OR " +
+                        "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+                        "AND (:month IS NULL OR MONTH(p.createdAt) = :month) " +
+                        "AND (:year IS NULL OR YEAR(p.createdAt) = :year) " +
+                        "AND (:isPaid IS NULL OR " +
+                        "(:isPaid = true AND p.status = com.company.company_clean_hub_be.entity.PayrollStatus.PAID) OR " +
+                        "(:isPaid = false AND p.status IN (com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID, com.company.company_clean_hub_be.entity.PayrollStatus.PARTIAL_PAID)))")
+        Page<Payroll> findByFiltersAndCustomerIds(
+                        @Param("keyword") String keyword,
+                        @Param("month") Integer month,
+                        @Param("year") Integer year,
+                        @Param("isPaid") Boolean isPaid,
+                        @Param("customerIds") List<Long> customerIds,
+                        Pageable pageable);
+
         @Query("SELECT COUNT(p), " +
                         "SUM(CASE WHEN p.status = com.company.company_clean_hub_be.entity.PayrollStatus.PAID THEN 1 ELSE 0 END), " +
                         "SUM(CASE WHEN p.status = com.company.company_clean_hub_be.entity.PayrollStatus.UNPAID THEN 1 ELSE 0 END), " +

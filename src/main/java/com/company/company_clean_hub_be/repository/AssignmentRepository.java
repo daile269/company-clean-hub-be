@@ -30,6 +30,21 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
                         @Param("keyword") String keyword,
                         Pageable pageable);
 
+        @Query("SELECT a FROM Assignment a " +
+                        "LEFT JOIN a.employee e " +
+                        "LEFT JOIN a.contract cont " +
+                        "LEFT JOIN cont.customer c " +
+                        "WHERE c.id IN :ids AND (:keyword IS NULL OR :keyword = '' OR " +
+                        "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(c.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(c.customerCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "CAST(a.id AS string) LIKE CONCAT('%', :keyword, '%'))")
+        Page<Assignment> findByFiltersAndIds(
+                        @Param("keyword") String keyword,
+                        @Param("ids") java.util.List<Long> ids,
+                        Pageable pageable);
+
         @Query("SELECT a FROM Assignment a WHERE a.employee.id = :employeeId " +
                         "AND a.startDate <= :endDate " +
                         "ORDER BY a.startDate DESC")
@@ -264,4 +279,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
                         @Param("startTime") java.time.LocalTime startTime,
                         @Param("endTime") java.time.LocalTime endTime,
                         @Param("excludeId") Long excludeId);
+
+        @Query("SELECT DISTINCT a.employee.id FROM Assignment a WHERE a.contract.customer.id IN :customerIds")
+        List<Long> findEmployeeIdsByCustomerIds(@Param("customerIds") List<Long> customerIds);
 }

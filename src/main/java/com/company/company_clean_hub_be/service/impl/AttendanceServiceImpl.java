@@ -17,6 +17,7 @@ import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.AttendanceRepository;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
+import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
 import com.company.company_clean_hub_be.dto.request.AttendanceCaptureRequest;
 
 import java.time.LocalDate;
@@ -69,6 +70,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final WorkScheduleService workScheduleService;
     private final WorkScheduleRepository workScheduleRepository;
     private final AssignmentMetricsService assignmentMetricsService;
+    private final CustomerAssignmentRepository customerAssignmentRepository;
 
     @Override
     public AttendanceResponse createAttendance(AttendanceRequest request) {
@@ -220,7 +222,33 @@ public class AttendanceServiceImpl implements AttendanceService {
     public PageResponse<AttendanceResponse> getAttendancesWithFilter(String keyword, Integer month, Integer year, int page, int pageSize) {
         log.info("getAttendancesWithFilter requested: keyword='{}', month={}, year={}, page={}, pageSize={}", keyword, month, year, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("date").descending());
-        Page<Attendance> attendancePage = attendanceRepository.findByFilters(keyword, month, year, pageable);
+        
+        String username = "anonymous";
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) username = auth.getName();
+        } catch (Exception ignored) {}
+        User currentUser = userRepository.findByUsername(username).orElse(null);
+
+        Page<Attendance> attendancePage;
+        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+            if (assignedIds.isEmpty()) {
+                return PageResponse.<AttendanceResponse>builder()
+                        .content(new ArrayList<>())
+                        .page(0)
+                        .pageSize(pageSize)
+                        .totalElements(0)
+                        .totalPages(0)
+                        .first(true)
+                        .last(true)
+                        .build();
+            }
+            attendancePage = attendanceRepository.findByFiltersAndCustomerIds(keyword, month, year, assignedIds, pageable);
+        } else {
+            attendancePage = attendanceRepository.findByFilters(keyword, month, year, pageable);
+        }
 
         List<AttendanceResponse> attendances = attendancePage.getContent().stream()
                 .map(this::mapToResponse)

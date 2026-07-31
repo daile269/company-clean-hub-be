@@ -6,6 +6,8 @@ import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.RatingRepository;
 import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
+import com.company.company_clean_hub_be.repository.InvoiceRepository;
+import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.entity.Rating;
 import com.company.company_clean_hub_be.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,8 @@ public class SecurityCheck {
     private final AssignmentRepository assignmentRepository;
     private final RatingRepository ratingRepository;
     private final CustomerAssignmentRepository customerAssignmentRepository;
+    private final InvoiceRepository invoiceRepository;
+    private final UserRepository userRepository;
 
     public boolean isEmployeeSelf(Long employeeId) {
         if (employeeId == null) return false;
@@ -180,5 +184,50 @@ public class SecurityCheck {
                     log.info("[SECURITY] canEmployeeReviewManager - assignmentId={} not found", assignmentId);
                     return false;
                 });
+    }
+
+    public boolean isCustomerManagedByCurrentUser(Long customerId) {
+        if (customerId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
+        if (currentUser == null) return false;
+        
+        if (currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            return customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), customerId);
+        }
+        return true;
+    }
+
+    public boolean isAssignmentManagedByCurrentUser(Long assignmentId) {
+        if (assignmentId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
+        if (currentUser == null) return false;
+
+        if (currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            return assignmentRepository.findById(assignmentId)
+                    .map(a -> a.getContract() != null && a.getContract().getCustomer() != null &&
+                            customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), a.getContract().getCustomer().getId()))
+                    .orElse(false);
+        }
+        return true;
+    }
+
+    public boolean isInvoiceManagedByCurrentUser(Long invoiceId) {
+        if (invoiceId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
+        if (currentUser == null) return false;
+
+        if (currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            return invoiceRepository.findById(invoiceId)
+                    .map(i -> i.getContract() != null && i.getContract().getCustomer() != null &&
+                            customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), i.getContract().getCustomer().getId()))
+                    .orElse(false);
+        }
+        return true;
     }
 }
