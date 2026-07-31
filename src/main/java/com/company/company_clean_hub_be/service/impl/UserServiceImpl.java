@@ -12,6 +12,8 @@ import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.RoleRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
+import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
+import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,10 +41,30 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CustomerAssignmentRepository customerAssignmentRepository;
+    private final AssignmentRepository assignmentRepository;
 
     @Override
     public List<UserResponse> getAllUsers() {
         log.info("getAllUsers requested by {}", getCurrentUsername());
+        String currentUsername = getCurrentUsername();
+        User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            List<Long> customerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+            if (customerIds.isEmpty()) {
+                return new java.util.ArrayList<>();
+            }
+            List<Long> employeeIds = assignmentRepository.findEmployeeIdsByCustomerIds(customerIds);
+            List<Long> allowedUserIds = new java.util.ArrayList<>();
+            allowedUserIds.addAll(customerIds);
+            allowedUserIds.addAll(employeeIds);
+            if (allowedUserIds.isEmpty()) {
+                return new java.util.ArrayList<>();
+            }
+            return userRepository.findAllById(allowedUserIds).stream()
+                    .map(this::mapToResponse)
+                    .collect(Collectors.toList());
+        }
         return userRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -53,7 +75,43 @@ public class UserServiceImpl implements UserService {
         log.info("getUsersWithFilter requested by {}: keyword='{}', roleId={}, page={}, pageSize={}",
                 getCurrentUsername(), keyword, roleId, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
-        Page<User> userPage = userRepository.findByFilters(keyword, roleId, pageable);
+        
+        String currentUsername = getCurrentUsername();
+        User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+
+        Page<User> userPage;
+        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            List<Long> customerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+            if (customerIds.isEmpty()) {
+                return PageResponse.<UserResponse>builder()
+                        .content(new java.util.ArrayList<>())
+                        .page(0)
+                        .pageSize(pageSize)
+                        .totalElements(0)
+                        .totalPages(0)
+                        .first(true)
+                        .last(true)
+                        .build();
+            }
+            List<Long> employeeIds = assignmentRepository.findEmployeeIdsByCustomerIds(customerIds);
+            List<Long> allowedUserIds = new java.util.ArrayList<>();
+            allowedUserIds.addAll(customerIds);
+            allowedUserIds.addAll(employeeIds);
+            if (allowedUserIds.isEmpty()) {
+                return PageResponse.<UserResponse>builder()
+                        .content(new java.util.ArrayList<>())
+                        .page(0)
+                        .pageSize(pageSize)
+                        .totalElements(0)
+                        .totalPages(0)
+                        .first(true)
+                        .last(true)
+                        .build();
+            }
+            userPage = userRepository.findByFiltersAndUserIds(keyword, roleId, allowedUserIds, pageable);
+        } else {
+            userPage = userRepository.findByFilters(keyword, roleId, pageable);
+        }
 
         List<UserResponse> users = userPage.getContent().stream()
                 .map(this::mapToResponse)

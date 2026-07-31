@@ -51,6 +51,29 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
                                 @Param("year") Integer year,
                                 Pageable pageable);
 
+    @Query("SELECT i FROM Invoice i " +
+            "LEFT JOIN i.contract c " +
+            "LEFT JOIN c.customer cust " +
+            "WHERE cust.id IN :customerIds " +
+            "AND (:customerCode IS NULL OR :customerCode = '' OR cust.customerCode = :customerCode) " +
+            "AND (:month IS NULL OR i.invoiceMonth = :month) " +
+            "AND (:year IS NULL OR i.invoiceYear = :year) " +
+            "ORDER BY i.invoiceYear DESC, i.invoiceMonth DESC")
+    Page<Invoice> findByFiltersAndCustomerIds(@Param("customerCode") String customerCode,
+                                @Param("month") Integer month,
+                                @Param("year") Integer year,
+                                @Param("customerIds") List<Long> customerIds,
+                                Pageable pageable);
+
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+            "LEFT JOIN FETCH i.invoiceLines l " +
+            "LEFT JOIN FETCH i.contract c " +
+            "LEFT JOIN FETCH c.customer cust " +
+            "WHERE i.invoiceMonth = :month AND i.invoiceYear = :year " +
+            "AND cust.id IN :customerIds " +
+            "ORDER BY cust.name")
+    List<Invoice> findAllWithLinesByMonthAndYearAndCustomerIds(@Param("month") Integer month, @Param("year") Integer year, @Param("customerIds") List<Long> customerIds);
+
     // Lấy tất cả hóa đơn cùng invoice lines + contract + customer để xuất tổng hợp (theo month/year)
     @Query("SELECT DISTINCT i FROM Invoice i " +
             "LEFT JOIN FETCH i.invoiceLines l " +

@@ -113,6 +113,7 @@ public class EmployeeController {
     }
 
     @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority('EMPLOYEE_CREATE', 'EMPLOYEE_EDIT')")
     public ApiResponse<List<EmployeeImage>> uploadEmployeeImages(
             @PathVariable Long id,
             @RequestParam("file") MultipartFile[] files) throws IOException {
@@ -141,6 +142,7 @@ public class EmployeeController {
     }
 
     @PostMapping(value = "/{id}/images/single", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority('EMPLOYEE_CREATE', 'EMPLOYEE_EDIT')")
     public ApiResponse<EmployeeImage> uploadEmployeeImage(@PathVariable Long id,
             @RequestParam("file") MultipartFile file) throws IOException {
 
@@ -158,6 +160,7 @@ public class EmployeeController {
     }
 
     @PutMapping(value = "/{id}/images/{imageId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_EDIT')")
     public ApiResponse<EmployeeImage> replaceEmployeeImage(@PathVariable Long id,
             @PathVariable Long imageId,
             @RequestParam("file") MultipartFile file) throws IOException {
@@ -176,6 +179,7 @@ public class EmployeeController {
     }
 
     @DeleteMapping("/{id}/images/{imageId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority('EMPLOYEE_EDIT', 'EMPLOYEE_DELETE')")
     public ApiResponse<Void> deleteEmployeeImage(@PathVariable Long id,
             @PathVariable Long imageId) throws IOException {
         log.info("Start deleteEmployeeImage: employeeId={}, imageId={}", id, imageId);
@@ -191,6 +195,7 @@ public class EmployeeController {
     }
 
     @DeleteMapping("/{id}/images")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority('EMPLOYEE_EDIT', 'EMPLOYEE_DELETE')")
     public ApiResponse<Void> deleteAllEmployeeImages(@PathVariable Long id) throws IOException {
         log.info("Start deleteAllEmployeeImages: employeeId={}", id);
 

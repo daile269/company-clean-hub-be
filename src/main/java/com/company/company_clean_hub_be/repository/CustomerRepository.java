@@ -9,22 +9,34 @@ import org.springframework.data.repository.query.Param;
 import com.company.company_clean_hub_be.entity.Customer;
 
 public interface CustomerRepository extends JpaRepository<Customer, Long> {
-    
-    @Query("SELECT c FROM Customer c WHERE " +
+
+        @Query("SELECT c FROM Customer c WHERE " +
+                        "(:keyword IS NULL OR :keyword = '' OR " +
+                        "LOWER(c.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(c.customerCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(c.phone) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(c.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+                        "LOWER(c.taxCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+        Page<Customer> findByFilters(
+                        @Param("keyword") String keyword,
+                        Pageable pageable);
+
+    @Query("SELECT c FROM Customer c WHERE c.id IN :ids AND " +
            "(:keyword IS NULL OR :keyword = '' OR " +
            "LOWER(c.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(c.customerCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(c.phone) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(c.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(c.taxCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
-    Page<Customer> findByFilters(
+    Page<Customer> findByFiltersAndIds(
             @Param("keyword") String keyword,
+            @Param("ids") java.util.List<Long> ids,
             Pageable pageable
     );
 
-    java.util.Optional<Customer> findByCustomerCode(String customerCode);
-    
-    // Phương thức để lấy mã khách hàng lớn nhất
-    @Query("SELECT c.customerCode FROM Customer c WHERE c.customerCode LIKE 'KH%' ORDER BY c.customerCode DESC")
-    java.util.List<String> findTopByCustomerCodeStartingWithKH(Pageable pageable);
+        java.util.Optional<Customer> findByCustomerCode(String customerCode);
+
+        // Phương thức để lấy mã khách hàng lớn nhất
+        @Query("SELECT c.customerCode FROM Customer c WHERE c.customerCode LIKE 'KH%' ORDER BY c.customerCode DESC")
+        java.util.List<String> findTopByCustomerCodeStartingWithKH(Pageable pageable);
 }

@@ -57,6 +57,7 @@ public class PayrollServiceImpl implements PayrollService {
         private final UserRepository userRepository;
         private final EmployeeRepository employeeRepository;
         private final PaymentHistoryRepository paymentHistoryRepository;
+        private final com.company.company_clean_hub_be.repository.CustomerAssignmentRepository customerAssignmentRepository;
 
         @Override
         public List<PayrollAssignmentResponse> calculatePayroll(PayrollRequest request) {
@@ -1073,7 +1074,6 @@ public class PayrollServiceImpl implements PayrollService {
                 if (attendances == null) {
                         attendances = attendanceRepository.findByAssignmentId(assignment.getId());
                 }
-
                 long count = attendances.stream()
                                 .filter(a -> a.getDate() != null && !a.getDate().isAfter(today) && !a.getDeleted())
                                 .count();
@@ -1411,10 +1411,29 @@ public class PayrollServiceImpl implements PayrollService {
         @Override
         public List<PayrollResponse> getAllPayrolls() {
                 log.info("getAllPayrolls requested");
-                List<PayrollResponse> result = payrollRepository.findAll().stream()
+                String currentUsername = userService.getCurrentUsername();
+                User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+                List<Long> assignedCustomerIds = null;
+                if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        assignedCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+                }
+                
+                List<Payroll> rawPayrolls;
+                if (assignedCustomerIds != null) {
+                        if (assignedCustomerIds.isEmpty()) {
+                                return new ArrayList<>();
+                        }
+                        Page<Payroll> payrollPage = payrollRepository.findByFiltersAndCustomerIds(null, null, null, null, assignedCustomerIds, Pageable.unpaged());
+                        rawPayrolls = payrollPage.getContent();
+                } else {
+                        rawPayrolls = payrollRepository.findAll();
+                }
+
+                final List<Long> finalAssignedIds = assignedCustomerIds;
+                List<PayrollResponse> result = rawPayrolls.stream()
                                 .map(p -> {
                                         LocalDateTime createdAt = p.getCreatedAt();
-                                        return mapToResponse(p, createdAt.getMonthValue(), createdAt.getYear(), null);
+                                        return mapToResponse(p, createdAt.getMonthValue(), createdAt.getYear(), null, finalAssignedIds);
                                 })
                                 .collect(Collectors.toList());
                 log.info("getAllPayrolls completed: count={}", result.size());
@@ -1452,12 +1471,36 @@ public class PayrollServiceImpl implements PayrollService {
                 }
 
                 Pageable pageable = PageRequest.of(page, pageSize, sort);
-                Page<Payroll> payrollPage = payrollRepository.findByFilters(keyword, month, year, isPaid, pageable);
+                String currentUsername = userService.getCurrentUsername();
+                User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+                List<Long> assignedCustomerIds = null;
+                if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        assignedCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+                }
 
+                Page<Payroll> payrollPage;
+                if (assignedCustomerIds != null) {
+                        if (assignedCustomerIds.isEmpty()) {
+                                return PageResponse.<PayrollResponse>builder()
+                                                .content(new ArrayList<>())
+                                                .page(0)
+                                                .pageSize(pageSize)
+                                                .totalElements(0)
+                                                .totalPages(0)
+                                                .first(true)
+                                                .last(true)
+                                                .build();
+                        }
+                        payrollPage = payrollRepository.findByFiltersAndCustomerIds(keyword, month, year, isPaid, assignedCustomerIds, pageable);
+                } else {
+                        payrollPage = payrollRepository.findByFilters(keyword, month, year, isPaid, pageable);
+                }
+
+                final List<Long> finalAssignedIds = assignedCustomerIds;
                 List<PayrollResponse> payrolls = payrollPage.getContent().stream()
                                 .map(p -> {
                                         LocalDateTime createdAt = p.getCreatedAt();
-                                        return mapToResponse(p, createdAt.getMonthValue(), createdAt.getYear(), null);
+                                        return mapToResponse(p, createdAt.getMonthValue(), createdAt.getYear(), null, finalAssignedIds);
                                 })
                                 .collect(Collectors.toList());
 
@@ -1481,9 +1524,32 @@ public class PayrollServiceImpl implements PayrollService {
                 log.info("getPayrollOverview requested: keyword='{}', month={}, year={}, isPaid={}",
                                 keyword, month, year, isPaid);
 
+                String currentUsername = userService.getCurrentUsername();
+                User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+                List<Long> assignedCustomerIds = null;
+                if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        assignedCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+                }
+
                 // Lấy toàn bộ payroll theo cùng filter như danh sách, không phân trang
-                Page<Payroll> payrollPage = payrollRepository.findByFilters(
-                                keyword, month, year, isPaid, Pageable.unpaged());
+                Page<Payroll> payrollPage;
+                if (assignedCustomerIds != null) {
+                        if (assignedCustomerIds.isEmpty()) {
+                                return PayrollOverviewResponse.builder()
+                                                .totalPayrolls(0L)
+                                                .paidPayrolls(0L)
+                                                .unpaidPayrolls(0L)
+                                                .partialPaidPayrolls(0L)
+                                                .totalFinalSalary(BigDecimal.ZERO)
+                                                .totalPaidAmount(BigDecimal.ZERO)
+                                                .totalRemainingAmount(BigDecimal.ZERO)
+                                                .build();
+                        }
+                        payrollPage = payrollRepository.findByFiltersAndCustomerIds(keyword, month, year, isPaid, assignedCustomerIds, Pageable.unpaged());
+                } else {
+                        payrollPage = payrollRepository.findByFilters(
+                                        keyword, month, year, isPaid, Pageable.unpaged());
+                }
 
                 List<Payroll> payrolls = payrollPage.getContent();
 
@@ -1511,12 +1577,20 @@ public class PayrollServiceImpl implements PayrollService {
                                 .filter(p -> p.getStatus() == com.company.company_clean_hub_be.entity.PayrollStatus.PARTIAL_PAID)
                                 .count();
 
-                BigDecimal totalFinalSalary = payrolls.stream()
-                                .map(p -> p.getFinalSalary() != null ? p.getFinalSalary() : BigDecimal.ZERO)
+                final List<Long> finalAssignedIds = assignedCustomerIds;
+                List<PayrollResponse> mappedResponses = payrolls.stream()
+                                .map(p -> {
+                                        LocalDateTime createdAt = p.getCreatedAt();
+                                        return mapToResponse(p, createdAt.getMonthValue(), createdAt.getYear(), null, finalAssignedIds);
+                                })
+                                .collect(Collectors.toList());
+
+                BigDecimal totalFinalSalary = mappedResponses.stream()
+                                .map(r -> r.getFinalSalary() != null ? r.getFinalSalary() : BigDecimal.ZERO)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-                BigDecimal totalPaidAmount = payrolls.stream()
-                                .map(p -> p.getPaidAmount() != null ? p.getPaidAmount() : BigDecimal.ZERO)
+                BigDecimal totalPaidAmount = mappedResponses.stream()
+                                .map(r -> r.getPaidAmount() != null ? r.getPaidAmount() : BigDecimal.ZERO)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
                 BigDecimal totalRemainingAmount = totalFinalSalary.subtract(totalPaidAmount);
@@ -1865,6 +1939,16 @@ public class PayrollServiceImpl implements PayrollService {
         }
 
         private PayrollResponse mapToResponse(Payroll payroll, Integer month, Integer year, Long fallbackEmployeeId) {
+                String currentUsername = userService.getCurrentUsername();
+                User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+                List<Long> assignedCustomerIds = null;
+                if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        assignedCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+                }
+                return mapToResponse(payroll, month, year, fallbackEmployeeId, assignedCustomerIds);
+        }
+
+        private PayrollResponse mapToResponse(Payroll payroll, Integer month, Integer year, Long fallbackEmployeeId, List<Long> assignedCustomerIds) {
 
                 log.info("=== mapToResponse START ===");
                 log.info("Input payrollId: {}, month: {}, year: {}, fallbackEmployeeId: {}",
@@ -1891,12 +1975,80 @@ public class PayrollServiceImpl implements PayrollService {
                         // Get salary base from first assignment if available
                         List<Assignment> assignments = assignmentRepository
                                         .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId);
+                        if (assignedCustomerIds != null) {
+                                assignments = assignments.stream()
+                                                .filter(a -> a.getContract() != null && a.getContract().getCustomer() != null &&
+                                                                assignedCustomerIds.contains(a.getContract().getCustomer().getId()))
+                                                .collect(Collectors.toList());
+                        }
                         if (!assignments.isEmpty()) {
                                 salaryBase = assignments.get(0).getSalaryAtTime();
                                 log.info("Salary base from assignment: {}", salaryBase);
                         }
                 } else {
                         log.info("WARNING: payroll.getEmployee() is null!");
+                }
+
+                BigDecimal bonusTotal = payroll.getBonusTotal();
+                BigDecimal penaltyTotal = payroll.getPenaltyTotal();
+                BigDecimal advanceTotal = payroll.getAdvanceTotal();
+                BigDecimal allowanceTotal = payroll.getAllowanceTotal();
+                BigDecimal insuranceTotal = payroll.getInsuranceTotal();
+                BigDecimal finalSalary = payroll.getFinalSalary();
+                BigDecimal baseSalary = payroll.getBaseSalary();
+                int totalDays = payroll.getTotalDays() != null ? payroll.getTotalDays() : 0;
+
+                if (assignedCustomerIds != null) {
+                        List<Attendance> attendances = payroll.getAttendances();
+                        if (attendances == null) {
+                                attendances = attendanceRepository.findByPayrollId(payroll.getId());
+                        }
+                        if (attendances != null) {
+                                List<Attendance> filteredAttendances = attendances.stream()
+                                                .filter(a -> a.getAssignment() != null &&
+                                                                a.getAssignment().getContract() != null &&
+                                                                a.getAssignment().getContract().getCustomer() != null &&
+                                                                assignedCustomerIds.contains(a.getAssignment().getContract().getCustomer().getId()))
+                                                .collect(Collectors.toList());
+                                
+                                long activeDaysCount = filteredAttendances.stream()
+                                                .filter(a -> a.getDeleted() == null || !a.getDeleted())
+                                                .count();
+                                totalDays = (int) activeDaysCount;
+
+                                bonusTotal = filteredAttendances.stream()
+                                                .filter(a -> a.getDeleted() == null || !a.getDeleted())
+                                                .map(a -> a.getBonus() != null ? a.getBonus() : BigDecimal.ZERO)
+                                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                                penaltyTotal = filteredAttendances.stream()
+                                                .map(a -> a.getPenalty() != null ? a.getPenalty() : BigDecimal.ZERO)
+                                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                                Set<Long> filteredAssignmentIds = filteredAttendances.stream()
+                                                .filter(a -> a.getDeleted() == null || !a.getDeleted())
+                                                .map(a -> a.getAssignment().getId())
+                                                .collect(Collectors.toSet());
+                                
+                                List<Assignment> assignmentsForAttendances = assignmentRepository.findAllById(filteredAssignmentIds);
+                                allowanceTotal = assignmentsForAttendances.stream()
+                                                .map(a -> a.getAdditionalAllowance() != null ? a.getAdditionalAllowance() : BigDecimal.ZERO)
+                                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                                baseSalary = BigDecimal.ZERO;
+                                for (Assignment assignment : assignmentsForAttendances) {
+                                        BigDecimal assignmentBaseSalary = calculateBaseSalaryForAssignment(assignment);
+                                        baseSalary = baseSalary.add(assignmentBaseSalary);
+                                }
+
+                                advanceTotal = BigDecimal.ZERO;
+                                insuranceTotal = BigDecimal.ZERO;
+
+                                finalSalary = baseSalary.add(bonusTotal).add(allowanceTotal).subtract(penaltyTotal);
+                                if (finalSalary.compareTo(BigDecimal.ZERO) < 0) {
+                                        finalSalary = BigDecimal.ZERO;
+                                }
+                        }
                 }
 
                 PayrollResponse response = PayrollResponse.builder()
@@ -1907,14 +2059,14 @@ public class PayrollServiceImpl implements PayrollService {
                                 .salaryBase(salaryBase)
                                 .month(month)
                                 .year(year)
-                                .totalDays(payroll.getTotalDays())
-                                .bonusTotal(payroll.getBonusTotal())
-                                .penaltyTotal(payroll.getPenaltyTotal())
-                                .advanceTotal(payroll.getAdvanceTotal())
-                                .allowanceTotal(payroll.getAllowanceTotal())
-                                .insuranceTotal(payroll.getInsuranceTotal())
-                                .finalSalary(payroll.getFinalSalary())
-                                .baseSalary(payroll.getBaseSalary())
+                                .totalDays(totalDays)
+                                .bonusTotal(bonusTotal)
+                                .penaltyTotal(penaltyTotal)
+                                .advanceTotal(advanceTotal)
+                                .allowanceTotal(allowanceTotal)
+                                .insuranceTotal(insuranceTotal)
+                                .finalSalary(finalSalary)
+                                .baseSalary(baseSalary)
                                 .status(payroll.getStatus())
                                 .paidAmount(payroll.getPaidAmount() != null ? payroll.getPaidAmount() : BigDecimal.ZERO)
                                 .remainingAmount(payroll.getFinalSalary() != null && payroll.getPaidAmount() != null

@@ -27,6 +27,9 @@ import com.company.company_clean_hub_be.dto.response.CustomerResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.Customer;
 import com.company.company_clean_hub_be.entity.Role;
+import com.company.company_clean_hub_be.entity.User;
+import com.company.company_clean_hub_be.repository.UserRepository;
+import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.ContractRepository;
@@ -46,6 +49,8 @@ public class CustomerServiceImpl implements CustomerService {
     private final ContractRepository contractRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserRepository userRepository;
+    private final CustomerAssignmentRepository customerAssignmentRepository;
 
     @Override
     public String generateCustomerCode() {
@@ -162,6 +167,17 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     public List<CustomerResponse> getAllCustomers() {
+        String username = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByUsername(username).orElse(null);
+        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+            if (assignedIds.isEmpty()) {
+                return new ArrayList<>();
+            }
+            return customerRepository.findAllById(assignedIds).stream()
+                    .map(this::mapToResponse)
+                    .collect(Collectors.toList());
+        }
         return customerRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -170,7 +186,28 @@ public class CustomerServiceImpl implements CustomerService {
     @Override
     public PageResponse<CustomerResponse> getCustomersWithFilter(String keyword, int page, int pageSize) {
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("customerCode").descending());
-        Page<Customer> customerPage = customerRepository.findByFilters(keyword, pageable);
+        
+        String username = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByUsername(username).orElse(null);
+        
+        Page<Customer> customerPage;
+        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+            if (assignedIds.isEmpty()) {
+                return PageResponse.<CustomerResponse>builder()
+                        .content(new ArrayList<>())
+                        .page(0)
+                        .pageSize(pageSize)
+                        .totalElements(0)
+                        .totalPages(0)
+                        .first(true)
+                        .last(true)
+                        .build();
+            }
+            customerPage = customerRepository.findByFiltersAndIds(keyword, assignedIds, pageable);
+        } else {
+            customerPage = customerRepository.findByFilters(keyword, pageable);
+        }
 
         List<CustomerResponse> customers = customerPage.getContent().stream()
                 .map(this::mapToResponse)
@@ -189,6 +226,15 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     public CustomerResponse getCustomerById(Long id) {
+        String username = org.springframework.security.core.context.SecurityContextHolder
+            .getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByUsername(username).orElse(null);
+        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            boolean exists = customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), id);
+            if (!exists) {
+                throw new AppException(ErrorCode.FORBIDDEN);
+            }
+        }
         Customer customer = customerRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
         log.info("getCustomerById requested: id={}", id);

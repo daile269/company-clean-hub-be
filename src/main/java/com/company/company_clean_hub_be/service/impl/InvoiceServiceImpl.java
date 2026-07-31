@@ -14,12 +14,14 @@ import com.company.company_clean_hub_be.repository.InvoiceLineRepository;
 import com.company.company_clean_hub_be.repository.AttendanceRepository;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
+import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
 import com.company.company_clean_hub_be.service.InvoiceService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -56,6 +58,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     AttendanceRepository attendanceRepository;
     AssignmentRepository assignmentRepository;
     UserRepository userRepository;
+    CustomerAssignmentRepository customerAssignmentRepository;
 
     @Override
     @Transactional
@@ -638,6 +641,18 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Override
     public List<InvoiceResponse> getInvoicesByMonthAndYear(Integer month, Integer year) {
         log.info("getInvoicesByMonthAndYear requested: month={}, year={}", month, year);
+        String currentUsername = getCurrentUsername();
+        User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+            if (assignedIds.isEmpty()) {
+                return new ArrayList<>();
+            }
+            Page<Invoice> invoicePage = invoiceRepository.findByFiltersAndCustomerIds(null, month, year, assignedIds, Pageable.unpaged());
+            return invoicePage.getContent().stream()
+                .map(this::toInvoiceResponse)
+                .collect(Collectors.toList());
+        }
         List<InvoiceResponse> resp = invoiceRepository.findByMonthAndYear(month, year).stream()
             .map(this::toInvoiceResponse)
             .collect(Collectors.toList());
@@ -648,7 +663,18 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Override
     public List<InvoiceResponse> getFullInvoicesByMonthAndYear(Integer month, Integer year) {
         log.info("getFullInvoicesByMonthAndYear requested: month={}, year={}", month, year);
-        List<Invoice> invoices = invoiceRepository.findAllWithLinesByMonthAndYear(month, year);
+        String currentUsername = getCurrentUsername();
+        User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+        List<Invoice> invoices;
+        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+            if (assignedIds.isEmpty()) {
+                return new ArrayList<>();
+            }
+            invoices = invoiceRepository.findAllWithLinesByMonthAndYearAndCustomerIds(month, year, assignedIds);
+        } else {
+            invoices = invoiceRepository.findAllWithLinesByMonthAndYear(month, year);
+        }
         List<InvoiceResponse> resp = invoices.stream()
                 .map(this::toInvoiceResponse)
                 .collect(Collectors.toList());
@@ -658,25 +684,45 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         @Override
         public com.company.company_clean_hub_be.dto.response.PageResponse<InvoiceResponse> getInvoicesWithFilters(String customerCode, Integer month, Integer year, int page, int pageSize) {
-        int safePage = Math.max(0, page <= 0 ? 0 : page - 1);
-        int safePageSize = Math.max(1, pageSize);
-        Pageable pageable = org.springframework.data.domain.PageRequest.of(safePage, safePageSize);
+            int safePage = Math.max(0, page <= 0 ? 0 : page - 1);
+            int safePageSize = Math.max(1, pageSize);
+            Pageable pageable = org.springframework.data.domain.PageRequest.of(safePage, safePageSize);
 
-        org.springframework.data.domain.Page<Invoice> invoicePage = invoiceRepository.findByFilters(customerCode, month, year, pageable);
+            String currentUsername = getCurrentUsername();
+            User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
 
-        List<InvoiceResponse> items = invoicePage.getContent().stream()
-            .map(this::toInvoiceResponse)
-            .collect(java.util.stream.Collectors.toList());
+            org.springframework.data.domain.Page<Invoice> invoicePage;
+            if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+                if (assignedIds.isEmpty()) {
+                    return com.company.company_clean_hub_be.dto.response.PageResponse.<InvoiceResponse>builder()
+                        .content(new ArrayList<>())
+                        .page(0)
+                        .pageSize(pageSize)
+                        .totalElements(0)
+                        .totalPages(0)
+                        .first(true)
+                        .last(true)
+                        .build();
+                }
+                invoicePage = invoiceRepository.findByFiltersAndCustomerIds(customerCode, month, year, assignedIds, pageable);
+            } else {
+                invoicePage = invoiceRepository.findByFilters(customerCode, month, year, pageable);
+            }
 
-        return com.company.company_clean_hub_be.dto.response.PageResponse.<InvoiceResponse>builder()
-            .content(items)
-            .page(invoicePage.getNumber())
-            .pageSize(invoicePage.getSize())
-            .totalElements(invoicePage.getTotalElements())
-            .totalPages(invoicePage.getTotalPages())
-            .first(invoicePage.isFirst())
-            .last(invoicePage.isLast())
-            .build();
+            List<InvoiceResponse> items = invoicePage.getContent().stream()
+                .map(this::toInvoiceResponse)
+                .collect(java.util.stream.Collectors.toList());
+
+            return com.company.company_clean_hub_be.dto.response.PageResponse.<InvoiceResponse>builder()
+                .content(items)
+                .page(invoicePage.getNumber())
+                .pageSize(invoicePage.getSize())
+                .totalElements(invoicePage.getTotalElements())
+                .totalPages(invoicePage.getTotalPages())
+                .first(invoicePage.isFirst())
+                .last(invoicePage.isLast())
+                .build();
         }
 
     @Override
