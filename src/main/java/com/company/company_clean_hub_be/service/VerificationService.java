@@ -20,6 +20,9 @@ public interface VerificationService {
 
     List<AssignmentVerificationResponse> getPendingVerifications();
 
+    // Customer-specific: Lấy verifications của nhân viên làm việc tại địa chỉ khách hàng đang đăng nhập
+    List<AssignmentVerificationResponse> getVerificationsByCurrentCustomer();
+
     // Image capture
     VerificationImageResponse captureVerificationImage(VerificationCaptureRequest request);
 
