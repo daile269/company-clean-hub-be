@@ -267,9 +267,26 @@ public class PayrollServiceImpl implements PayrollService {
                                                 insuranceTotal);
                         }
                 } else {
-                        insuranceTotal = request.getInsuranceAmount() != null ? request.getInsuranceAmount()
-                                        : BigDecimal.ZERO;
-                        log.debug("[SINGLE-CALC][INSURANCE] Using request insurance salary={}", insuranceTotal);
+                        if (request.getInsuranceAmount() != null) {
+                                insuranceTotal = request.getInsuranceAmount();
+                                log.debug("[SINGLE-CALC][INSURANCE] Using request insurance salary={}", insuranceTotal);
+                        } else {
+                                // CONTRACT_STAFF: fallback về tháng trước, nếu không có thì 0
+                                int prevMonth = request.getMonth() == 1 ? 12 : request.getMonth() - 1;
+                                int prevYear = request.getMonth() == 1 ? request.getYear() - 1 : request.getYear();
+                                Optional<Payroll> prevPayroll = payrollRepository.findByEmployeeAndMonthAndYear(
+                                                request.getEmployeeId(), prevMonth, prevYear);
+                                if (prevPayroll.isPresent() && prevPayroll.get().getInsuranceTotal() != null
+                                                && prevPayroll.get().getInsuranceTotal()
+                                                                .compareTo(BigDecimal.ZERO) > 0) {
+                                        insuranceTotal = prevPayroll.get().getInsuranceTotal();
+                                        log.debug("[SINGLE-CALC][INSURANCE] CONTRACT_STAFF: using prev month ({}/{}) insuranceTotal = {}",
+                                                        prevMonth, prevYear, insuranceTotal);
+                                } else {
+                                        insuranceTotal = BigDecimal.ZERO;
+                                        log.debug("[SINGLE-CALC][INSURANCE] CONTRACT_STAFF: no prev month insurance, using 0");
+                                }
+                        }
                 }
 
                 // Calculate final salary: amountTotal - (penalties + insurance)
@@ -922,10 +939,29 @@ public class PayrollServiceImpl implements PayrollService {
                                                 insuranceTotal);
                         }
                 } else {
-                        insuranceTotal = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal()
-                                        : BigDecimal.ZERO;
-                        log.debug("[PAYROLL-EXPORT][DEBUG] Using payroll.insuranceTotal (existing) = {}",
-                                        insuranceTotal);
+                        if (isExist) {
+                                // Payroll đã tồn tại: giữ nguyên giá trị hiện tại
+                                insuranceTotal = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal()
+                                                : BigDecimal.ZERO;
+                                log.debug("[PAYROLL-EXPORT][DEBUG] Using payroll.insuranceTotal (existing) = {}",
+                                                insuranceTotal);
+                        } else {
+                                // Payroll mới (CONTRACT_STAFF): fallback về tháng trước, nếu không có thì 0
+                                int prevMonth = month == 1 ? 12 : month - 1;
+                                int prevYear = month == 1 ? year - 1 : year;
+                                Optional<Payroll> prevPayroll = payrollRepository.findByEmployeeAndMonthAndYear(
+                                                employee.getId(), prevMonth, prevYear);
+                                if (prevPayroll.isPresent() && prevPayroll.get().getInsuranceTotal() != null
+                                                && prevPayroll.get().getInsuranceTotal()
+                                                                .compareTo(BigDecimal.ZERO) > 0) {
+                                        insuranceTotal = prevPayroll.get().getInsuranceTotal();
+                                        log.debug("[PAYROLL-EXPORT][DEBUG] CONTRACT_STAFF new payroll: using prev month ({}/{}) insuranceTotal = {}",
+                                                        prevMonth, prevYear, insuranceTotal);
+                                } else {
+                                        insuranceTotal = BigDecimal.ZERO;
+                                        log.debug("[PAYROLL-EXPORT][DEBUG] CONTRACT_STAFF new payroll: no prev month insurance found, using 0");
+                                }
+                        }
                 }
 
                 // Calculate deductions: penalties + insurance (advanceTotal is now only a note,
@@ -1034,7 +1070,11 @@ public class PayrollServiceImpl implements PayrollService {
                 log.debug("[PAYROLL-EXPORT][DEBUG] calculateActualWorkDays for assignmentId={} today={}",
                                 assignment != null ? assignment.getId() : null, today);
 
-                long count = assignment.getAttendances().stream()
+                List<Attendance> attendances = assignment.getAttendances();
+                if (attendances == null) {
+                        attendances = attendanceRepository.findByAssignmentId(assignment.getId());
+                }
+                long count = attendances.stream()
                                 .filter(a -> a.getDate() != null && !a.getDate().isAfter(today) && !a.getDeleted())
                                 .count();
 

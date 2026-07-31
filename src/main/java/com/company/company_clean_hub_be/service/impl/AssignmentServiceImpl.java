@@ -1100,28 +1100,34 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                                 .get();
                                                                 Long payrollId = payroll.getId();
 
-                                                                // Xóa payment history trước khi xóa payroll
-                                                                try {
-                                                                        List<com.company.company_clean_hub_be.entity.PaymentHistory> paymentHistories = paymentHistoryRepository
-                                                                                        .findByPayrollIdOrderByCreatedAtAsc(
+                                                                // SAFETY CHECK: Không xóa payroll đã PAID (đã thanh toán hoàn toàn)
+                                                                if (payroll.getStatus() == com.company.company_clean_hub_be.entity.PayrollStatus.PAID) {
+                                                                        log.warn("Cannot delete PAID payroll payrollId={} for employeeId={}, month={}, year={} (orphan record but already paid)",
+                                                                                        payrollId, employeeId, month, year);
+                                                                } else {
+                                                                        // Xóa payment history trước khi xóa payroll
+                                                                        try {
+                                                                                List<com.company.company_clean_hub_be.entity.PaymentHistory> paymentHistories = paymentHistoryRepository
+                                                                                                .findByPayrollIdOrderByCreatedAtAsc(
+                                                                                                                payrollId);
+                                                                                if (paymentHistories != null
+                                                                                                && !paymentHistories
+                                                                                                                .isEmpty()) {
+                                                                                        paymentHistoryRepository.deleteAll(
+                                                                                                        paymentHistories);
+                                                                                        log.info("Deleted {} payment history records for payrollId={}",
+                                                                                                        paymentHistories.size(),
                                                                                                         payrollId);
-                                                                        if (paymentHistories != null
-                                                                                        && !paymentHistories
-                                                                                                        .isEmpty()) {
-                                                                                paymentHistoryRepository.deleteAll(
-                                                                                                paymentHistories);
-                                                                                log.info("Deleted {} payment history records for payrollId={}",
-                                                                                                paymentHistories.size(),
-                                                                                                payrollId);
+                                                                                }
+                                                                        } catch (Exception ex) {
+                                                                                log.warn("Failed to delete payment history for payrollId={}: {}",
+                                                                                                payrollId, ex.getMessage());
                                                                         }
-                                                                } catch (Exception ex) {
-                                                                        log.warn("Failed to delete payment history for payrollId={}: {}",
-                                                                                        payrollId, ex.getMessage());
-                                                                }
 
-                                                                payrollRepository.delete(payroll);
-                                                                log.info("Deleted payroll payrollId={} for employeeId={}, month={}, year={} (no remaining assignments/attendances)",
-                                                                                payrollId, employeeId, month, year);
+                                                                        payrollRepository.delete(payroll);
+                                                                        log.info("Deleted orphan payroll payrollId={} (status={}) for employeeId={}, month={}, year={} (no remaining assignments/attendances)",
+                                                                                        payrollId, payroll.getStatus(), employeeId, month, year);
+                                                                }
                                                         } else {
                                                                 log.debug("No payroll found for employeeId={}, month={}, year={}",
                                                                                 employeeId, month, year);
@@ -1586,6 +1592,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                         // Lưu attendance bị xóa
                         AttendanceResponse deletedAttendanceResponse = mapAttendanceToResponse(deletedAttendance);
                         deletedAttendances.add(deletedAttendanceResponse);
+
+                        // Sync WorkSchedule liên kết trước khi xóa attendance
+                        // (đánh dấu attendanceDeleted=true để metrics không đếm WorkSchedule này)
+                        workScheduleRepository.findByAttendanceId(deletedAttendance.getId()).ifPresent(ws -> {
+                                ws.setAttendance(null);
+                                ws.setAttendanceDeleted(true);
+                                ws.setSyncNote("Attendance deleted by temporary reassignment at " + LocalDateTime.now());
+                                ws.setLastSyncedAt(LocalDateTime.now());
+                                workScheduleRepository.save(ws);
+                                log.info("Synced WorkSchedule id={} with attendance deletion (temporary reassignment), set attendanceDeleted=true",
+                                                ws.getId());
+                        });
+
                         attendanceRepository.delete(deletedAttendance);
                         log.info("Deleted old attendance id={} for replacedEmployeeId={} on date={}",
                                         deletedAttendance.getId(), request.getReplacedEmployeeId(), date);
