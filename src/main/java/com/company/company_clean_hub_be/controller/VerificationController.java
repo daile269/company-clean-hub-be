@@ -37,6 +37,17 @@ public class VerificationController {
         return ApiResponse.success("Lấy danh sách xác minh chờ duyệt thành công", verifications, HttpStatus.OK.value());
     }
 
+    /**
+     * CUSTOMER endpoint: xem danh sách verifications (ảnh chấm công) của nhân viên
+     * làm việc theo hợp đồng của khách hàng đang đăng nhập.
+     * Chỉ trả về verifications thuộc assignment.contract.customer = current user.
+     */
+    @GetMapping("/my-assignments")
+    public ApiResponse<List<AssignmentVerificationResponse>> getMyAssignmentVerifications() {
+        List<AssignmentVerificationResponse> verifications = verificationService.getVerificationsByCurrentCustomer();
+        return ApiResponse.success("Lấy danh sách xác minh nhân viên thành công", verifications, HttpStatus.OK.value());
+    }
+
     @GetMapping("/assignment/{assignmentId}")
     public ApiResponse<AssignmentVerificationResponse> getVerificationByAssignment(@PathVariable Long assignmentId) {
         log.info("[GET /verifications/assignment/{}] Received request to get verification for assignmentId={}",

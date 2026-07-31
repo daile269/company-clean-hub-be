@@ -33,7 +33,6 @@ public class Employee extends User {
     @Column(name = "employee_code", unique = true)
     private String employeeCode;
 
-    @NotBlank
     @Size(max = 50)
     @Column(unique = true)
     private String cccd;
@@ -73,8 +72,10 @@ public class Employee extends User {
     // Số tiền xin ứng hàng tháng
     @Column(name = "monthly_advance_limit", precision = 18, scale = 2)
     private BigDecimal monthlyAdvanceLimit;
-    // @Column(name = "created_at")
-    // private LocalDateTime createdAt;
-    // @Column(name = "updated_at")
-    // private LocalDateTime updatedAt;
+
+    @Column(name = "cccd_front_image", length = 512)
+    private String cccdFrontImage;
+
+    @Column(name = "cccd_back_image", length = 512)
+    private String cccdBackImage;
 }

@@ -41,4 +41,6 @@ public class EmployeeResponse {
     // Số tiền xin ứng hàng tháng
     private BigDecimal monthlyAdvanceLimit;
 
+    private String cccdFrontImage;
+    private String cccdBackImage;
 }

@@ -14,11 +14,9 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @Builder
 public class EmployeeRequest {
-    @NotBlank(message = "Username is required")
     @Size(min = 3, max = 50, message = "Tên đăng nhập phải có độ dài từ 3 đến 50 ký tự")
     private String username;
 
-    @NotBlank(message = "Mã nhân viên bắt buộc")
     @Size(max = 50, message = "Mã nhân viên không được vượt quá 50 ký tự")
     private String employeeCode;
 
@@ -26,6 +24,7 @@ public class EmployeeRequest {
     @Size(min = 6, max = 255, message = "Mật khẩu phải có ít nhất 6 ký tự")
     private String password;
 
+    @NotBlank(message = "Số điện thoại không được để trống")
     @Size(max = 50, message = "Số điện thoại không được vượt quá 50 ký tự")
     private String phone;
 
@@ -34,10 +33,10 @@ public class EmployeeRequest {
 
     private String status;
 
-    @NotBlank(message = "CCCD bắt buộc")
     @Size(max = 50, message = "CCCD không được vượt quá 50 ký tự")
     private String cccd;
 
+    @NotBlank(message = "Chỗ ở hiện tại không được để trống")
     private String address;
 
     @NotBlank(message = "Tên nhân viên bắt buộc")
@@ -63,5 +62,9 @@ public class EmployeeRequest {
 
     // Số tiền xin ứng hàng tháng
     private BigDecimal monthlyAdvanceLimit;
+
+    private String cccdFrontImage;
+
+    private String cccdBackImage;
 
 }

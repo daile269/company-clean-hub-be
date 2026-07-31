@@ -43,4 +43,12 @@ public interface AssignmentVerificationRepository extends JpaRepository<Assignme
            "WHERE av.status IN ('PENDING', 'IN_PROGRESS') " +
            "AND av.currentAttempts > 0")
     List<AssignmentVerification> findVerificationsForAutoApproval();
+
+    // Lấy tất cả verifications của nhân viên làm việc theo hợp đồng của 1 customer cụ thể
+    @Query("SELECT av FROM AssignmentVerification av " +
+           "JOIN FETCH av.assignment a " +
+           "JOIN FETCH a.employee " +
+           "WHERE a.contract.customer.id = :customerId " +
+           "ORDER BY av.createdAt DESC")
+    List<AssignmentVerification> findByCustomerId(@Param("customerId") Long customerId);
 }

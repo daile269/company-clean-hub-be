@@ -126,6 +126,25 @@ public class VerificationServiceImpl implements VerificationService {
     }
 
     @Override
+    public List<AssignmentVerificationResponse> getVerificationsByCurrentCustomer() {
+        // Lấy user hiện tại — phải là Customer
+        com.company.company_clean_hub_be.entity.User currentUser =
+                com.company.company_clean_hub_be.util.AuthorizationUtils.getCurrentUser();
+
+        if (!(currentUser instanceof com.company.company_clean_hub_be.entity.Customer)) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+
+        com.company.company_clean_hub_be.entity.Customer customer =
+                (com.company.company_clean_hub_be.entity.Customer) currentUser;
+
+        return verificationRepository.findByCustomerId(customer.getId())
+                .stream()
+                .map(this::mapToVerificationResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public List<VerificationImageResponse> getImagesByAttendanceId(Long attendanceId) {
         return imageRepository.findByAttendanceId(attendanceId)
                 .stream()
