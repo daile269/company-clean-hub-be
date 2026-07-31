@@ -141,6 +141,18 @@ public class EmployeeController {
                 HttpStatus.CREATED.value());
     }
 
+    @PostMapping(value = "/{id}/cccd-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority('EMPLOYEE_CREATE', 'EMPLOYEE_EDIT')")
+    public ApiResponse<EmployeeResponse> uploadCccdImages(
+            @PathVariable Long id,
+            @RequestParam(value = "frontFile", required = false) MultipartFile frontFile,
+            @RequestParam(value = "backFile", required = false) MultipartFile backFile) throws IOException {
+
+        log.info("Start uploadCccdImages: employeeId={}", id);
+        EmployeeResponse response = employeeService.uploadCccdImages(id, frontFile, backFile);
+        return ApiResponse.success("Upload ảnh CCCD thành công", response, HttpStatus.CREATED.value());
+    }
+
     @PostMapping(value = "/{id}/images/single", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @org.springframework.security.access.prepost.PreAuthorize("hasAnyAuthority('EMPLOYEE_CREATE', 'EMPLOYEE_EDIT')")
     public ApiResponse<EmployeeImage> uploadEmployeeImage(@PathVariable Long id,

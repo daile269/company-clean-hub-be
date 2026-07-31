@@ -48,6 +48,8 @@ public class EmployeeServiceImpl implements EmployeeService {
         private final com.company.company_clean_hub_be.repository.AssignmentRepository assignmentRepository;
         private final com.company.company_clean_hub_be.repository.AttendanceRepository attendanceRepository;
         private final WorkScheduleRepository workScheduleRepository;
+        private final com.company.company_clean_hub_be.service.EmployeeImageService employeeImageService;
+        private final com.company.company_clean_hub_be.service.FileStorageService fileStorageService;
 
         @Override
         public String generateEmployeeCode(EmploymentType employmentType) {
@@ -131,16 +133,38 @@ public class EmployeeServiceImpl implements EmployeeService {
         public EmployeeResponse createEmployee(EmployeeRequest request) {
                 String username = org.springframework.security.core.context.SecurityContextHolder
                                 .getContext().getAuthentication().getName();
-                log.info("createEmployee by {}: username={}, employeeCode={}", username, request.getUsername(),
-                                request.getEmployeeCode());
-                // Kiểm tra trùng username
-                if (employeeRepository.existsByUsername(request.getUsername())) {
+                log.info("createEmployee by {}: username={}, phone={}, employeeCode={}", username, request.getUsername(),
+                                request.getPhone(), request.getEmployeeCode());
+
+                // Nếu username rỗng hoặc chưa nhập, tự động lấy phone làm username
+                if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
+                        request.setUsername(request.getPhone());
+                }
+
+                // Nếu employeeCode rỗng, tự động sinh mã nhân viên
+                if (request.getEmployeeCode() == null || request.getEmployeeCode().trim().isEmpty()) {
+                        request.setEmployeeCode(generateEmployeeCode(
+                                        request.getEmploymentType() != null ? request.getEmploymentType() : EmploymentType.CONTRACT_STAFF
+                        ));
+                }
+
+                // Kiểm tra trùng username trong bảng employees & users
+                if (employeeRepository.existsByUsername(request.getUsername()) || userRepository.existsByUsername(request.getUsername())) {
                         throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
                 }
 
-                // Kiểm tra trùng phone
-                if (request.getPhone() != null && employeeRepository.existsByPhone(request.getPhone())) {
-                        throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
+                // Kiểm tra trùng phone trong bảng employees & users
+                if (request.getPhone() != null && !request.getPhone().trim().isEmpty()) {
+                        if (employeeRepository.existsByPhone(request.getPhone()) || userRepository.existsByPhone(request.getPhone())) {
+                                throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
+                        }
+                }
+
+                // Kiểm tra trùng bankAccount (nếu có nhập)
+                if (request.getBankAccount() != null && !request.getBankAccount().trim().isEmpty()) {
+                        if (employeeRepository.existsByBankAccount(request.getBankAccount().trim())) {
+                                throw new AppException(ErrorCode.BANK_ACCOUNT_ALREADY_EXISTS);
+                        }
                 }
 
                 // Kiểm tra trùng employeeCode
@@ -148,9 +172,11 @@ public class EmployeeServiceImpl implements EmployeeService {
                         throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
                 }
 
-                // Kiểm tra trùng CCCD
-                if (employeeRepository.existsByCccd(request.getCccd())) {
-                        throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
+                // Kiểm tra trùng CCCD (nếu có nhập)
+                if (request.getCccd() != null && !request.getCccd().trim().isEmpty()) {
+                        if (employeeRepository.existsByCccd(request.getCccd().trim())) {
+                                throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
+                        }
                 }
 
                 // Nếu người tạo là Quản lý vùng (code = 'QLV') thì không được thêm Nhân viên
@@ -165,6 +191,9 @@ public class EmployeeServiceImpl implements EmployeeService {
                 Role role = roleRepository.findById(request.getRoleId())
                                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
+                String finalCccd = (request.getCccd() != null && !request.getCccd().trim().isEmpty()) ? request.getCccd().trim() : null;
+                String finalBankAccount = (request.getBankAccount() != null && !request.getBankAccount().trim().isEmpty()) ? request.getBankAccount().trim() : null;
+
                 Employee employee = Employee.builder()
                                 .employeeCode(request.getEmployeeCode())
                                 .username(request.getUsername())
@@ -172,11 +201,10 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .phone(request.getPhone())
                                 .role(role)
                                 .status(request.getStatus())
-                                .employeeCode(request.getEmployeeCode())
-                                .cccd(request.getCccd())
+                                .cccd(finalCccd)
                                 .address(request.getAddress())
                                 .name(request.getName())
-                                .bankAccount(request.getBankAccount())
+                                .bankAccount(finalBankAccount)
                                 .bankName(request.getBankName())
                                 .description(request.getDescription())
                                 .employmentType(request.getEmploymentType())
@@ -184,6 +212,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .allowance(request.getAllowance())
                                 .insuranceSalary(request.getInsuranceSalary())
                                 .monthlyAdvanceLimit(request.getMonthlyAdvanceLimit())
+                                .cccdFrontImage(request.getCccdFrontImage())
+                                .cccdBackImage(request.getCccdBackImage())
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
                                 .build();
@@ -236,17 +266,26 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
                 // Kiểm tra trùng phone (ngoại trừ chính nó)
-                if (request.getPhone() != null && employeeRepository.existsByPhoneAndIdNot(request.getPhone(), id)) {
+                if (request.getPhone() != null && !request.getPhone().trim().isEmpty() 
+                                && (employeeRepository.existsByPhoneAndIdNot(request.getPhone(), id) || userRepository.existsByPhoneAndIdNot(request.getPhone(), id))) {
                         throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
                 }
 
+                // Kiểm tra trùng bankAccount (nếu có nhập, ngoại trừ chính nó)
+                if (request.getBankAccount() != null && !request.getBankAccount().trim().isEmpty()
+                                && employeeRepository.existsByBankAccountAndIdNot(request.getBankAccount().trim(), id)) {
+                        throw new AppException(ErrorCode.BANK_ACCOUNT_ALREADY_EXISTS);
+                }
+
                 // Kiểm tra trùng employeeCode (ngoại trừ chính nó)
-                if (employeeRepository.existsByEmployeeCodeAndIdNot(request.getEmployeeCode(), id)) {
+                if (request.getEmployeeCode() != null && !request.getEmployeeCode().trim().isEmpty()
+                                && employeeRepository.existsByEmployeeCodeAndIdNot(request.getEmployeeCode(), id)) {
                         throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
                 }
 
-                // Kiểm tra trùng CCCD (ngoại trừ chính nó)
-                if (employeeRepository.existsByCccdAndIdNot(request.getCccd(), id)) {
+                // Kiểm tra trùng CCCD (nếu có nhập, ngoại trừ chính nó)
+                if (request.getCccd() != null && !request.getCccd().trim().isEmpty() 
+                                && employeeRepository.existsByCccdAndIdNot(request.getCccd().trim(), id)) {
                         throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
                 }
 
@@ -326,11 +365,68 @@ public class EmployeeServiceImpl implements EmployeeService {
                 employee.setAllowance(request.getAllowance());
                 employee.setInsuranceSalary(request.getInsuranceSalary());
                 employee.setMonthlyAdvanceLimit(request.getMonthlyAdvanceLimit());
+                if (request.getCccdFrontImage() != null) {
+                        String front = request.getCccdFrontImage().trim();
+                        String oldFront = employee.getCccdFrontImage();
+                        if (front.isEmpty()) {
+                                if (oldFront != null && !oldFront.isEmpty()) {
+                                        try { fileStorageService.deleteFile(oldFront); } catch (Exception e) { log.warn("Failed to delete old front CCCD image: {}", oldFront, e); }
+                                }
+                                employee.setCccdFrontImage(null);
+                        } else {
+                                if (oldFront != null && !oldFront.isEmpty() && !oldFront.equals(front)) {
+                                        try { fileStorageService.deleteFile(oldFront); } catch (Exception e) { log.warn("Failed to delete old front CCCD image: {}", oldFront, e); }
+                                }
+                                employee.setCccdFrontImage(front);
+                        }
+                }
+                if (request.getCccdBackImage() != null) {
+                        String back = request.getCccdBackImage().trim();
+                        String oldBack = employee.getCccdBackImage();
+                        if (back.isEmpty()) {
+                                if (oldBack != null && !oldBack.isEmpty()) {
+                                        try { fileStorageService.deleteFile(oldBack); } catch (Exception e) { log.warn("Failed to delete old back CCCD image: {}", oldBack, e); }
+                                }
+                                employee.setCccdBackImage(null);
+                        } else {
+                                if (oldBack != null && !oldBack.isEmpty() && !oldBack.equals(back)) {
+                                        try { fileStorageService.deleteFile(oldBack); } catch (Exception e) { log.warn("Failed to delete old back CCCD image: {}", oldBack, e); }
+                                }
+                                employee.setCccdBackImage(back);
+                        }
+                }
                 employee.setUpdatedAt(LocalDateTime.now());
 
                 Employee updatedEmployee = employeeRepository.save(employee);
                 log.info("updateEmployee completed by {}: id={}", username, updatedEmployee.getId());
                 return mapToResponse(updatedEmployee);
+        }
+
+        @Override
+        public EmployeeResponse uploadCccdImages(Long id, org.springframework.web.multipart.MultipartFile frontFile, org.springframework.web.multipart.MultipartFile backFile) throws java.io.IOException {
+                log.info("EmployeeService.uploadCccdImages - start: employeeId={}", id);
+                Employee employee = employeeRepository.findById(id)
+                                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+                if (frontFile != null && !frontFile.isEmpty()) {
+                        String oldFront = employee.getCccdFrontImage();
+                        if (oldFront != null && !oldFront.isEmpty()) {
+                                try { fileStorageService.deleteFile(oldFront); } catch (Exception e) { log.warn("Failed to delete old front CCCD image: {}", oldFront, e); }
+                        }
+                        String frontPublicId = fileStorageService.storeFile(frontFile);
+                        employee.setCccdFrontImage(frontPublicId);
+                }
+                if (backFile != null && !backFile.isEmpty()) {
+                        String oldBack = employee.getCccdBackImage();
+                        if (oldBack != null && !oldBack.isEmpty()) {
+                                try { fileStorageService.deleteFile(oldBack); } catch (Exception e) { log.warn("Failed to delete old back CCCD image: {}", oldBack, e); }
+                        }
+                        String backPublicId = fileStorageService.storeFile(backFile);
+                        employee.setCccdBackImage(backPublicId);
+                }
+
+                Employee updated = employeeRepository.save(employee);
+                return mapToResponse(updated);
         }
 
         @Override
@@ -366,6 +462,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .allowance(employee.getAllowance())
                                 .insuranceSalary(employee.getInsuranceSalary())
                                 .monthlyAdvanceLimit(employee.getMonthlyAdvanceLimit())
+                                .cccdFrontImage(employee.getCccdFrontImage())
+                                .cccdBackImage(employee.getCccdBackImage())
                                 .createdAt(employee.getCreatedAt())
                                 .updatedAt(employee.getUpdatedAt())
                                 .build();
