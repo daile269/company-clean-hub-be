@@ -5,6 +5,7 @@ import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.RatingRepository;
+import com.company.company_clean_hub_be.repository.ContractRepository;
 import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
 import com.company.company_clean_hub_be.repository.InvoiceRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
@@ -24,6 +25,7 @@ public class SecurityCheck {
     private final UserService userService;
     private final EmployeeRepository employeeRepository;
     private final CustomerRepository customerRepository;
+    private final ContractRepository contractRepository;
     private final AssignmentRepository assignmentRepository;
     private final RatingRepository ratingRepository;
     private final CustomerAssignmentRepository customerAssignmentRepository;
@@ -226,6 +228,22 @@ public class SecurityCheck {
             return invoiceRepository.findById(invoiceId)
                     .map(i -> i.getContract() != null && i.getContract().getCustomer() != null &&
                             customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), i.getContract().getCustomer().getId()))
+                    .orElse(false);
+        }
+        return true;
+    }
+
+    public boolean isContractManagedByCurrentUser(Long contractId) {
+        if (contractId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
+        if (currentUser == null) return false;
+
+        if (currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            return contractRepository.findById(contractId)
+                    .map(c -> c.getCustomer() != null &&
+                            customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), c.getCustomer().getId()))
                     .orElse(false);
         }
         return true;

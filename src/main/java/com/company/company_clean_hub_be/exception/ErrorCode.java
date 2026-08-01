@@ -41,6 +41,7 @@ public enum ErrorCode {
     NO_ASSIGNMENT_DATA(400, "Không tìm thấy dữ liệu phân công cho nhân viên trong thời gian yêu cầu"),
     NO_ASSIGNMENT_EMP(400, "Không có nhân viên nào được phân công cho hợp đồng này trong thời gian yêu cầu"),
     ASSIGNMENT_START_DATE_BEFORE_CONTRACT(400, "Ngày bắt đầu phân công không được trước ngày bắt đầu hợp đồng"),
+    CONTRACT_EXPIRED(400, "Hợp đồng đã hết hạn, không thể tạo phân công mới"),
 
     INVOICE_NOT_FOUND(404, "Hóa đơn không tồn tại"),
     INVOICE_ALREADY_EXISTS(400, "Hóa đơn tháng này cho hợp đồng đã tồn tại"),

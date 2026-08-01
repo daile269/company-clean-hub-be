@@ -53,6 +53,7 @@ public class ContractController {
     }
 
     @GetMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CONTRACT_VIEW') or @securityCheck.isContractManagedByCurrentUser(#id)")
     public ApiResponse<ContractResponse> getContractById(@PathVariable Long id) {
         ContractResponse contract = contractService.getContractById(id);
         // CUSTOMER can only view their own contracts
