@@ -48,9 +48,12 @@ public class CustomerController {
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CUSTOMER_VIEW')")
     public ApiResponse<PageResponse<CustomerResponse>> getCustomersWithFilter(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean hasContractInMonth,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        PageResponse<CustomerResponse> customers = customerService.getCustomersWithFilter(keyword, page, pageSize);
+        PageResponse<CustomerResponse> customers = customerService.getCustomersWithFilter(keyword, hasContractInMonth, month, year, page, pageSize);
         return ApiResponse.success("Lấy danh sách khách hàng thành công", customers, HttpStatus.OK.value());
     }
 

@@ -1255,7 +1255,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .status(tempStatus)
                                 .description(request.getDescription() != null
                                                 ? request.getDescription()
-                                                : "Điều động tạm thời")
+                                                : "Điều động thay thế")
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
                                 .build();

@@ -9,7 +9,7 @@ import com.company.company_clean_hub_be.dto.response.PageResponse;
 
 public interface CustomerService {
     List<CustomerResponse> getAllCustomers();
-    PageResponse<CustomerResponse> getCustomersWithFilter(String keyword, int page, int pageSize);
+    PageResponse<CustomerResponse> getCustomersWithFilter(String keyword, Boolean hasContractInMonth, Integer month, Integer year, int page, int pageSize);
     CustomerResponse getCustomerById(Long id);
     CustomerResponse createCustomer(CustomerRequest request);
     CustomerResponse updateCustomer(Long id, CustomerRequest request);
