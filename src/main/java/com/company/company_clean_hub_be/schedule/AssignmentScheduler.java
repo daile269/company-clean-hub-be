@@ -40,7 +40,8 @@ public class AssignmentScheduler {
     private final AssignmentVerificationRepository verificationRepository;
 
     /**
-     * Chạy lúc 1h sáng hàng ngày để cập nhật trạng thái các phân công tạm thời đã qua
+     * Chạy lúc 1h sáng hàng ngày để cập nhật trạng thái các phân công tạm thời đã
+     * qua
      * Cron: 0 0 1 * * * = giây phút giờ ngày tháng thứ
      */
     @Scheduled(cron = "0 0 1 * * *")
@@ -50,7 +51,8 @@ public class AssignmentScheduler {
     }
 
     /**
-     * Chạy lúc 2h sáng ngày đầu tiên của mỗi tháng để cập nhật trạng thái phân công cố định đã hết hạn
+     * Chạy lúc 2h sáng ngày đầu tiên của mỗi tháng để cập nhật trạng thái phân công
+     * cố định đã hết hạn
      * Cron: 0 0 2 1 * * = giây phút giờ ngày tháng thứ (ngày 1 hàng tháng)
      */
     @Scheduled(cron = "0 0 2 1 * *")
@@ -66,39 +68,45 @@ public class AssignmentScheduler {
      */
     @Scheduled(cron = "0 5 0 * * ?")
     @EventListener(ApplicationReadyEvent.class)
-    @Transactional
     public void autoCompleteExpiredAssignments() {
-        LocalDate today = LocalDate.now();
-        log.info("[SCHEDULER] Checking expired assignments as of {}", today);
-
         try {
-            List<Assignment> expiredAssignments = assignmentRepository.findAll().stream()
-                    .filter(a -> a.getStatus() == AssignmentStatus.IN_PROGRESS || a.getStatus() == AssignmentStatus.SCHEDULED)
-                    .filter(a -> {
-                        // Trường hợp 1: Phân công có endDate riêng và endDate < today
-                        if (a.getEndDate() != null && a.getEndDate().isBefore(today)) {
-                            return true;
-                        }
-                        // Trường hợp 2: Hợp đồng có endDate và contract.endDate < today
-                        if (a.getContract() != null && a.getContract().getEndDate() != null 
-                                && a.getContract().getEndDate().isBefore(today)) {
-                            return true;
-                        }
-                        return false;
-                    })
-                    .toList();
-
-            if (!expiredAssignments.isEmpty()) {
-                for (Assignment a : expiredAssignments) {
-                    a.setStatus(AssignmentStatus.COMPLETED);
-                }
-                assignmentRepository.saveAll(expiredAssignments);
-                log.info("[SCHEDULER] Successfully updated {} expired assignments to COMPLETED status", expiredAssignments.size());
-            } else {
-                log.info("[SCHEDULER] No expired assignments to update");
-            }
+            executeUpdateAutoCompleteExpiredAssignments();
         } catch (Exception e) {
-            log.error("[SCHEDULER] Error while running autoCompleteExpiredAssignments", e);
+            log.debug("[LỊCH TRÌNH] Bỏ qua quét khi ứng dụng đang đóng hoặc khởi động lại: {}", e.getMessage());
+        }
+    }
+
+    @Transactional
+    public void executeUpdateAutoCompleteExpiredAssignments() {
+        LocalDate today = LocalDate.now();
+        log.info("[LỊCH TRÌNH] Kiểm tra các phân công đã hết hạn tính đến ngày {}", today);
+
+        List<Assignment> expiredAssignments = assignmentRepository.findAll().stream()
+                .filter(a -> a.getStatus() == AssignmentStatus.IN_PROGRESS
+                        || a.getStatus() == AssignmentStatus.SCHEDULED)
+                .filter(a -> {
+                    // Trường hợp 1: Phân công có endDate riêng và endDate < today
+                    if (a.getEndDate() != null && a.getEndDate().isBefore(today)) {
+                        return true;
+                    }
+                    // Trường hợp 2: Hợp đồng có endDate và contract.endDate < today
+                    if (a.getContract() != null && a.getContract().getEndDate() != null
+                            && a.getContract().getEndDate().isBefore(today)) {
+                        return true;
+                    }
+                    return false;
+                })
+                .toList();
+
+        if (!expiredAssignments.isEmpty()) {
+            for (Assignment a : expiredAssignments) {
+                a.setStatus(AssignmentStatus.COMPLETED);
+            }
+            assignmentRepository.saveAll(expiredAssignments);
+            log.info("[LỊCH TRÌNH] Đã cập nhật thành công {} phân công hết hạn sang trạng thái HOÀN THÀNH (COMPLETED)",
+                    expiredAssignments.size());
+        } else {
+            log.info("[LỊCH TRÌNH] Không có phân công hết hạn nào cần cập nhật");
         }
     }
 
@@ -111,29 +119,30 @@ public class AssignmentScheduler {
         log.info("Thời gian chạy: {}", LocalDateTime.now());
 
         LocalDate yesterday = LocalDate.now().minusDays(1);
-        
+
         try {
-            // Tìm tất cả các phân công TEMPORARY có startDate < hôm nay và status IN_PROGRESS
+            // Tìm tất cả các phân công TEMPORARY có startDate < hôm nay và status
+            // IN_PROGRESS
             List<Assignment> expiredAssignments = assignmentRepository.findExpiredTemporaryAssignments(yesterday);
-            
+
             log.info("Tìm thấy {} phân công tạm thời đã hết hạn", expiredAssignments.size());
 
             if (!expiredAssignments.isEmpty()) {
                 int updatedCount = 0;
-                
+
                 for (Assignment assignment : expiredAssignments) {
                     log.info("Cập nhật assignment ID: {} - Employee: {} - StartDate: {} - Status: {} → COMPLETED",
                             assignment.getId(),
                             assignment.getEmployee().getName(),
                             assignment.getStartDate(),
                             assignment.getStatus());
-                    
+
                     assignment.setStatus(AssignmentStatus.COMPLETED);
                     assignment.setUpdatedAt(LocalDateTime.now());
                     assignmentRepository.save(assignment);
                     updatedCount++;
                 }
-                
+
                 log.info("✓ Đã cập nhật {} phân công tạm thời sang trạng thái COMPLETED", updatedCount);
             } else {
                 log.info("Không có phân công tạm thời nào cần cập nhật");
@@ -141,20 +150,25 @@ public class AssignmentScheduler {
 
             // --- SUPPORT assignments: complete when no upcoming attendances remain ---
             try {
-                List<Assignment> supportAssignments = assignmentRepository.findByAssignmentTypeAndStatus(AssignmentType.SUPPORT, AssignmentStatus.IN_PROGRESS);
+                List<Assignment> supportAssignments = assignmentRepository
+                        .findByAssignmentTypeAndStatus(AssignmentType.SUPPORT, AssignmentStatus.IN_PROGRESS);
                 int supportCompleted = 0;
                 for (Assignment sup : supportAssignments) {
                     try {
                         Long total = attendanceRepository.countAttendancesByAssignment(sup.getId());
-                        java.time.LocalDate last = attendanceRepository.findMaxAttendanceDateByAssignmentId(sup.getId());
+                        java.time.LocalDate last = attendanceRepository
+                                .findMaxAttendanceDateByAssignmentId(sup.getId());
 
                         boolean hasWorkDays = sup.getWorkDays() != null && sup.getWorkDays() > 0;
 
-                        // If workDays present: complete when total >= workDays and last attendance date is before today
+                        // If workDays present: complete when total >= workDays and last attendance date
+                        // is before today
                         if (hasWorkDays) {
                             if (total != null && total >= sup.getWorkDays()) {
                                 if (last == null || last.isBefore(LocalDate.now())) {
-                                    log.info("Cập nhật SUPPORT assignment ID={} -> COMPLETED (workDays met and lastAttendance < today)", sup.getId());
+                                    log.info(
+                                            "Cập nhật SUPPORT assignment ID={} -> COMPLETED (workDays met and lastAttendance < today)",
+                                            sup.getId());
                                     sup.setStatus(AssignmentStatus.COMPLETED);
                                     sup.setUpdatedAt(LocalDateTime.now());
                                     assignmentRepository.save(sup);
@@ -163,9 +177,11 @@ public class AssignmentScheduler {
                             }
                         } else {
                             // fallback: behave like previous logic — complete if no upcoming attendances
-                            Long upcoming = attendanceRepository.countAttendancesOnOrAfter(sup.getId(), LocalDate.now());
+                            Long upcoming = attendanceRepository.countAttendancesOnOrAfter(sup.getId(),
+                                    LocalDate.now());
                             if (upcoming == null || upcoming == 0) {
-                                log.info("Cập nhật SUPPORT assignment ID={} -> COMPLETED (no upcoming attendances)", sup.getId());
+                                log.info("Cập nhật SUPPORT assignment ID={} -> COMPLETED (no upcoming attendances)",
+                                        sup.getId());
                                 sup.setStatus(AssignmentStatus.COMPLETED);
                                 sup.setUpdatedAt(LocalDateTime.now());
                                 assignmentRepository.save(sup);
@@ -176,15 +192,16 @@ public class AssignmentScheduler {
                         log.warn("Failed to evaluate SUPPORT assignment id={}: {}", sup.getId(), inner.getMessage());
                     }
                 }
-                if (supportCompleted > 0) log.info("✓ Đã cập nhật {} SUPPORT assignment sang COMPLETED", supportCompleted);
+                if (supportCompleted > 0)
+                    log.info("✓ Đã cập nhật {} SUPPORT assignment sang COMPLETED", supportCompleted);
             } catch (Exception ex) {
                 log.warn("Failed to auto-complete SUPPORT assignments: {}", ex.getMessage());
             }
-            
+
         } catch (Exception e) {
             log.error("❌ LỖI khi cập nhật phân công tạm thời: {}", e.getMessage(), e);
         }
-        
+
         log.info("=== KẾT THÚC QUÉT CẬP NHẬT PHÂN CÔNG TẠM THỜI ===\n");
     }
 
@@ -197,45 +214,49 @@ public class AssignmentScheduler {
         log.info("Thời gian chạy: {}", LocalDateTime.now());
 
         LocalDate endOfLastMonth = LocalDate.now().withDayOfMonth(1).minusDays(1);
-        
+
         try {
-            // Tìm tất cả các phân công FIXED có startDate <= cuối tháng trước và status IN_PROGRESS
+            // Tìm tất cả các phân công FIXED có startDate <= cuối tháng trước và status
+            // IN_PROGRESS
             List<Assignment> expiredAssignments = assignmentRepository.findExpiredFixedAssignments(endOfLastMonth);
-            
+
             log.info("Tìm thấy {} phân công cố định đã hết hạn", expiredAssignments.size());
 
             if (!expiredAssignments.isEmpty()) {
                 int updatedCount = 0;
-                
+
                 for (Assignment assignment : expiredAssignments) {
-                    log.info("Cập nhật assignment ID: {} - Employee: {} - Type: {} - StartDate: {} - Status: {} → COMPLETED",
+                    log.info(
+                            "Cập nhật assignment ID: {} - Employee: {} - Type: {} - StartDate: {} - Status: {} → COMPLETED",
                             assignment.getId(),
                             assignment.getEmployee().getName(),
                             assignment.getAssignmentType(),
                             assignment.getStartDate(),
                             assignment.getStatus());
-                    
+
                     assignment.setStatus(AssignmentStatus.COMPLETED);
                     assignment.setUpdatedAt(LocalDateTime.now());
                     assignmentRepository.save(assignment);
                     updatedCount++;
                 }
-                
+
                 log.info("✓ Đã cập nhật {} phân công cố định sang trạng thái COMPLETED", updatedCount);
             } else {
                 log.info("Không có phân công cố định nào cần cập nhật");
             }
-            
+
         } catch (Exception e) {
             log.error("❌ LỖI khi cập nhật phân công cố định: {}", e.getMessage(), e);
         }
-        
+
         log.info("=== KẾT THÚC QUÉT CẬP NHẬT PHÂN CÔNG CỐ ĐỊNH ===\n");
     }
 
     /**
-     * Chạy lúc 1h sáng ngày đầu tiên của mỗi tháng để tự động sinh chấm công cho tháng mới
-     * Cron: 0 0 1 1 * * = giây phút giờ ngày tháng thứ (ngày 1 hàng tháng lúc 1h sáng)
+     * Chạy lúc 1h sáng ngày đầu tiên của mỗi tháng để tự động sinh chấm công cho
+     * tháng mới
+     * Cron: 0 0 1 1 * * = giây phút giờ ngày tháng thứ (ngày 1 hàng tháng lúc 1h
+     * sáng)
      */
     @Scheduled(cron = "0 0 1 1 * *")
     @Transactional
@@ -255,20 +276,20 @@ public class AssignmentScheduler {
         YearMonth currentMonth = YearMonth.from(today);
         int year = currentMonth.getYear();
         int month = currentMonth.getMonthValue();
-        
+
         try {
             // Tìm tất cả các phân công IN_PROGRESS hoặc COMPLETED của tháng trước
             YearMonth lastMonth = currentMonth.minusMonths(1);
             List<Assignment> lastMonthAssignments = assignmentRepository.findAll().stream()
-                    .filter(a -> a.getStatus() == AssignmentStatus.IN_PROGRESS 
+                    .filter(a -> a.getStatus() == AssignmentStatus.IN_PROGRESS
                             || a.getStatus() == AssignmentStatus.COMPLETED)
                     .filter(a -> {
                         YearMonth assignmentMonth = YearMonth.from(a.getStartDate());
                         return assignmentMonth.equals(lastMonth);
                     })
                     .toList();
-            
-            log.info("Tìm thấy {} phân công của tháng {} cần tạo cho tháng mới", 
+
+            log.info("Tìm thấy {} phân công của tháng {} cần tạo cho tháng mới",
                     lastMonthAssignments.size(), lastMonth);
 
             int totalCreatedAssignments = 0;
@@ -303,9 +324,9 @@ public class AssignmentScheduler {
 
                 // Kiểm tra xem tháng mới đã có Assignment chưa
                 if (isCompany) {
-                    List<Assignment> employeeMonthAssignments = assignmentRepository.findAssignmentsByEmployeeAndMonthAndYear(
-                            oldAssignment.getEmployee().getId(), month, year
-                    );
+                    List<Assignment> employeeMonthAssignments = assignmentRepository
+                            .findAssignmentsByEmployeeAndMonthAndYear(
+                                    oldAssignment.getEmployee().getId(), month, year);
                     boolean alreadyExists = employeeMonthAssignments.stream()
                             .anyMatch(a -> a.getScope() == AssignmentScope.COMPANY
                                     && a.getStartDate() != null
@@ -323,8 +344,7 @@ public class AssignmentScheduler {
                                     oldAssignment.getEmployee().getId(),
                                     contract.getId(),
                                     year,
-                                    month
-                            );
+                                    month);
                     if (existingAssignment.isPresent()) {
                         log.info("Tháng {}/{} đã có Assignment ID {} cho Employee {} - Contract {}, bỏ qua",
                                 month, year, existingAssignment.get().getId(),
@@ -335,9 +355,9 @@ public class AssignmentScheduler {
                 }
 
                 // Skip automatic generation for SUPPORT and TEMPORARY assignments
-                if (oldAssignment.getAssignmentType() == AssignmentType.SUPPORT 
+                if (oldAssignment.getAssignmentType() == AssignmentType.SUPPORT
                         || oldAssignment.getAssignmentType() == AssignmentType.TEMPORARY) {
-                    log.info("Bỏ qua tự động sinh cho Assignment {} ID={} (sinh thủ công theo dates)", 
+                    log.info("Bỏ qua tự động sinh cho Assignment {} ID={} (sinh thủ công theo dates)",
                             oldAssignment.getAssignmentType(), oldAssignment.getId());
                     skippedCount++;
                     continue;
@@ -355,32 +375,36 @@ public class AssignmentScheduler {
                         .salaryAtTime(oldAssignment.getSalaryAtTime())
                         .workDays(0) // Reset về 0
                         .plannedDays(oldAssignment.getPlannedDays())
-                        .workingDaysPerWeek(oldAssignment.getWorkingDaysPerWeek() != null 
-                                ? new ArrayList<>(oldAssignment.getWorkingDaysPerWeek()) 
+                        .workingDaysPerWeek(oldAssignment.getWorkingDaysPerWeek() != null
+                                ? new ArrayList<>(oldAssignment.getWorkingDaysPerWeek())
                                 : null)
                         .additionalAllowance(oldAssignment.getAdditionalAllowance())
                         .description(oldAssignment.getDescription())
                         .createdAt(LocalDateTime.now())
                         .updatedAt(LocalDateTime.now())
                         .build();
-                
+
                 Assignment savedAssignment = assignmentRepository.save(newAssignment);
                 totalCreatedAssignments++;
-                
+
                 log.info("✓ Đã tạo Assignment mới ID {} cho tháng {}/{} (Employee: {}, Type: {})",
-                        savedAssignment.getId(), month, year, 
+                        savedAssignment.getId(), month, year,
                         savedAssignment.getEmployee().getName(),
                         savedAssignment.getAssignmentType());
 
-                // === FIX: Skip Attendance generation for contracts requiring image verification ===
+                // === FIX: Skip Attendance generation for contracts requiring image
+                // verification ===
                 // Thay vào đó tạo WorkSchedule để nhân viên phải chụp ảnh mới có ngày công
-                boolean requiresImageVerification = !isCompany 
-                        && contract != null 
+                boolean requiresImageVerification = !isCompany
+                        && contract != null
                         && Boolean.TRUE.equals(contract.getRequiresImageVerification());
 
                 if (requiresImageVerification) {
-                    log.info("Contract ID {} yêu cầu chụp ảnh xác thực, bỏ qua sinh Attendance tự động cho Assignment ID {}. " +
-                             "Tạo WorkSchedule thay thế.", contract.getId(), savedAssignment.getId());
+                    log.info(
+                            "Contract ID {} yêu cầu chụp ảnh xác thực, bỏ qua sinh Attendance tự động cho Assignment ID {}. "
+                                    +
+                                    "Tạo WorkSchedule thay thế.",
+                            contract.getId(), savedAssignment.getId());
 
                     // Tính endDate cho assignment mới
                     LocalDate endOfMonth = currentMonth.atEndOfMonth();
@@ -432,13 +456,15 @@ public class AssignmentScheduler {
                     savedAssignment.setUpdatedAt(LocalDateTime.now());
                     assignmentRepository.save(savedAssignment);
 
-                    log.info("✓ Đã tạo WorkSchedule và cập nhật workDays=0, plannedDays={} cho Assignment ID {} (requiresImageVerification=true)",
+                    log.info(
+                            "✓ Đã tạo WorkSchedule và cập nhật workDays=0, plannedDays={} cho Assignment ID {} (requiresImageVerification=true)",
                             savedAssignment.getPlannedDays(), savedAssignment.getId());
                     continue; // Skip phần sinh Attendance bên dưới
                 }
                 // === END FIX ===
 
-                // Xác định ngày kết thúc: min của (cuối tháng, ngày hết hạn hợp đồng/assignment nếu có)
+                // Xác định ngày kết thúc: min của (cuối tháng, ngày hết hạn hợp đồng/assignment
+                // nếu có)
                 LocalDate endOfMonth = currentMonth.atEndOfMonth();
                 LocalDate endDate = endOfMonth;
                 if (isCompany) {
@@ -470,15 +496,15 @@ public class AssignmentScheduler {
                 } else {
                     workingDays = contract.getWorkingDaysPerWeek();
                 }
-                
+
                 // Debug log
                 if (isCompany) {
-                    log.info("[DEBUG] Assignment ID {} (COMPANY): workingDays = {}, startDate = {}, endDate = {}", 
-                            savedAssignment.getId(), 
+                    log.info("[DEBUG] Assignment ID {} (COMPANY): workingDays = {}, startDate = {}, endDate = {}",
+                            savedAssignment.getId(),
                             workingDays != null ? workingDays : "NULL",
                             firstDayOfMonth, endDate);
                 }
-                
+
                 LocalDate currentDate = firstDayOfMonth;
                 int skippedExisting = 0;
                 int skippedNotWorkingDay = 0;
@@ -487,19 +513,20 @@ public class AssignmentScheduler {
                 while (!currentDate.isAfter(endDate)) {
                     loopCount++;
                     DayOfWeek currentDayOfWeek = currentDate.getDayOfWeek();
-                    
-                    // Kiểm tra có phải ngày làm việc không - so sánh bằng String vì có thể khác enum class
+
+                    // Kiểm tra có phải ngày làm việc không - so sánh bằng String vì có thể khác
+                    // enum class
                     if (workingDays != null && !workingDays.isEmpty()) {
                         boolean isWorkingDay = false;
                         String currentDayName = currentDayOfWeek.name();
-                        
+
                         for (Object day : workingDays) {
                             if (day.toString().equals(currentDayName)) {
                                 isWorkingDay = true;
                                 break;
                             }
                         }
-                        
+
                         if (!isWorkingDay) {
                             skippedNotWorkingDay++;
                             currentDate = currentDate.plusDays(1);
@@ -508,10 +535,11 @@ public class AssignmentScheduler {
                     }
 
                     // Kiểm tra xem attendance đã tồn tại chưa
-                        Optional<Attendance> existing = attendanceRepository
-                            .findByAssignmentAndEmployeeAndDate(savedAssignment.getId(), savedAssignment.getEmployee().getId(), currentDate);
+                    Optional<Attendance> existing = attendanceRepository
+                            .findByAssignmentAndEmployeeAndDate(savedAssignment.getId(),
+                                    savedAssignment.getEmployee().getId(), currentDate);
 
-                        if (existing.isEmpty()) {
+                    if (existing.isEmpty()) {
                         Attendance attendance = Attendance.builder()
                                 .employee(savedAssignment.getEmployee())
                                 .assignment(savedAssignment) // Dùng assignment mới
@@ -526,7 +554,7 @@ public class AssignmentScheduler {
                                 .createdAt(LocalDateTime.now())
                                 .updatedAt(LocalDateTime.now())
                                 .build();
-                        
+
                         attendanceRepository.save(attendance);
                         generatedDays++;
                     } else {
@@ -537,20 +565,22 @@ public class AssignmentScheduler {
                 }
 
                 if (isCompany) {
-                    log.info("[DEBUG] Assignment ID {} (COMPANY): generatedDays={}, skippedExisting={}, skippedNotWorkingDay={}", 
+                    log.info(
+                            "[DEBUG] Assignment ID {} (COMPANY): generatedDays={}, skippedExisting={}, skippedNotWorkingDay={}",
                             savedAssignment.getId(), generatedDays, skippedExisting, skippedNotWorkingDay);
                 }
 
                 if (generatedDays > 0) {
-                    log.info("  → Sinh {} ngày chấm công cho Assignment mới ID {}", 
+                    log.info("  → Sinh {} ngày chấm công cho Assignment mới ID {}",
                             generatedDays, savedAssignment.getId());
                     totalGeneratedAttendances += generatedDays;
                 }
-                
+
                 // Cập nhật workDays = số attendance đã sinh
                 savedAssignment.setWorkDays(generatedDays);
-                
-                // Tính lại plannedDays cho tháng mới dựa trên workingDays và số ngày trong tháng
+
+                // Tính lại plannedDays cho tháng mới dựa trên workingDays và số ngày trong
+                // tháng
                 if (workingDays != null && !workingDays.isEmpty()) {
                     int plannedDaysForMonth = 0;
                     LocalDate tempDate = firstDayOfMonth;
@@ -573,22 +603,22 @@ public class AssignmentScheduler {
                     // Nếu không có workingDays thì plannedDays = workDays
                     savedAssignment.setPlannedDays(generatedDays);
                 }
-                
+
                 savedAssignment.setUpdatedAt(LocalDateTime.now());
                 assignmentRepository.save(savedAssignment);
-                
-                log.info("✓ Đã cập nhật workDays={}, plannedDays={} cho Assignment ID {} (scope={}, type={})", 
-                        generatedDays, savedAssignment.getPlannedDays(), savedAssignment.getId(), 
+
+                log.info("✓ Đã cập nhật workDays={}, plannedDays={} cho Assignment ID {} (scope={}, type={})",
+                        generatedDays, savedAssignment.getPlannedDays(), savedAssignment.getId(),
                         savedAssignment.getScope(), savedAssignment.getAssignmentType());
             }
-            
-            log.info("✓ Tổng kết: Đã tạo {} Assignment mới, sinh {} ngày chấm công, bỏ qua {} assignment", 
+
+            log.info("✓ Tổng kết: Đã tạo {} Assignment mới, sinh {} ngày chấm công, bỏ qua {} assignment",
                     totalCreatedAssignments, totalGeneratedAttendances, skippedCount);
-            
+
         } catch (Exception e) {
             log.error("❌ LỖI khi sinh assignment và chấm công tháng mới: {}", e.getMessage(), e);
         }
-        
+
         log.info("=== KẾT THÚC SINH ASSIGNMENT VÀ CHẤM CÔNG THÁNG MỚI ===\n");
     }
 }
