@@ -450,6 +450,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .map(c -> c.getName())
                                 .collect(Collectors.joining(", "));
 
+                Long currentCustomerId = activeCustomers.isEmpty() ? null : activeCustomers.get(0).getId();
+
                 return EmployeeResponse.builder()
                                 .id(employee.getId())
                                 .username(employee.getUsername())
@@ -475,6 +477,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .createdAt(employee.getCreatedAt())
                                 .updatedAt(employee.getUpdatedAt())
                                 .currentCustomerName(currentCustomerName)
+                                .currentCustomerId(currentCustomerId)
                                 .build();
         }
 

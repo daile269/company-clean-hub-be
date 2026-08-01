@@ -193,6 +193,11 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 throw new AppException(ErrorCode.ASSIGNMENT_START_DATE_BEFORE_CONTRACT);
                         }
 
+                        // Kiểm tra hợp đồng đã hết hạn trong quá khứ chưa
+                        if (contract.getEndDate() != null && contract.getEndDate().isBefore(today)) {
+                                throw new AppException(ErrorCode.CONTRACT_EXPIRED);
+                        }
+
                         workingDays = contract.getWorkingDaysPerWeek() != null
                                         ? new ArrayList<>(contract.getWorkingDaysPerWeek())
                                         : null;
