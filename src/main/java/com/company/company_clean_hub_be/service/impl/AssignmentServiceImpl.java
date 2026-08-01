@@ -162,10 +162,10 @@ public class AssignmentServiceImpl implements AssignmentService {
                         }
                 }
 
-                // Business rule: Only "Quản lý tổng" (QLT1) can create SUPPORT assignments
+                // Business rule: Only "Quản lý tổng" (QLT1 and QLT2) can create SUPPORT assignments
                 if (assignmentTypeParsed == AssignmentType.SUPPORT) {
                         String roleCode = (creator.getRole() != null) ? creator.getRole().getCode() : "";
-                        if (!"QLT1".equalsIgnoreCase(roleCode)) {
+                        if (!"QLT1".equalsIgnoreCase(roleCode) && !"QLT2".equalsIgnoreCase(roleCode)) {
                                 log.warn("User '{}' with role '{}' attempted to create SUPPORT assignment - forbidden",
                                                 username, roleCode);
                                 throw new AppException(ErrorCode.FORBIDDEN);
@@ -246,8 +246,9 @@ public class AssignmentServiceImpl implements AssignmentService {
                 }
 
                 // Kiểm tra nhân viên đã được phân công phụ trách hợp đồng này chưa (Chặn trùng
-                // cho cả IN_PROGRESS và SCHEDULED)
-                if (scope == AssignmentScope.CONTRACT && (AssignmentStatus.IN_PROGRESS.equals(finalStatus)
+                // cho cả IN_PROGRESS và SCHEDULED, loại trừ loại phân công SUPPORT)
+                if (scope == AssignmentScope.CONTRACT && assignmentTypeParsed != AssignmentType.SUPPORT
+                                && (AssignmentStatus.IN_PROGRESS.equals(finalStatus)
                                 || AssignmentStatus.SCHEDULED.equals(finalStatus))) {
                         List<Assignment> existingAssignments = assignmentRepository
                                         .findActiveAssignmentByEmployeeAndContract(request.getEmployeeId(),
