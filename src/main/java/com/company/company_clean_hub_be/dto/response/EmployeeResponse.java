@@ -43,4 +43,7 @@ public class EmployeeResponse {
 
     private String cccdFrontImage;
     private String cccdBackImage;
+
+    // Tên khách hàng đang làm việc (IN_PROGRESS assignment), null nếu chưa phân công
+    private String currentCustomerName;
 }

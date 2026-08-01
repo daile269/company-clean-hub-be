@@ -99,12 +99,12 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         @Override
         public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword,
-                        com.company.company_clean_hub_be.entity.EmploymentType employmentType, int page, int pageSize) {
-                log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, page={}, pageSize={}",
-                                keyword,
-                                employmentType, page, pageSize);
+                        com.company.company_clean_hub_be.entity.EmploymentType employmentType,
+                        String province, Boolean unassigned, int page, int pageSize) {
+                log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, province='{}', unassigned={}, page={}, pageSize={}",
+                                keyword, employmentType, province, unassigned, page, pageSize);
                 Pageable pageable = PageRequest.of(page, pageSize, Sort.by("employeeCode").descending());
-                Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, pageable);
+                Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, province, unassigned, pageable);
 
                 List<EmployeeResponse> employees = employeePage.getContent().stream()
                                 .map(this::mapToResponse)
@@ -442,6 +442,14 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         private EmployeeResponse mapToResponse(Employee employee) {
+                // Lấy tên các khách hàng đang làm việc (IN_PROGRESS)
+                List<com.company.company_clean_hub_be.entity.Customer> activeCustomers =
+                        assignmentRepository.findActiveCustomersByEmployee(employee.getId());
+                String currentCustomerName = activeCustomers.isEmpty() ? null :
+                        activeCustomers.stream()
+                                .map(c -> c.getName())
+                                .collect(Collectors.joining(", "));
+
                 return EmployeeResponse.builder()
                                 .id(employee.getId())
                                 .username(employee.getUsername())
@@ -466,6 +474,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .cccdBackImage(employee.getCccdBackImage())
                                 .createdAt(employee.getCreatedAt())
                                 .updatedAt(employee.getUpdatedAt())
+                                .currentCustomerName(currentCustomerName)
                                 .build();
         }
 

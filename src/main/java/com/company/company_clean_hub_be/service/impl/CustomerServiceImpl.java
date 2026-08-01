@@ -184,9 +184,15 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
-    public PageResponse<CustomerResponse> getCustomersWithFilter(String keyword, int page, int pageSize) {
+    public PageResponse<CustomerResponse> getCustomersWithFilter(String keyword, Boolean hasContractInMonth, Integer month, Integer year, int page, int pageSize) {
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("customerCode").descending());
         
+        LocalDate today = LocalDate.now();
+        int targetMonth = (month != null) ? month : today.getMonthValue();
+        int targetYear = (year != null) ? year : today.getYear();
+        LocalDate monthStart = LocalDate.of(targetYear, targetMonth, 1);
+        LocalDate monthEnd = monthStart.plusMonths(1).minusDays(1);
+
         String username = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
         User currentUser = userRepository.findByUsername(username).orElse(null);
         
@@ -204,9 +210,9 @@ public class CustomerServiceImpl implements CustomerService {
                         .last(true)
                         .build();
             }
-            customerPage = customerRepository.findByFiltersAndIds(keyword, assignedIds, pageable);
+            customerPage = customerRepository.findByFiltersAndIds(keyword, assignedIds, hasContractInMonth, monthStart, monthEnd, pageable);
         } else {
-            customerPage = customerRepository.findByFilters(keyword, pageable);
+            customerPage = customerRepository.findByFilters(keyword, hasContractInMonth, monthStart, monthEnd, pageable);
         }
 
         List<CustomerResponse> customers = customerPage.getContent().stream()

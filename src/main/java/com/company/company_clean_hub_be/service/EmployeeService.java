@@ -11,7 +11,8 @@ public interface EmployeeService {
         List<EmployeeResponse> getAllEmployees();
 
         PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword,
-                        com.company.company_clean_hub_be.entity.EmploymentType employmentType, int page, int pageSize);
+                        com.company.company_clean_hub_be.entity.EmploymentType employmentType,
+                        String province, Boolean unassigned, int page, int pageSize);
 
         EmployeeResponse getEmployeeById(Long id);
 

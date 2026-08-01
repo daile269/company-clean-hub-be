@@ -26,10 +26,15 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
            "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(e.phone) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
-           "AND (:employmentType IS NULL OR e.employmentType = :employmentType)")
+           "AND (:employmentType IS NULL OR e.employmentType = :employmentType) " +
+           "AND (:province IS NULL OR :province = '' OR LOWER(e.address) LIKE LOWER(CONCAT('%', :province, '%'))) " +
+           "AND (:unassigned IS NULL OR :unassigned = false OR e.id NOT IN (" +
+           "SELECT a.employee.id FROM Assignment a WHERE a.status IN ('IN_PROGRESS', 'SCHEDULED')))")
     Page<Employee> findByFilters(
             @Param("keyword") String keyword,
             @Param("employmentType") com.company.company_clean_hub_be.entity.EmploymentType employmentType,
+            @Param("province") String province,
+            @Param("unassigned") Boolean unassigned,
             Pageable pageable
     );
 
