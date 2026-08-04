@@ -137,6 +137,19 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
                         @Param("year") Integer year,
                         @Param("employeeId") Long employeeId);
 
+        @Query("SELECT DISTINCT a FROM Assignment a " +
+                        "JOIN FETCH a.contract c " +
+                        "JOIN FETCH c.customer cu " +
+                        "JOIN a.attendances att " +
+                        "WHERE a.employee.id IN :employeeIds " +
+                        "AND FUNCTION('MONTH', att.date) = :month " +
+                        "AND FUNCTION('YEAR', att.date) = :year " +
+                        "AND a.status <> com.company.company_clean_hub_be.entity.AssignmentStatus.CANCELLED")
+        List<Assignment> findDistinctAssignmentsByAttendanceMonthAndEmployeeIds(
+                        @Param("month") Integer month,
+                        @Param("year") Integer year,
+                        @Param("employeeIds") List<Long> employeeIds);
+
         @Query("SELECT a FROM Assignment a " +
                         "WHERE a.assignmentType = 'TEMPORARY' " +
                         "AND a.status = 'IN_PROGRESS' " +
@@ -195,6 +208,18 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
         Long countDistinctActiveEmployeesByContractExcludingType(
                         @Param("contractId") Long contractId,
                         @Param("excludedType") com.company.company_clean_hub_be.entity.AssignmentType excludedType);
+
+        @Query("SELECT COUNT(a) FROM Assignment a " +
+                        "WHERE a.contract.id = :contractId " +
+                        "AND a.status IN ('IN_PROGRESS', 'SCHEDULED')")
+        Long countActiveAssignmentsByContract(@Param("contractId") Long contractId);
+
+        @Query("SELECT a FROM Assignment a " +
+                        "JOIN FETCH a.contract c " +
+                        "WHERE a.status = :status AND c.requiresImageVerification = :requiresVerification")
+        List<Assignment> findByStatusAndContractRequiresImageVerification(
+                        @Param("status") AssignmentStatus status,
+                        @Param("requiresVerification") Boolean requiresVerification);
 
         @Query("SELECT COUNT(DISTINCT a.employee.id) FROM Assignment a " +
                         "WHERE a.contract.id = :contractId " +

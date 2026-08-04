@@ -54,6 +54,8 @@ public class AssignmentServiceImpl implements AssignmentService {
         private final com.company.company_clean_hub_be.repository.WorkScheduleRepository workScheduleRepository;
         private final com.company.company_clean_hub_be.repository.VerificationImageRepository imageRepository;
         private final AssignmentMetricsService assignmentMetricsService;
+        private final com.company.company_clean_hub_be.repository.SalaryNoteRepository salaryNoteRepository;
+        private final com.company.company_clean_hub_be.repository.NotificationRepository notificationRepository;
 
         @Override
         public List<AssignmentResponse> getAllAssignments() {
@@ -273,6 +275,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .salaryAtTime(request.getSalaryAtTime())
                                 .workingDaysPerWeek(workingDays)
                                 .additionalAllowance(request.getAdditionalAllowance())
+                                .monthlySupport(request.getMonthlySupport())
+                                .advanceNote(request.getAdvanceNote())
                                 .description(request.getDescription())
                                 .assignmentType(assignmentTypeParsed)
                                 .assignedBy(creator)
@@ -674,6 +678,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                                                                 : null)
                                                                                 .additionalAllowance(request
                                                                                                 .getAdditionalAllowance())
+                                                                                .monthlySupport(request.getMonthlySupport())
+                                                                                .advanceNote(request.getAdvanceNote())
                                                                                 .description(request.getDescription())
                                                                                 .assignmentType(assignmentTypeParsed)
                                                                                 .assignedBy(savedAssignment
@@ -726,6 +732,26 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 checkAndNotifyTimeConflict(savedAssignment, contract);
                         } catch (Exception e) {
                                 log.warn("checkAndNotifyTimeConflict failed for assignmentId={}: {}",
+                                                savedAssignment.getId(), e.getMessage());
+                        }
+                }
+
+                // Task 19: Kiểm tra và gửi notification thiếu nhân viên (không chặn flow chính)
+                if (contract != null) {
+                        try {
+                                checkAndNotifyInsufficientStaff(contract);
+                        } catch (Exception e) {
+                                log.warn("checkAndNotifyInsufficientStaff failed for contractId={}: {}",
+                                                contract.getId(), e.getMessage());
+                        }
+                }
+
+                // Task 19: Kiểm tra và gửi notification phân công vượt salaryNote (không chặn flow chính)
+                if (contract != null) {
+                        try {
+                                checkAndNotifyAssignmentOverBudget(savedAssignment);
+                        } catch (Exception e) {
+                                log.warn("checkAndNotifyAssignmentOverBudget failed for assignmentId={}: {}",
                                                 savedAssignment.getId(), e.getMessage());
                         }
                 }
@@ -849,10 +875,13 @@ public class AssignmentServiceImpl implements AssignmentService {
                 // Update fields
                 assignment.setEmployee(employee);
                 assignment.setStartDate(request.getStartDate());
+                assignment.setEndDate(calculateEndDate(request, assignment.getAssignmentType()));
                 assignment.setStatus(request.getStatus());
                 assignment.setSalaryAtTime(request.getSalaryAtTime());
 
                 assignment.setAdditionalAllowance(request.getAdditionalAllowance());
+                assignment.setMonthlySupport(request.getMonthlySupport());
+                assignment.setAdvanceNote(request.getAdvanceNote());
                 assignment.setDescription(request.getDescription());
                 assignment.setUpdatedAt(LocalDateTime.now());
 
@@ -880,6 +909,23 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 log.info("[ASSIGNMENT][UPDATE] Finish update assignment, id={}", updatedAssignment.getId());
 
+                // Task 19: Kiểm tra và gửi notification (không chặn flow chính)
+                Contract updatedContract = updatedAssignment.getContract();
+                if (updatedContract != null) {
+                        try {
+                                checkAndNotifyInsufficientStaff(updatedContract);
+                        } catch (Exception e) {
+                                log.warn("checkAndNotifyInsufficientStaff failed for contractId={}: {}",
+                                                updatedContract.getId(), e.getMessage());
+                        }
+                        try {
+                                checkAndNotifyAssignmentOverBudget(updatedAssignment);
+                        } catch (Exception e) {
+                                log.warn("checkAndNotifyAssignmentOverBudget failed for assignmentId={}: {}",
+                                                updatedAssignment.getId(), e.getMessage());
+                        }
+                }
+
                 return mapToResponse(updatedAssignment);
         }
 
@@ -903,6 +949,45 @@ public class AssignmentServiceImpl implements AssignmentService {
                 log.info("[ASSIGNMENT][UPDATE] Assignment updated successfully, id={}", updatedAssignment.getId());
 
                 return mapToResponse(updatedAssignment);
+        }
+
+        @Override
+        @Transactional
+        public AssignmentResponse updateAdvanceNote(Long id, BigDecimal advanceNote) {
+                log.info("[ASSIGNMENT][ADVANCE] Updating advanceNote for assignment id={}", id);
+
+                if (id == null) {
+                        throw new IllegalArgumentException("Assignment id must not be null");
+                }
+
+                Assignment assignment = assignmentRepository.findById(id)
+                        .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+
+                // Only QLV can update advance note (bypass 1-hour lock)
+                String username = SecurityContextHolder.getContext().getAuthentication().getName();
+                User updater = userRepository.findByUsername(username)
+                        .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+
+                if (updater.getRole() != null && "QLV".equalsIgnoreCase(updater.getRole().getCode())) {
+                        // QLV: only allow updating advanceNote, no time lock
+                        log.info("[ASSIGNMENT][ADVANCE] QLV updating advanceNote: assignmentId={}, oldValue={}, newValue={}",
+                                id, assignment.getAdvanceNote(), advanceNote);
+                } else if (updater.getRole() != null && ("QLT1".equalsIgnoreCase(updater.getRole().getCode())
+                        || "QLT2".equalsIgnoreCase(updater.getRole().getCode()))) {
+                        // QLT1/QLT2: also allowed, no time lock
+                        log.info("[ASSIGNMENT][ADVANCE] QLT updating advanceNote: assignmentId={}, oldValue={}, newValue={}",
+                                id, assignment.getAdvanceNote(), advanceNote);
+                } else {
+                        log.warn("[ASSIGNMENT][ADVANCE] Unauthorized user '{}' attempting to update advanceNote",
+                                username);
+                        throw new AppException(ErrorCode.FORBIDDEN);
+                }
+
+                assignment.setAdvanceNote(advanceNote);
+                assignment.setUpdatedAt(LocalDateTime.now());
+                Assignment updated = assignmentRepository.save(assignment);
+                log.info("[ASSIGNMENT][ADVANCE] AdvanceNote updated successfully for assignment id={}", id);
+                return mapToResponse(updated);
         }
 
         @Override
@@ -1047,6 +1132,17 @@ public class AssignmentServiceImpl implements AssignmentService {
                 // 3) Delete the assignment itself
                 assignmentRepository.delete(assignment);
                 log.info("deleteAssignment completed: assignmentId={}", id);
+
+                // Task 19: Kiểm tra thiếu nhân viên sau khi xóa assignment (không chặn flow chính)
+                Contract deletedContract = assignment.getContract();
+                if (deletedContract != null) {
+                        try {
+                                checkAndNotifyInsufficientStaff(deletedContract);
+                        } catch (Exception e) {
+                                log.warn("checkAndNotifyInsufficientStaff failed after delete for contractId={}: {}",
+                                                deletedContract.getId(), e.getMessage());
+                        }
+                }
 
                 // 4) Kiểm tra và xóa payroll nếu không còn assignment/attendance nào trong
                 // tháng/năm đó
@@ -2193,6 +2289,12 @@ public class AssignmentServiceImpl implements AssignmentService {
                         Employee employee) {
                 return com.company.company_clean_hub_be.dto.response.EmployeeResponse.builder()
                                 .id(employee.getId())
+                                .username(employee.getUsername())
+                                .phone(employee.getPhone())
+                                .email(employee.getEmail())
+                                .roleId(employee.getRole() != null ? employee.getRole().getId() : null)
+                                .roleName(employee.getRole() != null ? employee.getRole().getName() : null)
+                                .status(employee.getStatus())
                                 .employeeCode(employee.getEmployeeCode())
                                 .cccd(employee.getCccd())
                                 .address(employee.getAddress())
@@ -2201,6 +2303,13 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .bankName(employee.getBankName())
                                 .description(employee.getDescription())
                                 .employmentType(employee.getEmploymentType())
+                                .monthlySalary(employee.getMonthlySalary())
+                                .allowance(employee.getAllowance())
+                                .insuranceSalary(employee.getInsuranceSalary())
+                                // [DEPRECATED] .monthlyAdvanceLimit(employee.getMonthlyAdvanceLimit())
+                                .monthlySupport(employee.getMonthlySupport())
+                                .cccdFrontImage(employee.getCccdFrontImage())
+                                .cccdBackImage(employee.getCccdBackImage())
                                 .createdAt(employee.getCreatedAt())
                                 .updatedAt(employee.getUpdatedAt())
                                 .build();
@@ -2301,6 +2410,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .plannedDays(assignment.getPlannedDays())
                                 .workingDaysPerWeek(assignment.getWorkingDaysPerWeek())
                                 .additionalAllowance(assignment.getAdditionalAllowance())
+                                .monthlySupport(assignment.getMonthlySupport())
+                                .advanceNote(assignment.getAdvanceNote())
                                 .description(assignment.getDescription())
                                 .createdAt(assignment.getCreatedAt())
                                 .updatedAt(assignment.getUpdatedAt())
@@ -3211,8 +3322,119 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 .max(LocalDate::compareTo)
                                 .orElse(request.getStartDate());
                 }
-                
+
                 // Với các loại khác, không set endDate (null) - sẽ dùng contract endDate hoặc unlimited
                 return null;
+        }
+
+        // ─── Task 19: Notification helpers ──────────────────────────────────────
+
+        /**
+         * Kiểm tra và gửi notification nếu hợp đồng thiếu nhân viên phụ trách.
+         * So sánh số NV đang active với numberOfEmployees trong contract.
+         */
+        private void checkAndNotifyInsufficientStaff(Contract contract) {
+                if (contract.getNumberOfEmployees() == null || contract.getNumberOfEmployees() <= 0) {
+                        return;
+                }
+                Long currentCount = assignmentRepository.countActiveAssignmentsByContract(contract.getId());
+                if (currentCount < contract.getNumberOfEmployees().longValue()) {
+                        String title = "Thiếu nhân viên phụ trách hợp đồng";
+                        String message = String.format(
+                                "Hợp đồng '%s' (ID=%d) yêu cầu %d nhân viên nhưng hiện chỉ có %d nhân viên được phân công.",
+                                contract.getDescription() != null ? contract.getDescription() : "Không có mô tả",
+                                contract.getId(),
+                                contract.getNumberOfEmployees(),
+                                currentCount);
+
+                        // Gửi cho tất cả QLT1 và QLT2
+                        List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2"));
+                        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+                        for (User manager : managers) {
+                                boolean exists = notificationRepository.existsByTypeAndRefContractIdAndRecipientIdAndCreatedAtAfter(
+                                        NotificationType.INSUFFICIENT_STAFF, contract.getId(), manager.getId(), todayStart);
+                                if (!exists) {
+                                        notificationService.createNotification(
+                                                manager,
+                                                NotificationType.INSUFFICIENT_STAFF,
+                                                title,
+                                                message,
+                                                null, null, contract.getId());
+                                }
+                        }
+                        log.info("[NOTIFY][INSUFFICIENT_STAFF] Contract {} has {} employees, requires {}",
+                                contract.getId(), currentCount, contract.getNumberOfEmployees());
+                }
+        }
+
+        /**
+         * Kiểm tra và gửi notification nếu phân công có lương vượt quá salaryNote quy định.
+         * Duyệt tất cả SalaryNote của contract, so sánh với salaryAtTime của assignment.
+         */
+        private void checkAndNotifyAssignmentOverBudget(Assignment assignment) {
+                Contract contract = assignment.getContract();
+                if (contract == null) {
+                        return;
+                }
+                List<SalaryNote> salaryNotes = salaryNoteRepository.findByContractId(contract.getId());
+                if (salaryNotes == null || salaryNotes.isEmpty()) {
+                        return;
+                }
+
+                BigDecimal assignmentSalary = assignment.getSalaryAtTime();
+                if (assignmentSalary == null) {
+                        return;
+                }
+
+                for (SalaryNote sn : salaryNotes) {
+                        if (sn.getAmount() == null) {
+                                continue;
+                        }
+                        if (assignmentSalary.compareTo(sn.getAmount()) > 0) {
+                                Employee emp = (Employee) assignment.getEmployee();
+                                String categoryLabel = sn.getCategory() != null
+                                        ? sn.getCategory().getDescription()
+                                        : "Không xác định";
+                                String typeLabel = sn.getSalaryType() != null
+                                        ? sn.getSalaryType().getDescription()
+                                        : "Không xác định";
+                                String title = "Phân công vượt ngân sách lương";
+                                String message = String.format(
+                                        "Nhân viên %s (%s) được phân công với mức lương %s VNĐ, "
+                                                + "vượt quá ghi chú lương '%s - %s' (%s VNĐ) của hợp đồng '%s' (ID=%d).",
+                                        emp.getName(),
+                                        emp.getEmployeeCode(),
+                                        String.format("%,.0f", assignmentSalary),
+                                        categoryLabel, typeLabel,
+                                        String.format("%,.0f", sn.getAmount()),
+                                        contract.getDescription() != null ? contract.getDescription() : "Không có mô tả",
+                                        contract.getId());
+
+                                // Gửi cho tất cả QLT1 và QLT2
+                                List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2"));
+                                LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+                                for (User manager : managers) {
+                                        boolean exists = notificationRepository.existsByTypeAndContractIdAndEmployeeIdAndRecipientIdAndCreatedAtAfter(
+                                                NotificationType.ASSIGNMENT_OVER_BUDGET,
+                                                contract.getId(),
+                                                assignment.getEmployee().getId(),
+                                                manager.getId(),
+                                                todayStart);
+                                        if (!exists) {
+                                                notificationService.createNotification(
+                                                        manager,
+                                                        NotificationType.ASSIGNMENT_OVER_BUDGET,
+                                                        title,
+                                                        message,
+                                                        assignment.getEmployee().getId(),
+                                                        assignment.getId(),
+                                                        contract.getId());
+                                        }
+                                }
+                                log.warn("[NOTIFY][ASSIGNMENT_OVER_BUDGET] Assignment {} salary {} exceeds SalaryNote {} amount {}",
+                                        assignment.getId(), assignmentSalary, sn.getId(), sn.getAmount());
+                                break; // Chỉ gửi 1 notification cho lần vượt đầu tiên
+                        }
+                }
         }
 }

@@ -15,5 +15,6 @@ public class AssignmentPayrollDetailResponse {
     private Long assignmentId;
     private BigDecimal baseSalary; // Lương cơ bản
     private Integer workDays; // Ngày công thực tế
-    private BigDecimal expectedSalary; // Lương dự kiến (từ công thức)
+    private BigDecimal monthlySupport; // Hỗ trợ tháng cộng thẳng, không chia ngày công
+    private BigDecimal expectedSalary; // Lương dự kiến (đã gồm monthlySupport)
 }

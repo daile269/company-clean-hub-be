@@ -19,6 +19,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -47,8 +48,9 @@ public class Payroll {
     @Column(name = "penalty_total")
     private BigDecimal penaltyTotal;
 
-    @Column(name = "advance_total")
-    private BigDecimal advanceTotal;
+    // [DEPRECATED] Replaced by advanceNoteSummary (compiled from Assignment.advanceNote)
+    // @Column(name = "advance_total")
+    // private BigDecimal advanceTotal;
 
     @Column(name = "allowance_total")
     private BigDecimal allowanceTotal;

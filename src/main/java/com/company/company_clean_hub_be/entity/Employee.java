@@ -69,9 +69,13 @@ public class Employee extends User {
     @Column(name = "insurance_salary", precision = 18, scale = 2)
     private BigDecimal insuranceSalary;
 
+    // [DEPRECATED] Replaced by Assignment.advanceNote compiled in advanceNoteSummary
     // Số tiền xin ứng hàng tháng
-    @Column(name = "monthly_advance_limit", precision = 18, scale = 2)
-    private BigDecimal monthlyAdvanceLimit;
+    // @Column(name = "monthly_advance_limit", precision = 18, scale = 2)
+    // private BigDecimal monthlyAdvanceLimit;
+
+    @Column(name = "monthly_support", precision = 18, scale = 2)
+    private BigDecimal monthlySupport;
 
     @Column(name = "cccd_front_image", length = 512)
     private String cccdFrontImage;

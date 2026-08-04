@@ -106,6 +106,21 @@ public class AssignmentController {
                 HttpStatus.OK.value());
     }
 
+    @PutMapping("/{id}/advance")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('QLT1', 'QLT2', 'QLV')")
+    public ApiResponse<AssignmentResponse> updateAdvanceNote(
+            @PathVariable Long id,
+            @Valid @RequestBody com.company.company_clean_hub_be.dto.request.AdvanceNoteUpdateRequest request) {
+        log.info("[ASSIGNMENT][API][ADVANCE] Start PUT /assignments/{}/advance advanceNote={}", id,
+                request.getAdvanceNote());
+        AssignmentResponse assignment = assignmentService.updateAdvanceNote(id, request.getAdvanceNote());
+        log.info("[ASSIGNMENT][API][ADVANCE] Update advanceNote success, id={}", assignment.getId());
+        return ApiResponse.success(
+                "Cập nhật ghi chú ứng lương thành công",
+                assignment,
+                HttpStatus.OK.value());
+    }
+
     @DeleteMapping("/{id}")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('ASSIGNMENT_DELETE')")
     public ApiResponse<Void> deleteAssignment(@PathVariable Long id) {

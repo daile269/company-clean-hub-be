@@ -77,6 +77,9 @@ public interface WorkScheduleService {
     // Helper
     boolean canCapturePhoto(Long workScheduleId);
 
+    // Check if employee has any pending SCHEDULED work schedules from today
+    boolean hasPendingSchedules(Long employeeId);
+
     // Image
     com.company.company_clean_hub_be.dto.response.VerificationImageResponse getImageByWorkScheduleId(Long workScheduleId);
 

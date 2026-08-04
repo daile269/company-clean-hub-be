@@ -23,6 +23,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider tokenProvider;
     private final CustomUserDetailsService customUserDetailsService;
 
+    // Không filter lại async dispatch (SSE timeout, etc.) — đã auth ở request gốc
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return true;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {

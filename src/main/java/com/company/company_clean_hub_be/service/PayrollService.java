@@ -9,6 +9,7 @@ import com.company.company_clean_hub_be.dto.response.PayRollAssignmentExportExce
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollOverviewResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
+import com.company.company_clean_hub_be.dto.response.PayrollSummaryDTO;
 import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 
 import jakarta.validation.Valid;
@@ -30,6 +31,8 @@ public interface PayrollService {
 
         PayrollResponse updatePaymentStatus(Long id, BigDecimal paidAmount);
 
+        PayrollResponse processPayment(Long id, com.company.company_clean_hub_be.dto.request.PaymentRequest request);
+
         void deletePayroll(Long id);
 
         // Updated to return List for bulk calculation
@@ -48,6 +51,9 @@ public interface PayrollService {
         // Assignment payroll details for employee view
         List<com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse> getAssignmentPayrollDetails(
                         Long employeeId, Integer month, Integer year);
+
+        // Get payroll summary for the payroll table (employeeCode, employeeName, advanceNote, totalSalary, paidAmount, remainingAmount)
+        List<PayrollSummaryDTO> getPayrollSummaryList(Integer month, Integer year);
 
         // Get distinct years from payroll data
         List<Integer> getDistinctYears();

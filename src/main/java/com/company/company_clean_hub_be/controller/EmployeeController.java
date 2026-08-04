@@ -23,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.company.company_clean_hub_be.dto.request.EmployeeRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
 import com.company.company_clean_hub_be.dto.response.EmployeeExportDto;
+import com.company.company_clean_hub_be.dto.response.EmployeeImageResponse;
 import com.company.company_clean_hub_be.dto.response.EmployeeResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
 import com.company.company_clean_hub_be.entity.EmployeeImage;
@@ -42,6 +43,7 @@ public class EmployeeController {
     private final EmployeeService employeeService;
     private final EmployeeImageService employeeImageService;
     private final ExcelExportService excelExportService;
+    private final com.company.company_clean_hub_be.service.FileStorageService fileStorageService;
 
     @GetMapping
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_VIEW')")
@@ -94,17 +96,18 @@ public class EmployeeController {
         return ApiResponse.success("Xóa nhân viên thành công", null, HttpStatus.OK.value());
     }
 
-    @PutMapping("/{id}/advance-salary")
-    public ApiResponse<EmployeeResponse> updateAdvanceSalary(
-            @PathVariable Long id,
-            @RequestBody java.util.Map<String, Object> requestBody) {
-        java.math.BigDecimal monthlyAdvanceLimit = null;
-        if (requestBody.containsKey("monthlyAdvanceLimit") && requestBody.get("monthlyAdvanceLimit") != null) {
-            monthlyAdvanceLimit = new java.math.BigDecimal(requestBody.get("monthlyAdvanceLimit").toString());
-        }
-        EmployeeResponse response = employeeService.updateAdvanceSalary(id, monthlyAdvanceLimit);
-        return ApiResponse.success("Cập nhật tiền ứng lương thành công", response, HttpStatus.OK.value());
-    }
+    // [DEPRECATED] Replaced by advanceNoteSummary from Assignment.advanceNote
+    // @PutMapping("/{id}/advance-salary")
+    // public ApiResponse<EmployeeResponse> updateAdvanceSalary(
+    //         @PathVariable Long id,
+    //         @RequestBody java.util.Map<String, Object> requestBody) {
+    //     java.math.BigDecimal monthlyAdvanceLimit = null;
+    //     if (requestBody.containsKey("monthlyAdvanceLimit") && requestBody.get("monthlyAdvanceLimit") != null) {
+    //         monthlyAdvanceLimit = new java.math.BigDecimal(requestBody.get("monthlyAdvanceLimit").toString());
+    //     }
+    //     EmployeeResponse response = employeeService.updateAdvanceSalary(id, monthlyAdvanceLimit);
+        //     return ApiResponse.success("Cập nhật tiền ứng lương thành công", response, HttpStatus.OK.value());
+        // }
 
     @GetMapping("/generate-code")
     @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('EMPLOYEE_CREATE')")

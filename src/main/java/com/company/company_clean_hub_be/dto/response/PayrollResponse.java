@@ -27,11 +27,14 @@ public class PayrollResponse {
     private BigDecimal salaryBase;
     private BigDecimal bonusTotal;
     private BigDecimal penaltyTotal;
-    private BigDecimal advanceTotal;
+    // [DEPRECATED] Replaced by advanceNoteSummary (compiled from Assignment.advanceNote)
+    // private BigDecimal advanceTotal;
     private BigDecimal allowanceTotal;
     private BigDecimal insuranceTotal;
     private BigDecimal finalSalary;
     private BigDecimal baseSalary;
+    private BigDecimal monthlySupportTotal; // Tổng hỗ trợ hàng tháng (cộng thẳng, không chia ngày)
+    private BigDecimal advanceNoteSummary; // Tổng tiền ứng lương từ các assignment
 
     private PayrollStatus status;
     private BigDecimal paidAmount;

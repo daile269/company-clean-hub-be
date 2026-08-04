@@ -93,14 +93,14 @@ public class VerificationServiceImpl implements VerificationService {
                 .status(VerificationStatus.PENDING)
                 .maxAttempts(maxAttempts)
                 .currentAttempts(0)
-                .transitionToContractMode(assignment.getContract() != null && 
+                .transitionToContractMode(assignment.getContract() != null &&
                     Boolean.TRUE.equals(assignment.getContract().getRequiresImageVerification()))
                 .build();
 
         AssignmentVerification saved = verificationRepository.save(verification);
-        log.info("Created verification requirement: id={}, maxAttempts={}, transitionToContractMode={}", 
+        log.info("Created verification requirement: id={}, maxAttempts={}, transitionToContractMode={}",
             saved.getId(), saved.getMaxAttempts(), saved.getTransitionToContractMode());
-        
+
         return saved;
     }
 
@@ -157,11 +157,14 @@ public class VerificationServiceImpl implements VerificationService {
     public VerificationImageResponse captureVerificationImage(VerificationCaptureRequest request) {
         log.info("Capturing verification image: verificationId={}", request.getVerificationId());
 
-        // NOTE: This method is DEPRECATED with work_schedule
-        // Use WorkScheduleService.capturePhoto() instead
-        // Keeping for backward compatibility
-        
-        throw new AppException(ErrorCode.INVALID_REQUEST, 
+        // ⚠️ DEPRECATED since April 2026 — Verification tách thành 2 tầng:
+        //   - Verification (/api/verifications): quản lý yêu cầu xác minh, duyệt/từ chối (macro)
+        //   - WorkSchedule (/api/work-schedules): chụp ảnh từng buổi check-in (micro)
+        // FE gọi đúng: workScheduleService.capturePhoto() → POST /api/work-schedules/capture
+        // FE page: app/admin/attendance/capture/[id]/page.tsx
+        // Giữ lại để tương thích ngược — trả lỗi rõ ràng để dev biết endpoint đúng.
+
+        throw new AppException(ErrorCode.INVALID_REQUEST,
             "Please use /api/work-schedules/capture endpoint for photo capture");
     }
 
@@ -246,13 +249,13 @@ public class VerificationServiceImpl implements VerificationService {
 
     @Override
     public boolean requiresVerification(Assignment assignment) {
-        
+
         // Check completed verification first. If employee has completed verification
         // (BYPASS_APPROVED/APPROVED/AUTO_APPROVED), they NEVER need verification again,
         // regardless of photo count. This ensures bypass approval is permanent.
         Long completedCount = verificationRepository.countCompletedVerificationsByEmployee(
                 assignment.getEmployee().getId());
-        
+
         if (completedCount > 0) {
             log.info("Assignment {} does NOT require verification: employee {} has {} completed verification(s) - bypass/approval is permanent",
                     assignment.getId(), assignment.getEmployee().getId(), completedCount);
@@ -277,7 +280,7 @@ public class VerificationServiceImpl implements VerificationService {
         }
 
         // Condition 2: Contract setting
-        if (assignment.getContract() != null && 
+        if (assignment.getContract() != null &&
             Boolean.TRUE.equals(assignment.getContract().getRequiresImageVerification())) {
             log.info("Assignment {} requires verification: CONTRACT_REQUIREMENT", assignment.getId());
             return true;
@@ -294,8 +297,11 @@ public class VerificationServiceImpl implements VerificationService {
 
     @Override
     public boolean canCaptureImage(Long verificationId) {
-        // NOTE: This is deprecated with work_schedule
-        // Use WorkScheduleService.canCapturePhoto() instead
+        // ⚠️ DEPRECATED since April 2026 — endpoint này luôn return false.
+        // FE không dùng endpoint này. Thay vào đó FE đọc field `canCapture`
+        // từ response của GET /verifications/assignment/{id}, field này được
+        // tính từ entity logic: !isCompleted() && currentAttempts < maxAttempts.
+        // → WorkScheduleService.canCapturePhoto() cho logic chụp ảnh thực tế.
         return false;
     }
 
@@ -303,52 +309,52 @@ public class VerificationServiceImpl implements VerificationService {
     @Transactional
     public void processAutoApprovals() {
         log.info("Starting auto-approval process...");
-        
+
         // Find verifications that already entered capture flow.
         // Important: do not limit to IN_PROGRESS only, because some records
         // can remain PENDING even after captures happened.
         List<AssignmentVerification> verifications = verificationRepository
             .findVerificationsForAutoApproval();
-        
+
         for (AssignmentVerification verification : verifications) {
             try {
                 Long verifiedCount = workScheduleRepository.countByVerificationIdAndStatus(
                     verification.getId(), WorkScheduleStatus.VERIFIED
                 );
-                
+
                 log.info("Verification {} has {} verified schedules", verification.getId(), verifiedCount);
-                
+
                 if (verifiedCount >= 5) {
                     log.info("Auto-approving verification: id={}", verification.getId());
-                    
+
                     verification.setStatus(VerificationStatus.AUTO_APPROVED);
                     verification.setAutoApprovedAt(LocalDateTime.now());
                     verificationRepository.save(verification);
-                    
+
                     // Handle work schedules
                     handleVerificationApproval(verification);
-                    
+
                     log.info("Successfully auto-approved verification: {}", verification.getId());
                 } else {
-                    log.info("Verification {} not eligible yet (verified schedules: {})", 
+                    log.info("Verification {} not eligible yet (verified schedules: {})",
                         verification.getId(), verifiedCount);
                 }
             } catch (Exception e) {
                 log.error("Failed to auto-approve verification: {}", verification.getId(), e);
             }
         }
-        
+
         log.info("Auto-approval process completed");
     }
 
     @Override
     @Transactional
     public void syncContractVerificationState(Contract contract, boolean requiresVerification) {
-        log.info("Syncing contract verification state: contractId={}, enabled={}", 
+        log.info("Syncing contract verification state: contractId={}, enabled={}",
             contract.getId(), requiresVerification);
-        
+
         List<Assignment> activeAssignments = assignmentRepository.findByContractId(contract.getId()).stream()
-            .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS || 
+            .filter(a -> a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.IN_PROGRESS ||
                         a.getStatus() == com.company.company_clean_hub_be.entity.AssignmentStatus.SCHEDULED)
             .collect(Collectors.toList());
 
@@ -375,16 +381,16 @@ public class VerificationServiceImpl implements VerificationService {
     }
 
     private void handleVerificationApproval(AssignmentVerification verification) {
-        log.info("Handling verification approval: id={}, transitionToContractMode={}", 
+        log.info("Handling verification approval: id={}, transitionToContractMode={}",
             verification.getId(), verification.getTransitionToContractMode());
 
         // Get all work schedules for this verification
         List<WorkSchedule> schedules = workScheduleRepository.findByVerificationId(verification.getId());
-        
+
         if (verification.getTransitionToContractMode()) {
             // Transition to CONTRACT_REQUIREMENT mode
             log.info("Transitioning to CONTRACT_REQUIREMENT mode for verification: {}", verification.getId());
-            
+
             // For contracts with image verification:
             // - Keep SCHEDULED/MISSED verification schedules as-is (employee still needs to capture photos)
             // - Only VERIFIED schedules already have attendance (employee captured photo)
@@ -392,16 +398,16 @@ public class VerificationServiceImpl implements VerificationService {
             // Do NOT delete or cancel verification schedules — employee must still capture photos for those days
             // Just save any status changes for VERIFIED ones
             workScheduleRepository.saveAll(schedules);
-            
+
             // Find the last verification schedule date to know where CONTRACT_REQUIREMENT should start
             LocalDate lastVerificationDate = schedules.stream()
                 .map(WorkSchedule::getScheduledDate)
                 .max(LocalDate::compareTo)
                 .orElse(LocalDate.now());
-            
+
             // Create CONTRACT_REQUIREMENT starting from the day AFTER the last verification schedule
             LocalDate contractRequirementStart = lastVerificationDate.plusDays(1);
-            
+
             // Rest of current month (from after last verification day)
             LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
             if (!contractRequirementStart.isAfter(endOfCurrentMonth)) {
@@ -426,11 +432,11 @@ public class VerificationServiceImpl implements VerificationService {
                 nextMonth.withDayOfMonth(1),
                 endOfNextMonth
             );
-            
+
         } else {
             // No transition - complete verification (contract doesn't require verification)
             log.info("Completing verification without transition: {}", verification.getId());
-            
+
             // Create attendances for ALL verification schedules (SCHEDULED + MISSED)
             for (WorkSchedule schedule : schedules) {
                 if (schedule.getAttendance() == null) {
@@ -443,7 +449,7 @@ public class VerificationServiceImpl implements VerificationService {
             }
             workScheduleRepository.saveAll(schedules);
             log.info("Created attendances for {} verification work schedules", schedules.size());
-            
+
             // Create attendance for gap period: [assignmentStartDate, firstVerificationDate - 1]
             // This handles the case where employee was assigned mid-month but assignment.startDate
             // is at the beginning of the month (e.g. contract start). The verification WorkSchedules
@@ -503,21 +509,21 @@ public class VerificationServiceImpl implements VerificationService {
                 .orElse(LocalDate.now());
             LocalDate afterVerification = lastVerificationDate.plusDays(1);
             LocalDate endOfCurrentMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
-            
+
             // Respect assignment end date (for SUPPORT assignments with specific dates)
             Assignment assignment = verification.getAssignment();
             if (assignment.getEndDate() != null && assignment.getEndDate().isBefore(endOfCurrentMonth)) {
                 endOfCurrentMonth = assignment.getEndDate();
                 log.info("Using assignment.endDate as limit: {}", endOfCurrentMonth);
             }
-            
+
             // Respect contract end date if it falls before end of current month
             Contract contract = assignment.getContract();
             if (contract != null && contract.getEndDate() != null && contract.getEndDate().isBefore(endOfCurrentMonth)) {
                 endOfCurrentMonth = contract.getEndDate();
                 log.info("Using contract.endDate as limit: {}", endOfCurrentMonth);
             }
-            
+
             // Create attendance for all working days from after verification to end of current month
             if (!afterVerification.isAfter(endOfCurrentMonth)) {
                 List<java.time.DayOfWeek> workingDays = assignment.getWorkingDaysPerWeek();
@@ -567,7 +573,7 @@ public class VerificationServiceImpl implements VerificationService {
                     afterVerification, endOfCurrentMonth);
             }
         }
-        
+
         // NOTE: GAP PERIOD ATTENDANCE (contractStartDate → assignmentStartDate) đã bị xóa.
         // Nhân viên chỉ có attendance từ assignment.startDate trở đi.
         // Gap từ assignment.startDate → firstVerificationDate đã được xử lý ở trên (trong non-transition path).
@@ -578,23 +584,23 @@ public class VerificationServiceImpl implements VerificationService {
 
     private void handleContractVerificationEnabled(Assignment assignment) {
         log.info("[VERIFI-ENABLE] ===== START handleContractVerificationEnabled =====");
-        log.info("[VERIFI-ENABLE] assignmentId={}, employeeId={}, contractId={}", 
-            assignment.getId(), 
+        log.info("[VERIFI-ENABLE] assignmentId={}, employeeId={}, contractId={}",
+            assignment.getId(),
             assignment.getEmployee() != null ? assignment.getEmployee().getId() : "NULL",
             assignment.getContract() != null ? assignment.getContract().getId() : "NULL");
-        
+
         LocalDate today = LocalDate.now();
         log.info("[VERIFI-ENABLE] today={}", today);
 
         // Xóa work_schedules SCHEDULED cũ (từ hôm nay trở đi) trước khi tạo mới
         List<WorkSchedule> oldScheduled = workScheduleRepository.findByAssignmentId(assignment.getId())
             .stream()
-            .filter(ws -> ws.getStatus() == WorkScheduleStatus.SCHEDULED 
+            .filter(ws -> ws.getStatus() == WorkScheduleStatus.SCHEDULED
                        && !ws.getScheduledDate().isBefore(today))
             .collect(Collectors.toList());
-        log.info("[VERIFI-ENABLE] Found {} old SCHEDULED work_schedules to delete (from {} onwards)", 
+        log.info("[VERIFI-ENABLE] Found {} old SCHEDULED work_schedules to delete (from {} onwards)",
             oldScheduled.size(), today);
-        oldScheduled.forEach(ws -> log.info("[VERIFI-ENABLE]   - workScheduleId={}, date={}, status={}", 
+        oldScheduled.forEach(ws -> log.info("[VERIFI-ENABLE]   - workScheduleId={}, date={}, status={}",
             ws.getId(), ws.getScheduledDate(), ws.getStatus()));
         if (!oldScheduled.isEmpty()) {
             workScheduleRepository.deleteAll(oldScheduled);
@@ -609,7 +615,7 @@ public class VerificationServiceImpl implements VerificationService {
         attendanceRepository.deleteByAssignmentIdAndDateAfter(assignment.getId(), today.minusDays(1));
 
         Long attendancesAfter = attendanceRepository.countAttendancesByAssignment(assignment.getId());
-        log.info("[VERIFI-ENABLE] Attendance count AFTER delete: {} (deleted {})", 
+        log.info("[VERIFI-ENABLE] Attendance count AFTER delete: {} (deleted {})",
             attendancesAfter, attendancesBefore - attendancesAfter);
 
         // Cập nhật workDays
@@ -619,14 +625,14 @@ public class VerificationServiceImpl implements VerificationService {
 
         // Reload để tránh lazy loading issue với workingDaysPerWeek
         Assignment freshAssignment = assignmentRepository.findById(assignment.getId()).orElse(assignment);
-        log.info("[VERIFI-ENABLE] freshAssignment workingDaysPerWeek: {} (size={})", 
+        log.info("[VERIFI-ENABLE] freshAssignment workingDaysPerWeek: {} (size={})",
             freshAssignment.getWorkingDaysPerWeek(),
             freshAssignment.getWorkingDaysPerWeek() != null ? freshAssignment.getWorkingDaysPerWeek().size() : "NULL");
 
         // Tạo work_schedules từ hôm nay
         LocalDate endOfMonth = today.withDayOfMonth(today.lengthOfMonth());
         log.info("[VERIFI-ENABLE] Creating work_schedules from {} to {}", today, endOfMonth);
-        
+
         List<WorkSchedule> created = workScheduleService.createWorkSchedulesForAssignment(
             freshAssignment,
             WorkScheduleReason.CONTRACT_REQUIREMENT,
@@ -634,10 +640,10 @@ public class VerificationServiceImpl implements VerificationService {
             today,
             endOfMonth
         );
-        
+
         log.info("[VERIFI-ENABLE] Created {} work_schedules", created != null ? created.size() : 0);
         if (created != null) {
-            created.forEach(ws -> log.info("[VERIFI-ENABLE]   + workScheduleId={}, date={}, status={}", 
+            created.forEach(ws -> log.info("[VERIFI-ENABLE]   + workScheduleId={}, date={}, status={}",
                 ws.getId(), ws.getScheduledDate(), ws.getStatus()));
         }
         log.info("[VERIFI-ENABLE] ===== END handleContractVerificationEnabled =====");
@@ -650,7 +656,7 @@ public class VerificationServiceImpl implements VerificationService {
 
         // Cancel pending verifications (NEW_EMPLOYEE chưa hoàn thành)
         verificationRepository.findByAssignmentId(assignment.getId()).ifPresent(verification -> {
-            if (verification.getStatus() == VerificationStatus.PENDING || 
+            if (verification.getStatus() == VerificationStatus.PENDING ||
                 verification.getStatus() == VerificationStatus.IN_PROGRESS) {
                 verification.setStatus(VerificationStatus.CANCELLED);
                 verification.setCancelledAt(LocalDateTime.now());
@@ -744,7 +750,7 @@ public class VerificationServiceImpl implements VerificationService {
         int displayMaxAttempts = actualScheduleCount != null && actualScheduleCount > 0
                 ? actualScheduleCount.intValue()
                 : verification.getMaxAttempts();
-        
+
         return AssignmentVerificationResponse.builder()
                 .id(verification.getId())
                 .assignmentId(assignment.getId())
@@ -773,7 +779,8 @@ public class VerificationServiceImpl implements VerificationService {
                 .employeeId(image.getEmployee().getId())
                 .attendanceId(image.getAttendance() != null ? image.getAttendance().getId() : null)
                 .cloudinaryPublicId(image.getCloudinaryPublicId())
-                .cloudinaryUrl(image.getCloudinaryUrl())
+                .cloudinaryUrl(image.getCloudinaryUrl() != null ? image.getCloudinaryUrl() : null)
+                .imageExpired(image.getCloudinaryUrl() == null) // Cờ đánh dấu ảnh đã bị xoá sau 90 ngày
                 .latitude(image.getLatitude())
                 .longitude(image.getLongitude())
                 .address(image.getAddress())
@@ -783,14 +790,14 @@ public class VerificationServiceImpl implements VerificationService {
                 .createdAt(image.getCreatedAt())
                 .build();
     }
-    
+
     @Override
     public boolean isAttendancePhoto(VerificationImage image) {
         // Ảnh chấm công: có liên kết với attendance_id
         // Được chụp để chấm công hàng ngày
         return image.getAttendance() != null;
     }
-    
+
     @Override
     public boolean isVerificationImage(VerificationImage image) {
         // Ảnh xác minh: có liên kết với assignment_verification_id

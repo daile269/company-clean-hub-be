@@ -52,6 +52,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     private final FileStorageService fileStorageService;
     private final AssignmentMetricsService assignmentMetricsService;
     private final com.company.company_clean_hub_be.service.helper.VerificationChecker verificationChecker;
+    private final com.company.company_clean_hub_be.service.NotificationService notificationService;
+    private final com.company.company_clean_hub_be.repository.WorkLocationRepository workLocationRepository;
+    private final com.company.company_clean_hub_be.repository.UserRepository userRepository;
+    private final com.company.company_clean_hub_be.repository.NotificationRepository notificationRepository;
 
     @Override
     @Transactional
@@ -61,13 +65,13 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             Long verificationId,
             LocalDate fromDate,
             LocalDate toDate) {
-        
-        log.info("Creating work schedules: assignmentId={}, reason={}, from={}, to={}", 
+
+        log.info("Creating work schedules: assignmentId={}, reason={}, from={}, to={}",
             assignment.getId(), reason, fromDate, toDate);
 
         List<WorkSchedule> schedules = new ArrayList<>();
         AssignmentVerification verification = null;
-        
+
         if (verificationId != null) {
             verification = verificationRepository.findById(verificationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Verification not found: " + verificationId));
@@ -76,9 +80,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         // Get working days from assignment - convert entity DayOfWeek to java.time.DayOfWeek
         List<java.time.DayOfWeek> workingDays;
         List<java.time.DayOfWeek> rawDays = assignment.getWorkingDaysPerWeek();
-        log.info("[CREATE-WS] workingDays from assignment: {} (size={})", 
+        log.info("[CREATE-WS] workingDays from assignment: {} (size={})",
             rawDays, rawDays != null ? rawDays.size() : "NULL");
-        
+
         if (rawDays == null || rawDays.isEmpty()) {
             log.info("[CREATE-WS] workingDays is empty, using default Mon-Sat");
             workingDays = List.of(
@@ -99,7 +103,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             java.time.DayOfWeek javaDayOfWeek = currentDate.getDayOfWeek();
             boolean isWorkingDay = workingDays.contains(javaDayOfWeek);
             boolean alreadyExists = workScheduleRepository.existsByAssignmentIdAndScheduledDate(assignment.getId(), currentDate);
-            log.info("[CREATE-WS] date={}, dayOfWeek={}, isWorkingDay={}, alreadyExists={}", 
+            log.info("[CREATE-WS] date={}, dayOfWeek={}, isWorkingDay={}, alreadyExists={}",
                 currentDate, javaDayOfWeek, isWorkingDay, alreadyExists);
 
             if (isWorkingDay) {
@@ -107,10 +111,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 if (!workScheduleRepository.existsByAssignmentIdAndScheduledDate(assignment.getId(), currentDate)) {
                     // Past dates → MISSED (employee didn't capture photo, manager can create attendance manually)
                     // Today and future → SCHEDULED (waiting for photo capture)
-                    WorkScheduleStatus status = currentDate.isBefore(LocalDate.now()) 
-                        ? WorkScheduleStatus.MISSED 
+                    WorkScheduleStatus status = currentDate.isBefore(LocalDate.now())
+                        ? WorkScheduleStatus.MISSED
                         : WorkScheduleStatus.SCHEDULED;
-                    
+
                     WorkSchedule schedule = WorkSchedule.builder()
                         .assignment(assignment)
                         .employee(assignment.getEmployee())
@@ -119,7 +123,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                         .reason(reason)
                         .assignmentVerification(verification)
                         .build();
-                    
+
                     schedules.add(schedule);
                 }
             }
@@ -129,7 +133,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
         List<WorkSchedule> saved = workScheduleRepository.saveAll(schedules);
         log.info("Created {} work schedules for assignment {}", saved.size(), assignment.getId());
-        
+
         return saved;
     }
 
@@ -156,10 +160,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             boolean alreadyExists = workScheduleRepository
                 .existsByAssignmentIdAndScheduledDate(assignment.getId(), date);
             if (!alreadyExists) {
-                WorkScheduleStatus status = date.isBefore(LocalDate.now()) 
-                    ? WorkScheduleStatus.MISSED 
+                WorkScheduleStatus status = date.isBefore(LocalDate.now())
+                    ? WorkScheduleStatus.MISSED
                     : WorkScheduleStatus.SCHEDULED;
-                
+
                 WorkSchedule schedule = WorkSchedule.builder()
                     .assignment(assignment)
                     .employee(assignment.getEmployee())
@@ -198,7 +202,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .orElseThrow(() -> new ResourceNotFoundException("Work schedule not found: " + id));
         return mapToResponse(schedule);
     }
-    
+
     @Override
     public List<WorkScheduleResponse> getMissedSchedules(LocalDate startDate, LocalDate endDate) {
         List<WorkSchedule> schedules = workScheduleRepository.findMissedSchedulesByDateRange(startDate, endDate);
@@ -206,7 +210,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .map(this::mapToResponse)
             .collect(Collectors.toList());
     }
-    
+
     @Override
     public List<WorkScheduleResponse> getMissedSchedulesByEmployee(Long employeeId, LocalDate startDate, LocalDate endDate) {
         List<WorkSchedule> schedules = workScheduleRepository.findMissedSchedulesByEmployeeAndDateRange(employeeId, startDate, endDate);
@@ -214,14 +218,14 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .map(this::mapToResponse)
             .collect(Collectors.toList());
     }
-    
+
     @Override
     public List<WorkScheduleResponse> getWorkSchedulesByDateRange(LocalDate startDate, LocalDate endDate, Long employeeId, String status) {
-        log.info("Getting work schedules by date range: {} to {}, employeeId: {}, status: {}", 
+        log.info("Getting work schedules by date range: {} to {}, employeeId: {}, status: {}",
             startDate, endDate, employeeId, status);
-        
+
         List<WorkSchedule> schedules;
-        
+
         if (employeeId != null) {
             schedules = workScheduleRepository.findByEmployeeIdAndDateRange(employeeId, startDate, endDate);
         } else {
@@ -230,7 +234,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 .filter(ws -> !ws.getScheduledDate().isBefore(startDate) && !ws.getScheduledDate().isAfter(endDate))
                 .collect(Collectors.toList());
         }
-        
+
         // Filter by status if provided
         if (status != null && !status.isEmpty()) {
             try {
@@ -242,18 +246,18 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 log.warn("Invalid status: {}", status);
             }
         }
-        
+
         return schedules.stream()
             .map(this::mapToResponse)
             .collect(Collectors.toList());
     }
-    
+
     @Override
     public List<WorkScheduleResponse> getWorkSchedulesByDate(LocalDate date, String status) {
         log.info("Getting work schedules by date: {}, status: {}", date, status);
-        
+
         List<WorkSchedule> schedules = workScheduleRepository.findByScheduledDate(date);
-        
+
         // Filter by status if provided
         if (status != null && !status.isEmpty()) {
             try {
@@ -265,20 +269,20 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 log.warn("Invalid status: {}", status);
             }
         }
-        
+
         return schedules.stream()
             .map(this::mapToResponse)
             .collect(Collectors.toList());
     }
-    
+
     @Override
     public com.company.company_clean_hub_be.dto.response.WorkScheduleStatsResponse getStats(Integer month, Integer year, Long employeeId) {
         log.info("Getting work schedule stats: month={}, year={}, employeeId={}", month, year, employeeId);
-        
+
         // Determine date range
         LocalDate startDate;
         LocalDate endDate;
-        
+
         if (month != null && year != null) {
             startDate = LocalDate.of(year, month, 1);
             endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
@@ -286,7 +290,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             startDate = LocalDate.now().withDayOfMonth(1);
             endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
         }
-        
+
         // Get schedules
         List<WorkSchedule> schedules;
         if (employeeId != null) {
@@ -296,18 +300,18 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 .filter(ws -> !ws.getScheduledDate().isBefore(startDate) && !ws.getScheduledDate().isAfter(endDate))
                 .collect(Collectors.toList());
         }
-        
+
         // Calculate stats
         long total = schedules.size();
         long verified = schedules.stream().filter(ws -> ws.getStatus() == WorkScheduleStatus.VERIFIED).count();
         long missed = schedules.stream().filter(ws -> ws.getStatus() == WorkScheduleStatus.MISSED).count();
         long scheduled = schedules.stream().filter(ws -> ws.getStatus() == WorkScheduleStatus.SCHEDULED).count();
         long cancelled = schedules.stream().filter(ws -> ws.getStatus() == WorkScheduleStatus.CANCELLED).count();
-        
+
         double verifiedPercentage = total > 0 ? (verified * 100.0 / total) : 0.0;
         double missedPercentage = total > 0 ? (missed * 100.0 / total) : 0.0;
         double scheduledPercentage = total > 0 ? (scheduled * 100.0 / total) : 0.0;
-        
+
         return com.company.company_clean_hub_be.dto.response.WorkScheduleStatsResponse.builder()
             .total(total)
             .verified(verified)
@@ -319,15 +323,15 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .scheduledPercentage(Math.round(scheduledPercentage * 100.0) / 100.0)
             .build();
     }
-    
+
     @Override
     public List<com.company.company_clean_hub_be.dto.response.EmployeeScheduleSummary> getEmployeesWithSchedules(Integer month, Integer year) {
         log.info("Getting employees with schedules: month={}, year={}", month, year);
-        
+
         // Determine date range
         LocalDate startDate;
         LocalDate endDate;
-        
+
         if (month != null && year != null) {
             startDate = LocalDate.of(year, month, 1);
             endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
@@ -335,12 +339,12 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             startDate = LocalDate.now().withDayOfMonth(1);
             endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
         }
-        
+
         // Get all schedules in date range
         List<WorkSchedule> schedules = workScheduleRepository.findAll().stream()
             .filter(ws -> !ws.getScheduledDate().isBefore(startDate) && !ws.getScheduledDate().isAfter(endDate))
             .collect(Collectors.toList());
-        
+
         // Group by employee
         return schedules.stream()
             .collect(Collectors.groupingBy(WorkSchedule::getEmployee))
@@ -348,12 +352,12 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .map(entry -> {
                 Employee employee = entry.getKey();
                 List<WorkSchedule> employeeSchedules = entry.getValue();
-                
+
                 long total = employeeSchedules.size();
                 long verified = employeeSchedules.stream().filter(ws -> ws.getStatus() == WorkScheduleStatus.VERIFIED).count();
                 long missed = employeeSchedules.stream().filter(ws -> ws.getStatus() == WorkScheduleStatus.MISSED).count();
                 long scheduled = employeeSchedules.stream().filter(ws -> ws.getStatus() == WorkScheduleStatus.SCHEDULED).count();
-                
+
                 return com.company.company_clean_hub_be.dto.response.EmployeeScheduleSummary.builder()
                     .employeeId(employee.getId())
                     .employeeName(employee.getName())
@@ -400,13 +404,13 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         // Create attendance
         Attendance attendance = createAttendanceFromSchedule(schedule);
         schedule.setAttendance(attendance);
-        
+
         // Link verification image to attendance for attendance photos
         if (image != null && attendance != null) {
             image.setAttendance(attendance);
             imageRepository.save(image);
         }
-        
+
         schedule.setLastSyncedAt(LocalDateTime.now());
         schedule.setSyncNote("Attendance created from photo capture");
 
@@ -415,15 +419,26 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         log.info("Photo captured successfully for work schedule: {}", schedule.getId());
 
         // Check auto-approval if NEW_EMPLOYEE_VERIFICATION
-        if (schedule.getReason() == WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION && 
+        if (schedule.getReason() == WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION &&
             schedule.getAssignmentVerification() != null) {
             checkAndAutoApprove(schedule.getAssignmentVerification().getId());
         }
-        
+
         // Always update metrics after photo capture (workDays should increase)
         // Build response BEFORE updating metrics to avoid LazyInitializationException.
         WorkScheduleResponse response = mapToResponse(schedule);
         assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
+
+        // Task 19: Kiểm tra check-in ngoài bán kính (không chặn flow chính)
+        if (request.getLatitude() != null && request.getLongitude() != null) {
+            try {
+                checkAndNotifyCheckinOutsideRadius(schedule.getAssignment(),
+                        request.getLatitude(), request.getLongitude());
+            } catch (Exception e) {
+                log.warn("checkAndNotifyCheckinOutsideRadius failed for scheduleId={}: {}",
+                        schedule.getId(), e.getMessage());
+            }
+        }
 
         return response;
     }
@@ -439,7 +454,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         for (WorkSchedule schedule : scheduledToday) {
             schedule.setStatus(WorkScheduleStatus.MISSED);
             schedule.setSyncNote("Missed check-in for " + date);
-            log.warn("Marked MISSED: workScheduleId={}, employeeId={}, date={}", 
+            log.warn("Marked MISSED: workScheduleId={}, employeeId={}, date={}",
                 schedule.getId(), schedule.getEmployee().getId(), date);
         }
 
@@ -458,10 +473,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             schedule.setSyncNote("Attendance deleted at " + LocalDateTime.now() + " by user " + userId);
             schedule.setLastSyncedAt(LocalDateTime.now());
             workScheduleRepository.save(schedule);
-            
+
             // Update assignment metrics after attendance deletion
             assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
-            
+
             log.info("Synced work schedule {} with attendance deletion", schedule.getId());
         });
     }
@@ -473,7 +488,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .orElseThrow(() -> new ResourceNotFoundException("Attendance not found: " + attendanceId));
 
         workScheduleRepository.findByAssignmentIdAndScheduledDate(
-            attendance.getAssignment().getId(), 
+            attendance.getAssignment().getId(),
             attendance.getDate()
         ).ifPresent(schedule -> {
             schedule.setAttendance(attendance);
@@ -482,10 +497,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             schedule.setSyncNote("Attendance created manually");
             schedule.setLastSyncedAt(LocalDateTime.now());
             workScheduleRepository.save(schedule);
-            
+
             // Update assignment metrics after attendance creation
             assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
-            
+
             log.info("Synced work schedule {} with attendance creation", schedule.getId());
         });
     }
@@ -494,10 +509,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     @Transactional
     public void generateMonthlyWorkSchedules(LocalDate month) {
         log.info("Generating monthly work schedules for: {}", month);
-        
+
         LocalDate startDate = month.withDayOfMonth(1);
         LocalDate endDate = month.withDayOfMonth(month.lengthOfMonth());
-        
+
         // Find all active assignments
         List<Assignment> activeAssignments = assignmentRepository.findAll().stream()
             .filter(a -> a.getStatus() == AssignmentStatus.IN_PROGRESS || a.getStatus() == AssignmentStatus.SCHEDULED)
@@ -505,31 +520,31 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 // Check if assignment is still active in this month
                 LocalDate assignmentStart = a.getStartDate();
                 LocalDate assignmentEnd = a.getEndDate();
-                
+
                 // Assignment overlaps with month
-                return !assignmentStart.isAfter(endDate) && 
+                return !assignmentStart.isAfter(endDate) &&
                        (assignmentEnd == null || !assignmentEnd.isBefore(startDate));
             })
             .collect(Collectors.toList());
-        
+
         log.info("Found {} active assignments for month {}", activeAssignments.size(), month);
-        
+
         int totalCreated = 0;
         for (Assignment assignment : activeAssignments) {
             try {
                 // IMPORTANT: Use VerificationChecker.requiresVerification() - no circular dependency
                 // This checks if employee completed verification (5+ photos)
                 boolean requiresVerification = verificationChecker.requiresVerification(assignment);
-                
+
                 log.info("[SCHEDULER] Assignment {}: requiresVerification={}", assignment.getId(), requiresVerification);
-                
+
                 if (requiresVerification) {
                     // Determine reason — exclude this assignment (already in DB) from the count
                     boolean isNewEmployee = isEmployeeNew(assignment.getEmployee().getId(), assignment.getId());
-                    WorkScheduleReason reason = isNewEmployee ? 
-                        WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION : 
+                    WorkScheduleReason reason = isNewEmployee ?
+                        WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION :
                         WorkScheduleReason.CONTRACT_REQUIREMENT;
-                    
+
                     // Get verification if exists
                     Long verificationId = null;
                     if (isNewEmployee) {
@@ -538,16 +553,16 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                             .map(AssignmentVerification::getId)
                             .orElse(null);
                     }
-                    
+
                     // Calculate date range for this assignment
-                    LocalDate assignmentStartInMonth = assignment.getStartDate().isAfter(startDate) ? 
+                    LocalDate assignmentStartInMonth = assignment.getStartDate().isAfter(startDate) ?
                         assignment.getStartDate() : startDate;
                     LocalDate assignmentEndInMonth = endDate;
-                    
+
                     if (assignment.getEndDate() != null && assignment.getEndDate().isBefore(endDate)) {
                         assignmentEndInMonth = assignment.getEndDate();
                     }
-                    
+
                     // Create work schedules
                     List<WorkSchedule> created = createWorkSchedulesForAssignment(
                         assignment,
@@ -556,19 +571,19 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                         assignmentStartInMonth,
                         assignmentEndInMonth
                     );
-                    
+
                     totalCreated += created.size();
                     log.info("Created {} work schedules for assignment {}", created.size(), assignment.getId());
                 }
             } catch (Exception e) {
-                log.error("Failed to generate work schedules for assignment {}: {}", 
+                log.error("Failed to generate work schedules for assignment {}: {}",
                     assignment.getId(), e.getMessage(), e);
             }
         }
-        
+
         log.info("Monthly generation complete: created {} work schedules for month {}", totalCreated, month);
     }
-    
+
     // Helper method - still needed for determining reason
     private boolean isEmployeeNew(Long employeeId, Long excludeAssignmentId) {
         Long totalAssignments = excludeAssignmentId != null
@@ -588,12 +603,12 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         schedule.setLastSyncedAt(LocalDateTime.now());
 
         workScheduleRepository.save(schedule);
-        
+
         // Update assignment metrics after cancellation
         // Build response BEFORE updating metrics to avoid LazyInitializationException.
         WorkScheduleResponse response = mapToResponse(schedule);
         assignmentMetricsService.updateAssignmentMetrics(schedule.getAssignment().getId());
-        
+
         log.info("Cancelled work schedule: {}", id);
 
         return response;
@@ -605,10 +620,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         WorkSchedule schedule = workScheduleRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Work schedule not found: " + id));
 
-        if (schedule.getStatus() != WorkScheduleStatus.MISSED 
-                && !(schedule.getStatus() == WorkScheduleStatus.SCHEDULED 
+        if (schedule.getStatus() != WorkScheduleStatus.MISSED
+                && !(schedule.getStatus() == WorkScheduleStatus.SCHEDULED
                      && schedule.getScheduledDate().isBefore(LocalDate.now()))) {
-            throw new AppException(ErrorCode.INVALID_REQUEST, 
+            throw new AppException(ErrorCode.INVALID_REQUEST,
                 "Work schedule must be MISSED or SCHEDULED with past date to create attendance manually");
         }
 
@@ -644,18 +659,23 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .map(WorkSchedule::canCapturePhoto)
             .orElse(false);
     }
-    
+
+    @Override
+    public boolean hasPendingSchedules(Long employeeId) {
+        return workScheduleRepository.hasPendingSchedulesFromDate(employeeId, LocalDate.now());
+    }
+
     @Override
     @Transactional
     public void handleAssignmentUpdate(Long assignmentId, LocalDate newStartDate, LocalDate newEndDate) {
-        log.info("Handling assignment update: assignmentId={}, newStart={}, newEnd={}", 
+        log.info("Handling assignment update: assignmentId={}, newStart={}, newEnd={}",
             assignmentId, newStartDate, newEndDate);
-        
+
         // Cancel all future work schedules (after today)
         LocalDate today = LocalDate.now();
         List<WorkSchedule> futureSchedules = workScheduleRepository
             .findByAssignmentIdAndScheduledDateAfter(assignmentId, today);
-        
+
         for (WorkSchedule schedule : futureSchedules) {
             if (schedule.getStatus() == WorkScheduleStatus.SCHEDULED) {
                 schedule.setStatus(WorkScheduleStatus.CANCELLED);
@@ -663,20 +683,20 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 schedule.setLastSyncedAt(LocalDateTime.now());
             }
         }
-        
+
         workScheduleRepository.saveAll(futureSchedules);
         log.info("Cancelled {} future work schedules for assignment {}", futureSchedules.size(), assignmentId);
-        
+
         // Recreate work schedules with new schedule
         Assignment assignment = assignmentRepository.findById(assignmentId)
             .orElseThrow(() -> new ResourceNotFoundException("Assignment not found: " + assignmentId));
-        
+
         if (verificationChecker.requiresVerification(assignment)) {
             boolean isNewEmployee = isEmployeeNew(assignment.getEmployee().getId(), assignment.getId());
-            WorkScheduleReason reason = isNewEmployee ? 
-                WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION : 
+            WorkScheduleReason reason = isNewEmployee ?
+                WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION :
                 WorkScheduleReason.CONTRACT_REQUIREMENT;
-            
+
             Long verificationId = null;
             if (isNewEmployee) {
                 verificationId = verificationRepository
@@ -684,46 +704,48 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                     .map(AssignmentVerification::getId)
                     .orElse(null);
             }
-            
+
             LocalDate startDate = newStartDate.isAfter(today) ? newStartDate : today.plusDays(1);
-            createWorkSchedulesForAssignment(assignment, reason, verificationId, startDate, newEndDate);
-            log.info("Recreated work schedules for assignment {} from {} to {}", 
-                assignmentId, startDate, newEndDate);
+            LocalDate safeEndDate = newEndDate != null ?
+                newEndDate : LocalDate.now().plusMonths(1).withDayOfMonth(1).minusDays(1);
+            createWorkSchedulesForAssignment(assignment, reason, verificationId, startDate, safeEndDate);
+            log.info("Recreated work schedules for assignment {} from {} to {}",
+                assignmentId, startDate, safeEndDate);
         }
     }
-    
+
     @Override
     @Transactional
     public void handleAssignmentTermination(Long assignmentId, LocalDate terminationDate) {
-        log.info("Handling assignment termination: assignmentId={}, terminationDate={}", 
+        log.info("Handling assignment termination: assignmentId={}, terminationDate={}",
             assignmentId, terminationDate);
-        
+
         // Cancel all work schedules after termination date
         List<WorkSchedule> futureSchedules = workScheduleRepository
             .findByAssignmentIdAndScheduledDateAfter(assignmentId, terminationDate);
-        
+
         for (WorkSchedule schedule : futureSchedules) {
             schedule.setStatus(WorkScheduleStatus.CANCELLED);
             schedule.setSyncNote("Cancelled due to assignment termination on " + terminationDate);
             schedule.setLastSyncedAt(LocalDateTime.now());
         }
-        
+
         workScheduleRepository.saveAll(futureSchedules);
-        log.info("Cancelled {} work schedules after termination date for assignment {}", 
+        log.info("Cancelled {} work schedules after termination date for assignment {}",
             futureSchedules.size(), assignmentId);
     }
-    
+
     @Override
     @Transactional
     public void handleReassignment(Long oldAssignmentId, Long newAssignmentId) {
-        log.info("Handling reassignment: oldAssignmentId={}, newAssignmentId={}", 
+        log.info("Handling reassignment: oldAssignmentId={}, newAssignmentId={}",
             oldAssignmentId, newAssignmentId);
-        
+
         // Cancel old assignment's future work schedules
         LocalDate today = LocalDate.now();
         List<WorkSchedule> oldSchedules = workScheduleRepository
             .findByAssignmentIdAndScheduledDateAfter(oldAssignmentId, today);
-        
+
         for (WorkSchedule schedule : oldSchedules) {
             if (schedule.getStatus() == WorkScheduleStatus.SCHEDULED) {
                 schedule.setStatus(WorkScheduleStatus.CANCELLED);
@@ -731,20 +753,20 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 schedule.setLastSyncedAt(LocalDateTime.now());
             }
         }
-        
+
         workScheduleRepository.saveAll(oldSchedules);
         log.info("Cancelled {} work schedules for old assignment {}", oldSchedules.size(), oldAssignmentId);
-        
+
         // Create work schedules for new assignment if needed
         Assignment newAssignment = assignmentRepository.findById(newAssignmentId)
             .orElseThrow(() -> new ResourceNotFoundException("New assignment not found: " + newAssignmentId));
-        
+
         if (verificationChecker.requiresVerification(newAssignment)) {
             boolean isNewEmployee = isEmployeeNew(newAssignment.getEmployee().getId(), newAssignment.getId());
-            WorkScheduleReason reason = isNewEmployee ? 
-                WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION : 
+            WorkScheduleReason reason = isNewEmployee ?
+                WorkScheduleReason.NEW_EMPLOYEE_VERIFICATION :
                 WorkScheduleReason.CONTRACT_REQUIREMENT;
-            
+
             Long verificationId = null;
             if (isNewEmployee) {
                 verificationId = verificationRepository
@@ -752,14 +774,14 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                     .map(AssignmentVerification::getId)
                     .orElse(null);
             }
-            
-            LocalDate startDate = newAssignment.getStartDate().isAfter(today) ? 
+
+            LocalDate startDate = newAssignment.getStartDate().isAfter(today) ?
                 newAssignment.getStartDate() : today.plusDays(1);
-            LocalDate endDate = newAssignment.getEndDate() != null ? 
+            LocalDate endDate = newAssignment.getEndDate() != null ?
                 newAssignment.getEndDate() : LocalDate.now().plusMonths(1).withDayOfMonth(1).minusDays(1);
-            
+
             createWorkSchedulesForAssignment(newAssignment, reason, verificationId, startDate, endDate);
-            log.info("Created work schedules for new assignment {} from {} to {}", 
+            log.info("Created work schedules for new assignment {} from {} to {}",
                 newAssignmentId, startDate, endDate);
         }
     }
@@ -781,7 +803,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         }
         verificationRepository.save(verification);
 
-        log.info("Verification {} now has {}/{} attempts", 
+        log.info("Verification {} now has {}/{} attempts",
             verificationId, verification.getCurrentAttempts(), verification.getMaxAttempts());
 
         // Count VERIFIED schedules
@@ -811,7 +833,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                     // For verification contracts: keep remaining SCHEDULED schedules
                     // Employee still needs to capture photos for those days
                     // Bypass/auto-approve only means "skip approval", not "skip photo capture"
-                    log.info("Auto-approved verification {} - keeping {} remaining SCHEDULED schedules (employee must still capture photos)", 
+                    log.info("Auto-approved verification {} - keeping {} remaining SCHEDULED schedules (employee must still capture photos)",
                         verificationId, remainingSchedules.size());
                 } else {
                     // For non-verification contracts: create attendance for remaining SCHEDULED WorkSchedules
@@ -829,7 +851,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                             log.error("Failed to create attendance for schedule {}: {}", ws.getId(), e.getMessage());
                         }
                     }
-                    log.info("Auto-approved verification {} and created {} attendances from existing schedules", 
+                    log.info("Auto-approved verification {} and created {} attendances from existing schedules",
                         verificationId, scheduledAttendanceCount);
 
                     // Also create attendance DIRECTLY for working days that don't have WorkSchedule
@@ -966,11 +988,11 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .statusDescription(schedule.getStatus().getDescription())
             .reason(schedule.getReason())
             .reasonDescription(schedule.getReason().getDescription())
-            .assignmentVerificationId(schedule.getAssignmentVerification() != null ? 
+            .assignmentVerificationId(schedule.getAssignmentVerification() != null ?
                 schedule.getAssignmentVerification().getId() : null)
-            .verificationImageId(schedule.getVerificationImage() != null ? 
+            .verificationImageId(schedule.getVerificationImage() != null ?
                 schedule.getVerificationImage().getId() : null)
-            .attendanceId(schedule.getAttendance() != null ? 
+            .attendanceId(schedule.getAttendance() != null ?
                 schedule.getAttendance().getId() : null)
             .photoCapturedAt(schedule.getPhotoCapturedAt())
             .canCapturePhoto(schedule.canCapturePhoto())
@@ -1070,5 +1092,89 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         }
 
         return result;
+    }
+
+    // ─── Task 19: Check-in radius check ──────────────────────────────────────
+
+    /**
+     * Kiểm tra tọa độ check-in có nằm trong bán kính cho phép của ít nhất 1 WorkLocation không.
+     * Nếu không → tạo notification CHECKIN_OUTSIDE_RADIUS cho QLT1/QLT2.
+     */
+    private void checkAndNotifyCheckinOutsideRadius(Assignment assignment, Double latitude, Double longitude) {
+        if (assignment.getContract() == null) {
+            return; // COMPANY scope, không có contract → bỏ qua
+        }
+        Long contractId = assignment.getContract().getId();
+        List<com.company.company_clean_hub_be.entity.WorkLocation> locations =
+                workLocationRepository.findByContractIdAndIsActiveTrue(contractId);
+
+        if (locations == null || locations.isEmpty()) {
+            return; // Không có work location nào được cấu hình → bỏ qua
+        }
+
+        boolean isInsideAny = false;
+        for (com.company.company_clean_hub_be.entity.WorkLocation loc : locations) {
+            double distance = haversineDistance(latitude, longitude,
+                    loc.getLatitude(), loc.getLongitude());
+            if (distance <= loc.getRadiusMeters()) {
+                isInsideAny = true;
+                break;
+            }
+        }
+
+        if (!isInsideAny) {
+            com.company.company_clean_hub_be.entity.Employee emp =
+                    (com.company.company_clean_hub_be.entity.Employee) assignment.getEmployee();
+            String title = "Check-in ngoài bán kính cho phép";
+            String message = String.format(
+                    "Nhân viên %s (%s) vừa check-in ngoài bán kính cho phép của hợp đồng '%s' (ID=%d). "
+                            + "Tọa độ: (%.6f, %.6f).",
+                    emp.getName(),
+                    emp.getEmployeeCode(),
+                    assignment.getContract().getDescription() != null
+                            ? assignment.getContract().getDescription() : "Không có mô tả",
+                    contractId,
+                    latitude, longitude);
+
+            // Gửi cho tất cả QLT1 và QLT2
+            List<com.company.company_clean_hub_be.entity.User> managers =
+                    userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2"));
+            java.time.LocalDateTime todayStart = java.time.LocalDate.now().atStartOfDay();
+            for (com.company.company_clean_hub_be.entity.User manager : managers) {
+                boolean exists = notificationRepository
+                        .existsByTypeAndContractIdAndEmployeeIdAndRecipientIdAndCreatedAtAfter(
+                                com.company.company_clean_hub_be.entity.NotificationType.CHECKIN_OUTSIDE_RADIUS,
+                                contractId,
+                                assignment.getEmployee().getId(),
+                                manager.getId(),
+                                todayStart);
+                if (!exists) {
+                    notificationService.createNotification(
+                            manager,
+                            com.company.company_clean_hub_be.entity.NotificationType.CHECKIN_OUTSIDE_RADIUS,
+                            title,
+                            message,
+                            assignment.getEmployee().getId(),
+                            assignment.getId(),
+                            contractId);
+                }
+            }
+            log.warn("[NOTIFY][CHECKIN_OUTSIDE_RADIUS] Employee {} checked in outside radius at ({},{})",
+                    emp.getEmployeeCode(), latitude, longitude);
+        }
+    }
+
+    /**
+     * Tính khoảng cách giữa 2 điểm GPS bằng công thức Haversine (đơn vị: mét).
+     */
+    private double haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+        final double EARTH_RADIUS = 6_371_000; // mét
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return EARTH_RADIUS * c;
     }
 }

@@ -72,4 +72,36 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     );
 
     void deleteByCreatedAtBefore(LocalDateTime cutoff);
+
+    @Query("SELECT CASE WHEN COUNT(n) > 0 THEN true ELSE false END FROM Notification n " +
+           "WHERE n.type = :type AND n.refContractId = :contractId AND n.recipient.id = :recipientId AND n.createdAt > :since")
+    boolean existsByTypeAndRefContractIdAndCreatedAtAfter(
+            @Param("type") NotificationType type,
+            @Param("contractId") Long contractId,
+            @Param("since") LocalDateTime since);
+
+    @Query("SELECT CASE WHEN COUNT(n) > 0 THEN true ELSE false END FROM Notification n " +
+           "WHERE n.type = :type AND n.refContractId = :contractId AND n.recipient.id = :recipientId AND n.createdAt > :since")
+    boolean existsByTypeAndRefContractIdAndRecipientIdAndCreatedAtAfter(
+            @Param("type") NotificationType type,
+            @Param("contractId") Long contractId,
+            @Param("recipientId") Long recipientId,
+            @Param("since") LocalDateTime since);
+
+    @Query("SELECT CASE WHEN COUNT(n) > 0 THEN true ELSE false END FROM Notification n " +
+           "WHERE n.type = :type AND n.refContractId = :contractId AND n.refEmployeeId = :employeeId AND n.createdAt > :since")
+    boolean existsByTypeAndContractIdAndEmployeeIdAndCreatedAtAfter(
+            @Param("type") NotificationType type,
+            @Param("contractId") Long contractId,
+            @Param("employeeId") Long employeeId,
+            @Param("since") LocalDateTime since);
+
+    @Query("SELECT CASE WHEN COUNT(n) > 0 THEN true ELSE false END FROM Notification n " +
+           "WHERE n.type = :type AND n.refContractId = :contractId AND n.refEmployeeId = :employeeId AND n.recipient.id = :recipientId AND n.createdAt > :since")
+    boolean existsByTypeAndContractIdAndEmployeeIdAndRecipientIdAndCreatedAtAfter(
+            @Param("type") NotificationType type,
+            @Param("contractId") Long contractId,
+            @Param("employeeId") Long employeeId,
+            @Param("recipientId") Long recipientId,
+            @Param("since") LocalDateTime since);
 }
