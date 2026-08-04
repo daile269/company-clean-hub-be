@@ -214,7 +214,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // ===== COMPANY HEADER SECTION =====
             int currentRowIndex = 0;
-            int totalColumns = 16; // Updated to exclude advance salary column
+            int totalColumns = 19; // Tháng/Năm, Xin ứng và Ghi chú
 
             // Row 0: Company name
             Row companyRow = sheet.createRow(currentRowIndex++);
@@ -258,10 +258,10 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             // Header row - Simplified summary columns
             Row headerRow = sheet.createRow(currentRowIndex++);
             String[] headers = {
-                    "Mã NV", "Họ tên", "Ngân hàng", "Số TK", "SĐT",
-                    "Công trình", "Ngày công", "Lương ngày công", "Thưởng", "Phạt",
-                    "Phụ cấp", "Bảo hiểm", "Tổng lương tháng", "Lương đã thanh toán", "Lương còn lại",
-                    "Ghi chú"
+                    "Mã NV", "Họ tên", "Tháng/Năm", "Ngân hàng", "Số TK", "SĐT",
+                    "Công trình", "Ngày công", "Lương thực lãnh", "Thưởng", "Phạt",
+                    "Phụ cấp", "Hỗ trợ", "Bảo hiểm", "Tổng lương tháng", "Đã thanh toán", "Còn lại",
+                    "Xin ứng", "Ghi chú"
             };
 
             for (int i = 0; i < headers.length; i++) {
@@ -284,77 +284,96 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                 cell1.setCellValue(row.getEmployeeName() != null ? row.getEmployeeName() : "");
                 cell1.setCellStyle(dataStyle);
 
-                // Ngân hàng
+                // Tháng/Năm
                 Cell cell2 = dataRow.createCell(2);
-                cell2.setCellValue(row.getBankName() != null ? row.getBankName() : "");
+                if (row.getMonth() != null && row.getYear() != null) {
+                    cell2.setCellValue(row.getMonth() + "/" + row.getYear());
+                } else {
+                    cell2.setCellValue("");
+                }
                 cell2.setCellStyle(dataStyle);
 
-                // Số tài khoản
+                // Ngân hàng
                 Cell cell3 = dataRow.createCell(3);
-                cell3.setCellValue(row.getBankAccount() != null ? row.getBankAccount() : "");
+                cell3.setCellValue(row.getBankName() != null ? row.getBankName() : "");
                 cell3.setCellStyle(dataStyle);
 
-                // Số điện thoại
+                // Số tài khoản
                 Cell cell4 = dataRow.createCell(4);
-                cell4.setCellValue(row.getPhone() != null ? row.getPhone() : "");
+                cell4.setCellValue(row.getBankAccount() != null ? row.getBankAccount() : "");
                 cell4.setCellStyle(dataStyle);
 
-                // Công trình (joined projects list)
+                // Số điện thoại
                 Cell cell5 = dataRow.createCell(5);
-                cell5.setCellValue(row.getProjectCompany() != null ? row.getProjectCompany() : "");
+                cell5.setCellValue(row.getPhone() != null ? row.getPhone() : "");
                 cell5.setCellStyle(dataStyle);
 
-                // Tổng ngày công
+                // Công trình (joined projects list)
                 Cell cell6 = dataRow.createCell(6);
-                cell6.setCellValue(row.getTotalDays() != null ? row.getTotalDays() : 0);
-                cell6.setCellStyle(numberStyle);
+                cell6.setCellValue(row.getProjectCompany() != null ? row.getProjectCompany() : "");
+                cell6.setCellStyle(dataStyle);
 
-                // Lương ngày công (Base Salary)
+                // Tổng ngày công
                 Cell cell7 = dataRow.createCell(7);
-                cell7.setCellValue(row.getBaseSalary() != null ? row.getBaseSalary().doubleValue() : 0);
+                cell7.setCellValue(row.getTotalDays() != null ? row.getTotalDays() : 0);
                 cell7.setCellStyle(numberStyle);
 
-                // Tổng thưởng
+                // Lương thực lãnh (Base Salary)
                 Cell cell8 = dataRow.createCell(8);
-                cell8.setCellValue(row.getTotalBonus() != null ? row.getTotalBonus().doubleValue() : 0);
+                cell8.setCellValue(row.getBaseSalary() != null ? row.getBaseSalary().doubleValue() : 0);
                 cell8.setCellStyle(numberStyle);
 
-                // Tổng phạt
+                // Tổng thưởng
                 Cell cell9 = dataRow.createCell(9);
-                cell9.setCellValue(row.getTotalPenalty() != null ? row.getTotalPenalty().doubleValue() : 0);
+                cell9.setCellValue(row.getTotalBonus() != null ? row.getTotalBonus().doubleValue() : 0);
                 cell9.setCellStyle(numberStyle);
 
-                // Tổng phụ cấp
+                // Tổng phạt
                 Cell cell10 = dataRow.createCell(10);
-                cell10.setCellValue(row.getTotalAllowance() != null ? row.getTotalAllowance().doubleValue() : 0);
+                cell10.setCellValue(row.getTotalPenalty() != null ? row.getTotalPenalty().doubleValue() : 0);
                 cell10.setCellStyle(numberStyle);
 
-                // Bảo hiểm
+                // Tổng phụ cấp
                 Cell cell11 = dataRow.createCell(11);
-                cell11.setCellValue(row.getTotalInsurance() != null ? row.getTotalInsurance().doubleValue() : 0);
+                cell11.setCellValue(row.getTotalAllowance() != null ? row.getTotalAllowance().doubleValue() : 0);
                 cell11.setCellStyle(numberStyle);
 
-                // Tổng lương (before advance)
+                // Hỗ trợ (monthly support)
                 Cell cell12 = dataRow.createCell(12);
-                cell12.setCellValue(
-                        row.getTotalSalaryBeforeAdvance() != null ? row.getTotalSalaryBeforeAdvance().doubleValue()
-                                : 0);
+                cell12.setCellValue(row.getMonthlySupport() != null ? row.getMonthlySupport().doubleValue() : 0);
                 cell12.setCellStyle(numberStyle);
 
-                // Lương đã thanh toán
+                // Bảo hiểm
                 Cell cell13 = dataRow.createCell(13);
-                cell13.setCellValue(row.getPaidAmount() != null ? row.getPaidAmount().doubleValue() : 0);
+                cell13.setCellValue(row.getTotalInsurance() != null ? row.getTotalInsurance().doubleValue() : 0);
                 cell13.setCellStyle(numberStyle);
 
-                // Lương còn lại (after advance)
+                // Tổng lương tháng
                 Cell cell14 = dataRow.createCell(14);
-                cell14.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
+                cell14.setCellValue(
+                        row.getTotalSalaryBeforeAdvance() != null ? row.getTotalSalaryBeforeAdvance().doubleValue()
+                                : 0);
                 cell14.setCellStyle(numberStyle);
 
-                // Ghi chú (note)
+                // Đã thanh toán
                 Cell cell15 = dataRow.createCell(15);
-                cell15.setCellValue(row.getNote() != null ? row.getNote() : "");
-                cell15.setCellStyle(dataStyle);
+                cell15.setCellValue(row.getPaidAmount() != null ? row.getPaidAmount().doubleValue() : 0);
+                cell15.setCellStyle(numberStyle);
+
+                // Còn lại
+                Cell cell16 = dataRow.createCell(16);
+                cell16.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
+                cell16.setCellStyle(numberStyle);
+
+                // Xin ứng
+                Cell cell17 = dataRow.createCell(17);
+                cell17.setCellValue(row.getAdvanceNote() != null ? row.getAdvanceNote().doubleValue() : 0);
+                cell17.setCellStyle(numberStyle);
+
+                // Ghi chú công thức tính lương theo assignment
+                Cell cell18 = dataRow.createCell(18);
+                cell18.setCellValue(row.getNote() != null ? row.getNote() : "");
+                cell18.setCellStyle(dataStyle);
             }
 
             // Auto-size columns
@@ -363,8 +382,9 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             }
             // Set minimum widths for readability
             sheet.setColumnWidth(1, 4000); // Name
-            sheet.setColumnWidth(5, 8000); // Projects (can be long list)
-            sheet.setColumnWidth(15, 130 * 256); // Note column (wider for formulas)
+            sheet.setColumnWidth(6, 8000); // Projects (can be long list)
+            sheet.setColumnWidth(17, 3_000); // Xin ứng
+            sheet.setColumnWidth(18, 130 * 256); // Ghi chú/công thức tính lương
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);

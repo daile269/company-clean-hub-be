@@ -211,7 +211,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .monthlySalary(request.getMonthlySalary())
                                 .allowance(request.getAllowance())
                                 .insuranceSalary(request.getInsuranceSalary())
-                                .monthlyAdvanceLimit(request.getMonthlyAdvanceLimit())
+                                // [DEPRECATED] .monthlyAdvanceLimit(request.getMonthlyAdvanceLimit())
+                                .monthlySupport(request.getMonthlySupport())
                                 .cccdFrontImage(request.getCccdFrontImage())
                                 .cccdBackImage(request.getCccdBackImage())
                                 .createdAt(LocalDateTime.now())
@@ -364,7 +365,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                 employee.setMonthlySalary(request.getMonthlySalary());
                 employee.setAllowance(request.getAllowance());
                 employee.setInsuranceSalary(request.getInsuranceSalary());
-                employee.setMonthlyAdvanceLimit(request.getMonthlyAdvanceLimit());
+                // [DEPRECATED] employee.setMonthlyAdvanceLimit(request.getMonthlyAdvanceLimit());
+                employee.setMonthlySupport(request.getMonthlySupport());
                 if (request.getCccdFrontImage() != null) {
                         String front = request.getCccdFrontImage().trim();
                         String oldFront = employee.getCccdFrontImage();
@@ -471,7 +473,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .monthlySalary(employee.getMonthlySalary())
                                 .allowance(employee.getAllowance())
                                 .insuranceSalary(employee.getInsuranceSalary())
-                                .monthlyAdvanceLimit(employee.getMonthlyAdvanceLimit())
+                                // [DEPRECATED] .monthlyAdvanceLimit(employee.getMonthlyAdvanceLimit())
+                                .monthlySupport(employee.getMonthlySupport())
                                 .cccdFrontImage(employee.getCccdFrontImage())
                                 .cccdBackImage(employee.getCccdBackImage())
                                 .createdAt(employee.getCreatedAt())
@@ -536,30 +539,31 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .collect(Collectors.toList());
         }
 
-        @Override
-        public EmployeeResponse updateAdvanceSalary(Long id, java.math.BigDecimal monthlyAdvanceLimit) {
-                String username = org.springframework.security.core.context.SecurityContextHolder
-                                .getContext().getAuthentication().getName();
-                log.info("updateAdvanceSalary by {}: id={}, monthlyAdvanceLimit={}", username, id, monthlyAdvanceLimit);
-
-                Employee employee = employeeRepository.findById(id)
-                                .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
-
-                // Kiểm tra loại nhân viên phải là COMPANY_STAFF
-                if (employee.getEmploymentType() != EmploymentType.COMPANY_STAFF) {
-                        log.warn("Cannot update advance salary for non-company staff: employeeId={}, type={}",
-                                        id, employee.getEmploymentType());
-                        throw new AppException(ErrorCode.FORBIDDEN);
-                }
-
-                // Cập nhật chỉ trường monthlyAdvanceLimit
-                employee.setMonthlyAdvanceLimit(monthlyAdvanceLimit);
-                employee.setUpdatedAt(LocalDateTime.now());
-
-                Employee updatedEmployee = employeeRepository.save(employee);
-                log.info("updateAdvanceSalary completed by {}: id={}", username, updatedEmployee.getId());
-                return mapToResponse(updatedEmployee);
-        }
+        // [DEPRECATED] Replaced by advanceNoteSummary from Assignment.advanceNote
+        // @Override
+        // public EmployeeResponse updateAdvanceSalary(Long id, java.math.BigDecimal monthlyAdvanceLimit) {
+        //         String username = org.springframework.security.core.context.SecurityContextHolder
+        //                         .getContext().getAuthentication().getName();
+        //         log.info("updateAdvanceSalary by {}: id={}, monthlyAdvanceLimit={}", username, id, monthlyAdvanceLimit);
+        //
+        //         Employee employee = employeeRepository.findById(id)
+        //                         .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+        //
+        //         // Kiểm tra loại nhân viên phải là COMPANY_STAFF
+        //         if (employee.getEmploymentType() != EmploymentType.COMPANY_STAFF) {
+        //                 log.warn("Cannot update advance salary for non-company staff: employeeId={}, type={}",
+        //                                 id, employee.getEmploymentType());
+        //                 throw new AppException(ErrorCode.FORBIDDEN);
+        //         }
+        //
+        //         // Cập nhật chỉ trường monthlyAdvanceLimit
+        //         employee.setMonthlyAdvanceLimit(monthlyAdvanceLimit);
+        //         employee.setUpdatedAt(LocalDateTime.now());
+        //
+        //         Employee updatedEmployee = employeeRepository.save(employee);
+        //         log.info("updateAdvanceSalary completed by {}: id={}", username, updatedEmployee.getId());
+        //         return mapToResponse(updatedEmployee);
+        // }
 
         @Override
         public EmployeeResponse takeCompanyLeave(Long id, java.time.LocalDate leaveDate) {

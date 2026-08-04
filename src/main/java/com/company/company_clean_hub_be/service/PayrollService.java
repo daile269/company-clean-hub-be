@@ -30,6 +30,8 @@ public interface PayrollService {
 
         PayrollResponse updatePaymentStatus(Long id, BigDecimal paidAmount);
 
+        PayrollResponse processPayment(Long id, com.company.company_clean_hub_be.dto.request.PaymentRequest request);
+
         void deletePayroll(Long id);
 
         // Updated to return List for bulk calculation

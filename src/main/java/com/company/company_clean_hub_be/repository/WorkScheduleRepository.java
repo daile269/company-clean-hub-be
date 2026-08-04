@@ -105,6 +105,10 @@ public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Long
     @Query("SELECT COUNT(ws) FROM WorkSchedule ws WHERE ws.assignmentVerification.id = :verificationId")
     Long countByVerificationId(@Param("verificationId") Long verificationId);
 
+    // Check if employee has any SCHEDULED work schedules from today onwards
+    @Query("SELECT COUNT(ws) > 0 FROM WorkSchedule ws WHERE ws.employee.id = :employeeId AND ws.status = 'SCHEDULED' AND ws.scheduledDate >= :date")
+    boolean hasPendingSchedulesFromDate(@Param("employeeId") Long employeeId, @Param("date") LocalDate date);
+
     // Delete by assignment (for cleanup)
     void deleteByAssignmentId(Long assignmentId);
 }

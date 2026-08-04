@@ -68,15 +68,15 @@ public class AssignmentScheduler {
      */
     @Scheduled(cron = "0 5 0 * * ?")
     @EventListener(ApplicationReadyEvent.class)
+    @Transactional
     public void autoCompleteExpiredAssignments() {
         try {
             executeUpdateAutoCompleteExpiredAssignments();
         } catch (Exception e) {
-            log.debug("[LỊCH TRÌNH] Bỏ qua quét khi ứng dụng đang đóng hoặc khởi động lại: {}", e.getMessage());
+            log.error("[LỊCH TRÌNH] Lỗi khi quét phân công hết hạn: {}", e.getMessage(), e);
         }
     }
 
-    @Transactional
     public void executeUpdateAutoCompleteExpiredAssignments() {
         LocalDate today = LocalDate.now();
         log.info("[LỊCH TRÌNH] Kiểm tra các phân công đã hết hạn tính đến ngày {}", today);
@@ -108,6 +108,7 @@ public class AssignmentScheduler {
         } else {
             log.info("[LỊCH TRÌNH] Không có phân công hết hạn nào cần cập nhật");
         }
+        log.info("[LỊCH TRÌNH] 2257");
     }
 
     /**
@@ -379,6 +380,8 @@ public class AssignmentScheduler {
                                 ? new ArrayList<>(oldAssignment.getWorkingDaysPerWeek())
                                 : null)
                         .additionalAllowance(oldAssignment.getAdditionalAllowance())
+                        .monthlySupport(oldAssignment.getMonthlySupport())
+                        .advanceNote(null) // Reset: advanceNote là dữ liệu theo tháng, không copy sang tháng mới
                         .description(oldAssignment.getDescription())
                         .createdAt(LocalDateTime.now())
                         .updatedAt(LocalDateTime.now())

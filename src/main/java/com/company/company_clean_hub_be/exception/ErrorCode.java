@@ -92,7 +92,8 @@ public enum ErrorCode {
     ASSIGNMENT_VERIFICATION_REQUIRED(400, "Assignment này yêu cầu xác minh hình ảnh"),
 
     INVALID_WORK_TIME_RANGE(400, "Giờ bắt đầu phải nhỏ hơn giờ kết thúc"),
-    NOTIFICATION_NOT_FOUND(404, "Thông báo không tồn tại");
+    NOTIFICATION_NOT_FOUND(404, "Thông báo không tồn tại"),
+    SALARY_NOTE_NOT_FOUND(404, "Ghi chú tiền lương không tồn tại");
 
     private final int code;
     private final String message;

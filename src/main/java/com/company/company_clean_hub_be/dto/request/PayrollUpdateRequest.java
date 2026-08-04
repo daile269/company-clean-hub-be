@@ -15,6 +15,7 @@ public class PayrollUpdateRequest {
     // Optional adjustments provided by user. If null, system will use computed values.
     private BigDecimal allowanceTotal;
     private BigDecimal insuranceTotal;
-    private BigDecimal advanceTotal;
+    // [DEPRECATED] Replaced by advanceNoteSummary (compiled from Assignment.advanceNote)
+    // private BigDecimal advanceTotal;
     private BigDecimal paidAmount;  // Số tiền đã thanh toán sớm
 }

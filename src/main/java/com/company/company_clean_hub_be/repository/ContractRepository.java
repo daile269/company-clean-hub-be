@@ -49,4 +49,15 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
             ORDER BY c.customer.id ASC, c.id ASC, s.id ASC
             """)
     List<CustomerContractServiceFlatDto> findAllCustomerContractServicesFlat();
+
+    @Query("SELECT c FROM Contract c WHERE c.endDate BETWEEN :startDate AND :endDate AND c.paymentStatus <> :status")
+    List<Contract> findByEndDateBetweenAndPaymentStatusNot(
+            @Param("startDate") java.time.LocalDate startDate,
+            @Param("endDate") java.time.LocalDate endDate,
+            @Param("status") String status);
+
+    @Query("SELECT c FROM Contract c WHERE c.paymentStatus <> :status AND c.endDate > :date")
+    List<Contract> findByPaymentStatusNotAndEndDateAfter(
+            @Param("status") String status,
+            @Param("date") java.time.LocalDate date);
 }

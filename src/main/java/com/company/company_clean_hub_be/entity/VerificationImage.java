@@ -61,13 +61,11 @@ public class VerificationImage {
     @JsonIgnore
     private Attendance attendance;
 
-    // Cloudinary storage
-    @Column(name = "cloudinary_public_id", nullable = false, length = 512)
-    @NotBlank
+    // Cloudinary storage — nullable để hỗ trợ xoá ảnh sau 90 ngày (giữ lại GPS + time)
+    @Column(name = "cloudinary_public_id", length = 512)
     private String cloudinaryPublicId;
 
-    @Column(name = "cloudinary_url", nullable = false, length = 1024)
-    @NotBlank
+    @Column(name = "cloudinary_url", length = 1024)
     private String cloudinaryUrl;
 
     // GPS and location data
