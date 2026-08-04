@@ -24,6 +24,7 @@ import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollOverviewResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
+import com.company.company_clean_hub_be.dto.response.PayrollSummaryDTO;
 import com.company.company_clean_hub_be.entity.Assignment;
 import com.company.company_clean_hub_be.entity.AssignmentScope;
 import com.company.company_clean_hub_be.entity.AssignmentType;
@@ -1522,6 +1523,88 @@ public class PayrollServiceImpl implements PayrollService {
         }
 
         @Override
+        public List<PayrollSummaryDTO> getPayrollSummaryList(Integer month, Integer year) {
+                if (month == null || year == null) {
+                        java.time.LocalDate now = java.time.LocalDate.now();
+                        month = (month != null) ? month : now.getMonthValue();
+                        year = (year != null) ? year : now.getYear();
+                }
+                final Integer effectiveMonth = month;
+                final Integer effectiveYear = year;
+                log.info("getPayrollSummaryList requested: month={}, year={}", effectiveMonth, effectiveYear);
+
+                String currentUsername = userService.getCurrentUsername();
+                User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+                List<Long> assignedCustomerIds = null;
+                if (currentUser != null && currentUser.getRole() != null
+                        && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        assignedCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+                }
+
+                final List<Long> customerIdFilter = assignedCustomerIds;
+                List<Payroll> rawPayrolls;
+                if (customerIdFilter != null) {
+                        if (customerIdFilter.isEmpty()) {
+                                return new ArrayList<>();
+                        }
+                        Page<Payroll> payrollPage = payrollRepository.findByFiltersAndCustomerIds(
+                                null, effectiveMonth, effectiveYear, null, customerIdFilter, Pageable.unpaged());
+                        rawPayrolls = payrollPage.getContent();
+                } else {
+                        Page<Payroll> payrollPage = payrollRepository.findByFilters(
+                                null, effectiveMonth, effectiveYear, null, Pageable.unpaged());
+                        rawPayrolls = payrollPage.getContent();
+                }
+
+                // Batch-fetch assignments for advanceNote summary (tránh N+1)
+                List<Long> employeeIds = rawPayrolls.stream()
+                        .map(p -> p.getEmployee() != null ? p.getEmployee().getId() : null)
+                        .filter(id -> id != null)
+                        .distinct()
+                        .collect(Collectors.toList());
+
+                Map<Long, List<Assignment>> assignmentsByEmployee = Collections.emptyMap();
+                if (!employeeIds.isEmpty()) {
+                        List<Assignment> allAssignments = assignmentRepository
+                                .findDistinctAssignmentsByAttendanceMonthAndEmployeeIds(effectiveMonth, effectiveYear, employeeIds);
+                        if (customerIdFilter != null) {
+                                allAssignments = allAssignments.stream()
+                                        .filter(a -> a.getContract() != null && a.getContract().getCustomer() != null
+                                                && customerIdFilter.contains(a.getContract().getCustomer().getId()))
+                                        .collect(Collectors.toList());
+                        }
+                        assignmentsByEmployee = allAssignments.stream()
+                                .collect(Collectors.groupingBy(a -> a.getEmployee().getId()));
+                }
+                final Map<Long, List<Assignment>> finalAssignmentsMap = assignmentsByEmployee;
+
+                return rawPayrolls.stream().map(p -> {
+                        Long empId = p.getEmployee() != null ? p.getEmployee().getId() : null;
+                        List<Assignment> assignments = empId != null
+                                ? finalAssignmentsMap.getOrDefault(empId, Collections.emptyList())
+                                : Collections.emptyList();
+                        BigDecimal paidAmount = p.getPaidAmount() != null ? p.getPaidAmount() : BigDecimal.ZERO;
+                        BigDecimal finalSalary = p.getFinalSalary() != null ? p.getFinalSalary() : BigDecimal.ZERO;
+                        java.time.LocalDateTime payrollCreatedAt = p.getCreatedAt();
+                        int dtoMonth = payrollCreatedAt != null ? payrollCreatedAt.getMonthValue() : effectiveMonth;
+                        int dtoYear = payrollCreatedAt != null ? payrollCreatedAt.getYear() : effectiveYear;
+                        return PayrollSummaryDTO.builder()
+                                .payrollId(p.getId())
+                                .employeeId(p.getEmployee() != null ? p.getEmployee().getId() : null)
+                                .employeeCode(p.getEmployee() != null ? p.getEmployee().getEmployeeCode() : null)
+                                .employeeName(p.getEmployee() != null ? p.getEmployee().getName() : null)
+                                .month(dtoMonth)
+                                .year(dtoYear)
+                                .updatedAt(p.getUpdatedAt())
+                                .advanceNote(buildAdvanceNoteSummary(assignments))
+                                .totalSalary(finalSalary)
+                                .paidAmount(paidAmount)
+                                .remainingAmount(finalSalary.subtract(paidAmount))
+                                .build();
+                }).collect(Collectors.toList());
+        }
+
+        @Override
         public PageResponse<PayrollResponse> getPayrollsWithFilter(String keyword, Integer month, Integer year,
                         Boolean isPaid, String sortBy, String sortDirection, int page, int pageSize) {
                 log.info("getPayrollsWithFilter requested: keyword='{}', month={}, year={}, isPaid={}, sortBy={}, sortDirection={}, page={}, pageSize={}",
@@ -1774,13 +1857,7 @@ public class PayrollServiceImpl implements PayrollService {
                         throw new AppException(ErrorCode.INVALID_REQUEST);
                 }
 
-                // Validate: cannot overpay
-                if (newPaidAmount.compareTo(finalSalary) > 0) {
-                        log.warn("[PAYMENT] Payment amount {} exceeds remaining balance {} for payroll {}",
-                                paymentAmount, finalSalary.subtract(previousPaid), id);
-                        throw new AppException(ErrorCode.INVALID_REQUEST);
-                }
-
+                // Allow overpayment — FE will warn user with confirmation dialog before submitting
                 payroll.setPaidAmount(newPaidAmount);
 
                 BigDecimal epsilon = new BigDecimal("0.01");

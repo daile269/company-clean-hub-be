@@ -28,6 +28,7 @@ import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollOverviewResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
+import com.company.company_clean_hub_be.dto.response.PayrollSummaryDTO;
 import com.company.company_clean_hub_be.service.ExcelExportService;
 import com.company.company_clean_hub_be.service.PayrollService;
 import com.company.company_clean_hub_be.service.impl.ExcelExportServiceImpl;
@@ -115,6 +116,13 @@ public class PayrollController {
                             amount, remaining),
                     null, HttpStatus.OK.value());
         }
+        if (amount.compareTo(remaining) > 0) {
+            BigDecimal excess = amount.subtract(remaining);
+            return ApiResponse.success(
+                    String.format("Số tiền thanh toán vượt quá số dư còn lại (%,.0f ₫). Bạn đang chuyển dư: %,.0f ₫. Bạn có chắc muốn tiếp tục?",
+                            remaining, excess),
+                    null, HttpStatus.OK.value());
+        }
         return ApiResponse.success(null, null, HttpStatus.OK.value());
     }
 
@@ -185,6 +193,14 @@ public class PayrollController {
         List<com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse> details = payrollService
                 .getAssignmentPayrollDetails(employeeId, month, year);
         return ApiResponse.success("Lấy chi tiết lương assignment thành công", details, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/summary")
+    public ApiResponse<List<PayrollSummaryDTO>> getPayrollSummary(
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year) {
+        List<PayrollSummaryDTO> result = payrollService.getPayrollSummaryList(month, year);
+        return ApiResponse.success("Lấy bảng lương tổng hợp thành công", result, HttpStatus.OK.value());
     }
 
     @GetMapping("/years")
