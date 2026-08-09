@@ -58,11 +58,12 @@ public class EmployeeController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) com.company.company_clean_hub_be.entity.EmploymentType employmentType,
             @RequestParam(required = false) String province,
+            @RequestParam(required = false) String ward,
             @RequestParam(required = false) Boolean unassigned,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         PageResponse<EmployeeResponse> employees = employeeService.getEmployeesWithFilter(keyword, employmentType,
-                province, unassigned, page, pageSize);
+                province, ward, unassigned, page, pageSize);
         return ApiResponse.success("Lấy danh sách nhân viên thành công", employees, HttpStatus.OK.value());
     }
 

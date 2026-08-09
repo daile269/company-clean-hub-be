@@ -32,7 +32,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleAppException(AppException exception) {
         ErrorCode errorCode = exception.getErrorCode();
         ApiResponse<Void> apiResponse = ApiResponse.error(
-                errorCode.getMessage(),
+                exception.getResolvedMessage(),
                 errorCode.getCode()
         );
         ResponseEntity.BodyBuilder builder = ResponseEntity.badRequest();

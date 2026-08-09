@@ -140,12 +140,27 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 request.getStartDate());
                                 throw new AppException(ErrorCode.FORBIDDEN);
                         }
-                        // Nếu tạo cho ngày hôm nay nhưng đã qua 08:00 sáng thì QLV không được tạo
+                        // Nếu tạo cho ngày hôm nay: chỉ được phân công đến tối đa 1 tiếng SAU giờ bắt đầu làm của hợp đồng
+                        // Ví dụ: giờ làm 17:00 → được phân đến trước 18:00
+                        // Nếu không tìm thấy hợp đồng/giờ làm → bỏ qua, không chặn
                         if (request.getStartDate().isEqual(today)) {
                                 LocalTime now = LocalTime.now();
-                                if (now.isAfter(LocalTime.of(8, 0))) {
-                                        log.warn("QLV cannot create assignment for today after 08:00: now={}", now);
-                                        throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME);
+                                LocalTime workStartTime = null;
+                                if (request.getContractId() != null) {
+                                        workStartTime = contractRepository.findById(request.getContractId())
+                                                        .map(c -> c.getWorkStartTime())
+                                                        .orElse(null);
+                                }
+                                if (workStartTime != null) {
+                                        LocalTime cutoffTime = workStartTime.plusHours(1);
+                                        if (now.isAfter(cutoffTime)) {
+                                                log.warn("QLV không được phân công hôm nay sau thời hạn cho phép: now={}, cutoffTime={}, workStartTime={}",
+                                                                now, cutoffTime, workStartTime);
+                                                String detail = String.format(
+                                                        "QLV chỉ được phân công/điều động trong vòng 1 tiếng kể từ khi ca làm bắt đầu.%nCa làm: %s — Hạn chót phân công: %s — Thời điểm hiện tại: %s",
+                                                        workStartTime.toString(), cutoffTime.toString(), now.withSecond(0).withNano(0).toString());
+                                                throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME, detail);
+                                        }
                                 }
                         }
                 }
@@ -1302,12 +1317,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         }
 
                                         LocalTime workStartTime = (contractForDate != null) ? contractForDate.getWorkStartTime() : null;
-                                        LocalTime cutoffTime = (workStartTime != null) ? workStartTime.minusHours(1) : LocalTime.of(8, 0);
-
-                                        if (now.isAfter(cutoffTime)) {
-                                                log.warn("QLV cannot perform temporary reassignment for today after cutoff time: now={}, cutoffTime={}, workStartTime={}",
-                                                                now, cutoffTime, workStartTime);
-                                                throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME);
+                                        // Chỉ kiểm tra nếu tìm được giờ làm từ hợp đồng
+                                        // Được phân công đến tối đa 1 tiếng SAU giờ bắt đầu làm
+                                        // Ví dụ: giờ làm 17:00 → được phân đến trước 18:00
+                                        if (workStartTime != null) {
+                                                LocalTime cutoffTime = workStartTime.plusHours(1);
+                                                if (now.isAfter(cutoffTime)) {
+                                                        log.warn("QLV không được điều động tạm thời sau thời hạn cho phép: now={}, cutoffTime={}, workStartTime={}",
+                                                                        now, cutoffTime, workStartTime);
+                                                        String detail = String.format(
+                                                                "QLV chỉ được phân công/điều động trong vòng 1 tiếng kể từ khi ca làm bắt đầu.%nCa làm: %s — Hạn chót phân công: %s — Thời điểm hiện tại: %s",
+                                                                workStartTime.toString(), cutoffTime.toString(), now.withSecond(0).withNano(0).toString());
+                                                        throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME, detail);
+                                                }
                                         }
                                 }
                         }

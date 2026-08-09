@@ -208,7 +208,7 @@ public class SecurityCheck {
         com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
         if (currentUser == null) return false;
 
-        if (currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser.getRole() != null && ("QLT2".equalsIgnoreCase(currentUser.getRole().getCode()) || "QLV".equalsIgnoreCase(currentUser.getRole().getCode()))) {
             return assignmentRepository.findById(assignmentId)
                     .map(a -> a.getContract() != null && a.getContract().getCustomer() != null &&
                             customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), a.getContract().getCustomer().getId()))
@@ -224,7 +224,7 @@ public class SecurityCheck {
         com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
         if (currentUser == null) return false;
 
-        if (currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser.getRole() != null && ("QLT2".equalsIgnoreCase(currentUser.getRole().getCode()) || "QLV".equalsIgnoreCase(currentUser.getRole().getCode()))) {
             return invoiceRepository.findById(invoiceId)
                     .map(i -> i.getContract() != null && i.getContract().getCustomer() != null &&
                             customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), i.getContract().getCustomer().getId()))
@@ -240,7 +240,7 @@ public class SecurityCheck {
         com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
         if (currentUser == null) return false;
 
-        if (currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser.getRole() != null && ("QLT2".equalsIgnoreCase(currentUser.getRole().getCode()) || "QLV".equalsIgnoreCase(currentUser.getRole().getCode()))) {
             return contractRepository.findById(contractId)
                     .map(c -> c.getCustomer() != null &&
                             customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), c.getCustomer().getId()))

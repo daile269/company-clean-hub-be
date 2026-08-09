@@ -28,7 +28,7 @@ public class RatingController {
     }
 
     @GetMapping("/contract/{contractId}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_VIEW_CONTRACT')")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('REVIEW_VIEW_CONTRACT') or hasAuthority('REVIEW_VIEW_ALL') or @securityCheck.isContractManagedByCurrentUser(#contractId)")
     public ApiResponse<List<RatingResponse>> getByContract(@PathVariable Long contractId) {
         List<RatingResponse> list = ratingService.getRatingsByContract(contractId);
         return ApiResponse.success("Lấy đánh giá theo hợp đồng thành công", list, HttpStatus.OK.value());
