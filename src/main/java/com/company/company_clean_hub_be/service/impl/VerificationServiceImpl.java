@@ -250,14 +250,29 @@ public class VerificationServiceImpl implements VerificationService {
     @Override
     public boolean requiresVerification(Assignment assignment) {
 
-        // Check completed verification first. If employee has completed verification
-        // (BYPASS_APPROVED/APPROVED/AUTO_APPROVED), they NEVER need verification again,
-        // regardless of photo count. This ensures bypass approval is permanent.
+        // Condition 1: Contract requirement - ALWAYS checked regardless of employee history.
+        // If the contract explicitly requires image verification, it must be enforced
+        // even for employees who have completed verification before.
+        if (assignment.getContract() != null &&
+            Boolean.TRUE.equals(assignment.getContract().getRequiresImageVerification())) {
+            log.info("Assignment {} requires verification: CONTRACT_REQUIREMENT (contractId={})",
+                    assignment.getId(), assignment.getContract().getId());
+            return true;
+        }
+
+        // Below checks are for NEW_EMPLOYEE verification flow only.
+        // Completed verification bypass only applies to skip new employee checks,
+        // NOT to override contract-level requirements.
+
+        // Check completed verification. If employee has completed verification
+        // (BYPASS_APPROVED/APPROVED/AUTO_APPROVED), they don't need the new-employee
+        // verification flow anymore. This ensures bypass approval is permanent
+        // for new employee verification purposes.
         Long completedCount = verificationRepository.countCompletedVerificationsByEmployee(
                 assignment.getEmployee().getId());
 
         if (completedCount > 0) {
-            log.info("Assignment {} does NOT require verification: employee {} has {} completed verification(s) - bypass/approval is permanent",
+            log.info("Assignment {} does NOT require new-employee verification: employee {} has {} completed verification(s) - bypass is permanent for new employee check",
                     assignment.getId(), assignment.getEmployee().getId(), completedCount);
             return false;
         }
@@ -272,17 +287,10 @@ public class VerificationServiceImpl implements VerificationService {
             return true;
         }
 
-        // Condition 1: Completely new employee (never had any OTHER assignment)
+        // Condition 2: Completely new employee (never had any OTHER assignment)
         // Pass assignment.getId() to exclude the current assignment from the count
         if (isEmployeeCompletelyNew(assignment.getEmployee().getId(), assignment.getId())) {
             log.info("Assignment {} requires verification: NEW_EMPLOYEE", assignment.getId());
-            return true;
-        }
-
-        // Condition 2: Contract setting
-        if (assignment.getContract() != null &&
-            Boolean.TRUE.equals(assignment.getContract().getRequiresImageVerification())) {
-            log.info("Assignment {} requires verification: CONTRACT_REQUIREMENT", assignment.getId());
             return true;
         }
 

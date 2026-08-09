@@ -214,42 +214,27 @@ public class ExcelExportServiceImpl implements ExcelExportService {
 
             // ===== COMPANY HEADER SECTION =====
             int currentRowIndex = 0;
-            int totalColumns = 19; // Tháng/Năm, Xin ứng và Ghi chú
+            int totalColumns = 18; // Tháng/Năm và Ghi chú
 
             // Row 0: Company name
             Row companyRow = sheet.createRow(currentRowIndex++);
             sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, totalColumns - 1));
             Cell companyCell = companyRow.createCell(0);
-            companyCell.setCellValue("CÔNG TY TNHH TMDV PANPACIFIC");
+            companyCell.setCellValue("CÔNG TY TRÁCH NHIỆM HỮU HẠN PANPACIFIC");
             companyCell.setCellStyle(companyHeaderStyle);
 
-            // Row 1: Address 1
-            Row address1Row = sheet.createRow(currentRowIndex++);
+            // Row 1: Address
+            Row addressRow = sheet.createRow(currentRowIndex++);
             sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, totalColumns - 1));
-            Cell address1Cell = address1Row.createCell(0);
-            address1Cell.setCellValue("VPĐD 1: 877 Lê Đức Thọ, Phường 16, Quận Gò Vấp, TP.HCM");
-            address1Cell.setCellStyle(companyHeaderStyle);
+            Cell addressCell = addressRow.createCell(0);
+            addressCell.setCellValue("349B Lạc Long Quân, Hòa Bình, Hồ Chí Minh, Việt Nam");
+            addressCell.setCellStyle(companyHeaderStyle);
 
-            // Row 2: Address 2
-            Row address2Row = sheet.createRow(currentRowIndex++);
+            // Row 2: Document Title
+            Row titleRow = sheet.createRow(currentRowIndex++);
             sheet.addMergedRegion(new CellRangeAddress(2, 2, 0, totalColumns - 1));
-            Cell address2Cell = address2Row.createCell(0);
-            address2Cell.setCellValue("VPĐD 2: 90/31 Thành Thái, Phường 12, Quận 10, TP.HCM");
-            address2Cell.setCellStyle(companyHeaderStyle);
-
-            // Row 3: Phone and Document Title
-            Row phoneRow = sheet.createRow(currentRowIndex++);
-
-            // Phone part (left)
-            sheet.addMergedRegion(new CellRangeAddress(3, 3, 0, 4));
-            Cell phoneCell = phoneRow.createCell(0);
-            phoneCell.setCellValue("Điện Thoại: 0901417674 - 0762833102");
-            phoneCell.setCellStyle(companyHeaderStyle);
-
-            // Document Title part (right)
-            sheet.addMergedRegion(new CellRangeAddress(3, 3, 5, totalColumns - 1));
-            Cell titleCell = phoneRow.createCell(5);
-            titleCell.setCellValue("CÔNG TY TNHH PANPANCIFIC BẢNG THANH TOÁN TIỀN LƯƠNG THÁNG " + month + "/" + year);
+            Cell titleCell = titleRow.createCell(0);
+            titleCell.setCellValue("BẢNG THANH TOÁN TIỀN LƯƠNG THÁNG " + month + "/" + year);
             titleCell.setCellStyle(companyHeaderStyle);
 
             // Empty row
@@ -261,7 +246,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                     "Mã NV", "Họ tên", "Tháng/Năm", "Ngân hàng", "Số TK", "SĐT",
                     "Công trình", "Ngày công", "Lương thực lãnh", "Thưởng", "Phạt",
                     "Phụ cấp", "Hỗ trợ", "Bảo hiểm", "Tổng lương tháng", "Đã thanh toán", "Còn lại",
-                    "Xin ứng", "Ghi chú"
+                    "Ghi chú"
             };
 
             for (int i = 0; i < headers.length; i++) {
@@ -365,15 +350,10 @@ public class ExcelExportServiceImpl implements ExcelExportService {
                 cell16.setCellValue(row.getFinalSalary() != null ? row.getFinalSalary().doubleValue() : 0);
                 cell16.setCellStyle(numberStyle);
 
-                // Xin ứng
-                Cell cell17 = dataRow.createCell(17);
-                cell17.setCellValue(row.getAdvanceNote() != null ? row.getAdvanceNote().doubleValue() : 0);
-                cell17.setCellStyle(numberStyle);
-
                 // Ghi chú công thức tính lương theo assignment
-                Cell cell18 = dataRow.createCell(18);
-                cell18.setCellValue(row.getNote() != null ? row.getNote() : "");
-                cell18.setCellStyle(dataStyle);
+                Cell cell17 = dataRow.createCell(17);
+                cell17.setCellValue(row.getNote() != null ? row.getNote() : "");
+                cell17.setCellStyle(dataStyle);
             }
 
             // Auto-size columns
@@ -383,8 +363,7 @@ public class ExcelExportServiceImpl implements ExcelExportService {
             // Set minimum widths for readability
             sheet.setColumnWidth(1, 4000); // Name
             sheet.setColumnWidth(6, 8000); // Projects (can be long list)
-            sheet.setColumnWidth(17, 3_000); // Xin ứng
-            sheet.setColumnWidth(18, 130 * 256); // Ghi chú/công thức tính lương
+            sheet.setColumnWidth(17, 130 * 256); // Ghi chú/công thức tính lương
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);

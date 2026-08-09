@@ -978,10 +978,25 @@ public class AssignmentServiceImpl implements AssignmentService {
                 Assignment assignment = assignmentRepository.findById(id)
                         .orElseThrow(() -> new AppException(ErrorCode.ASSIGNMENT_NOT_FOUND));
 
+                // DEBUG: log assignment info
+                log.info("[ASSIGNMENT][ADVANCE] DEBUG assignment employeeId={}, assignmentId={}",
+                        assignment.getEmployee() != null ? assignment.getEmployee().getId() : "NULL", id);
+
                 // Only QLV can update advance note (bypass 1-hour lock)
                 String username = SecurityContextHolder.getContext().getAuthentication().getName();
+                log.info("[ASSIGNMENT][ADVANCE] DEBUG username from auth={}", username);
+
                 User updater = userRepository.findByUsername(username)
                         .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+
+                log.info("[ASSIGNMENT][ADVANCE] DEBUG updater class={}, updaterId={}, roleCode={}, isEmployee={}",
+                        updater.getClass().getSimpleName(), updater.getId(),
+                        updater.getRole() != null ? updater.getRole().getCode() : "NULL",
+                        updater instanceof Employee);
+
+                boolean isEmpInRepo = employeeRepository.findByUsername(username).isPresent();
+                log.info("[ASSIGNMENT][ADVANCE] DEBUG employeeRepository.findByUsername({}) present={}",
+                        username, isEmpInRepo);
 
                 if (updater.getRole() != null && "QLV".equalsIgnoreCase(updater.getRole().getCode())) {
                         // QLV: only allow updating advanceNote, no time lock
@@ -991,6 +1006,17 @@ public class AssignmentServiceImpl implements AssignmentService {
                         || "QLT2".equalsIgnoreCase(updater.getRole().getCode()))) {
                         // QLT1/QLT2: also allowed, no time lock
                         log.info("[ASSIGNMENT][ADVANCE] QLT updating advanceNote: assignmentId={}, oldValue={}, newValue={}",
+                                id, assignment.getAdvanceNote(), advanceNote);
+                } else if (updater instanceof Employee || employeeRepository.findByUsername(username).isPresent()) {
+                        // Employee: only allowed to update their own assignment's advanceNote
+                        Employee emp = employeeRepository.findByUsername(username)
+                                .orElseThrow(() -> new AppException(ErrorCode.USER_IS_NOT_EXISTS));
+                        if (assignment.getEmployee() == null || !emp.getId().equals(assignment.getEmployee().getId())) {
+                                log.warn("[ASSIGNMENT][ADVANCE] Employee '{}' attempting to update advanceNote of another employee's assignment",
+                                        username);
+                                throw new AppException(ErrorCode.FORBIDDEN);
+                        }
+                        log.info("[ASSIGNMENT][ADVANCE] Employee updating own advanceNote: assignmentId={}, oldValue={}, newValue={}",
                                 id, assignment.getAdvanceNote(), advanceNote);
                 } else {
                         log.warn("[ASSIGNMENT][ADVANCE] Unauthorized user '{}' attempting to update advanceNote",
