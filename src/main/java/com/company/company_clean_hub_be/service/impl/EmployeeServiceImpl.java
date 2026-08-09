@@ -100,11 +100,11 @@ public class EmployeeServiceImpl implements EmployeeService {
         @Override
         public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword,
                         com.company.company_clean_hub_be.entity.EmploymentType employmentType,
-                        String province, Boolean unassigned, int page, int pageSize) {
-                log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, province='{}', unassigned={}, page={}, pageSize={}",
-                                keyword, employmentType, province, unassigned, page, pageSize);
+                        String province, String ward, Boolean unassigned, int page, int pageSize) {
+                log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, province='{}', ward='{}', unassigned={}, page={}, pageSize={}",
+                                keyword, employmentType, province, ward, unassigned, page, pageSize);
                 Pageable pageable = PageRequest.of(page, pageSize, Sort.by("employeeCode").descending());
-                Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, province, unassigned, pageable);
+                Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, province, ward, unassigned, pageable);
 
                 List<Long> employeeIds = employeePage.getContent().stream().map(Employee::getId).collect(Collectors.toList());
                 java.util.Map<Long, List<com.company.company_clean_hub_be.entity.Customer>> customerMap = new java.util.HashMap<>();
