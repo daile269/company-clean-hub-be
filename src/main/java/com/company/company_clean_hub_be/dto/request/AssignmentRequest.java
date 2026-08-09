@@ -40,4 +40,7 @@ public class AssignmentRequest {
     private String description;
     @PositiveOrZero(message = "Planned days phải lớn hơn hoặc bằng 0")
     private Integer plannedDays;
+    @PositiveOrZero(message = "Hỗ trợ hàng tháng phải lớn hơn hoặc bằng 0")
+    private BigDecimal monthlySupport;
+    private BigDecimal advanceNote;
 }

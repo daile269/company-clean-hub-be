@@ -30,8 +30,9 @@ public interface EmployeeService {
         // Phương thức sinh mã nhân viên tự động
         String generateEmployeeCode(com.company.company_clean_hub_be.entity.EmploymentType employmentType);
 
+        // [DEPRECATED] Replaced by advanceNoteSummary from Assignment.advanceNote
         // Cập nhật chỉ tiền ứng lương cho nhân viên văn phòng
-        EmployeeResponse updateAdvanceSalary(Long id, java.math.BigDecimal monthlyAdvanceLimit);
+        // EmployeeResponse updateAdvanceSalary(Long id, java.math.BigDecimal monthlyAdvanceLimit);
         EmployeeResponse uploadCccdImages(Long id, org.springframework.web.multipart.MultipartFile frontFile, org.springframework.web.multipart.MultipartFile backFile) throws java.io.IOException;
         EmployeeResponse takeCompanyLeave(Long id, java.time.LocalDate leaveDate);
         EmployeeResponse cancelCompanyLeave(Long id, java.time.LocalDate leaveDate);

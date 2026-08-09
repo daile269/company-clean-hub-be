@@ -49,4 +49,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT u FROM User u WHERE u.role.code = :roleCode")
     List<User> findActiveUsersByRoleCode(@Param("roleCode") String roleCode);
+
+    @Query("SELECT u FROM User u WHERE u.role.code IN :roleCodes")
+    List<User> findByRoleCodeIn(@Param("roleCodes") List<String> roleCodes);
 }

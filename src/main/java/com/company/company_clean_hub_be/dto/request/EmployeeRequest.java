@@ -59,8 +59,11 @@ public class EmployeeRequest {
 
     private BigDecimal insuranceSalary;
 
+    // [DEPRECATED] Replaced by Assignment.advanceNote compiled in advanceNoteSummary
     // Số tiền xin ứng hàng tháng
-    private BigDecimal monthlyAdvanceLimit;
+    // private BigDecimal monthlyAdvanceLimit;
+
+    private BigDecimal monthlySupport;
 
     private String cccdFrontImage;
 

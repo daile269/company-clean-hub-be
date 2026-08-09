@@ -30,6 +30,7 @@ public class VerificationImageResponse {
     
     private BigDecimal faceConfidence;
     private BigDecimal imageQualityScore;
-    
+    private boolean imageExpired; // true nếu ảnh đã bị xoá Cloudinary sau 90 ngày (giữ lại GPS + time)
+
     private LocalDateTime createdAt;
 }

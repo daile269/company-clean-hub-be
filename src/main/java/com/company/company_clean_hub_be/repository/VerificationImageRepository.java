@@ -51,4 +51,10 @@ public interface VerificationImageRepository extends JpaRepository<VerificationI
            "WHERE vi.assignmentVerification.assignment.id = :assignmentId " +
            "ORDER BY vi.capturedAt DESC")
     List<LocalDateTime> findCaptureDatesByAssignmentId(@Param("assignmentId") Long assignmentId);
+
+    // Tìm ảnh cũ hơn 90 ngày và còn cloudinary_public_id
+    @Query("SELECT vi FROM VerificationImage vi " +
+           "WHERE vi.cloudinaryPublicId IS NOT NULL " +
+           "AND vi.capturedAt < :cutoffDate")
+    List<VerificationImage> findImagesOlderThanWithPublicId(@Param("cutoffDate") LocalDateTime cutoffDate);
 }

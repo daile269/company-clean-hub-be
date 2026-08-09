@@ -30,6 +30,7 @@ public class PayrollAssignmentResponse {
     private BigDecimal assignmentBonus;
     private BigDecimal assignmentPenalty;
     private BigDecimal assignmentAllowance;
+    private BigDecimal monthlySupport; // Cộng thẳng một lần, không chia theo ngày công
     private BigDecimal companyAllowance;
     private BigDecimal assignmentInsurance;
     private BigDecimal assignmentAdvance;

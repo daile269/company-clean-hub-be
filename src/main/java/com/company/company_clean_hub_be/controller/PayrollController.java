@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.company.company_clean_hub_be.dto.request.PaymentRequest;
 import com.company.company_clean_hub_be.dto.request.PayrollRequest;
 import com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest;
 import com.company.company_clean_hub_be.dto.response.ApiResponse;
@@ -27,6 +28,7 @@ import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollOverviewResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
+import com.company.company_clean_hub_be.dto.response.PayrollSummaryDTO;
 import com.company.company_clean_hub_be.service.ExcelExportService;
 import com.company.company_clean_hub_be.service.PayrollService;
 import com.company.company_clean_hub_be.service.impl.ExcelExportServiceImpl;
@@ -92,6 +94,36 @@ public class PayrollController {
             @RequestParam BigDecimal paidAmount) {
         PayrollResponse payroll = payrollService.updatePaymentStatus(id, paidAmount);
         return ApiResponse.success("Cập nhật thanh toán thành công", payroll, HttpStatus.OK.value());
+    }
+
+    @PostMapping("/{id}/payment")
+    public ApiResponse<PayrollResponse> processPayment(
+            @PathVariable Long id,
+            @Valid @RequestBody PaymentRequest request) {
+        PayrollResponse payroll = payrollService.processPayment(id, request);
+        return ApiResponse.success("Thanh toán lương thành công", payroll, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/{id}/payment-warning")
+    public ApiResponse<String> getPaymentWarning(
+            @PathVariable Long id,
+            @RequestParam BigDecimal amount) {
+        PayrollResponse payroll = payrollService.getPayrollById(id);
+        BigDecimal remaining = payroll.getFinalSalary().subtract(payroll.getPaidAmount());
+        if (amount.compareTo(remaining) < 0) {
+            return ApiResponse.success(
+                    String.format("Số tiền thanh toán (%,.0f ₫) nhỏ hơn số dư còn lại (%,.0f ₫). Bạn có chắc muốn tiếp tục?",
+                            amount, remaining),
+                    null, HttpStatus.OK.value());
+        }
+        if (amount.compareTo(remaining) > 0) {
+            BigDecimal excess = amount.subtract(remaining);
+            return ApiResponse.success(
+                    String.format("Số tiền thanh toán vượt quá số dư còn lại (%,.0f ₫). Bạn đang chuyển dư: %,.0f ₫. Bạn có chắc muốn tiếp tục?",
+                            remaining, excess),
+                    null, HttpStatus.OK.value());
+        }
+        return ApiResponse.success(null, null, HttpStatus.OK.value());
     }
 
     @PutMapping("/{id}/recalculate")
@@ -161,6 +193,14 @@ public class PayrollController {
         List<com.company.company_clean_hub_be.dto.response.AssignmentPayrollDetailResponse> details = payrollService
                 .getAssignmentPayrollDetails(employeeId, month, year);
         return ApiResponse.success("Lấy chi tiết lương assignment thành công", details, HttpStatus.OK.value());
+    }
+
+    @GetMapping("/summary")
+    public ApiResponse<List<PayrollSummaryDTO>> getPayrollSummary(
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year) {
+        List<PayrollSummaryDTO> result = payrollService.getPayrollSummaryList(month, year);
+        return ApiResponse.success("Lấy bảng lương tổng hợp thành công", result, HttpStatus.OK.value());
     }
 
     @GetMapping("/years")

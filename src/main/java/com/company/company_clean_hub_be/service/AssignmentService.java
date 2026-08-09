@@ -19,6 +19,7 @@ public interface AssignmentService {
     AssignmentResponse createAssignment(AssignmentRequest request);
     AssignmentResponse updateAssignment(Long id, AssignmentRequest request);
     AssignmentResponse updateAllowanceAssignment(Long id, BigDecimal allowance);
+    AssignmentResponse updateAdvanceNote(Long id, BigDecimal advanceNote);
     void deleteAssignment(Long id);
     TemporaryAssignmentResponse temporaryReassignment(TemporaryReassignmentRequest request);
     List<AssignmentResponse> getEmployeesByCustomer(Long customerId);

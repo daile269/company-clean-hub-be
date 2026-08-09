@@ -43,8 +43,18 @@ public class PayRollAssignmentExportExcel {
     
     // Flag to indicate if this is a total row
     private Boolean isTotalRow;
-    
+
     // Note containing calculation formulas
     private String note;
+
+    // Monthly support (hỗ trợ tháng) - cộng thẳng vào lương
+    private BigDecimal monthlySupport;
+
+    // Advance note (xin ứng) - số tiền ứng lương
+    private BigDecimal advanceNote;
+
+    // Month/Year for display in Excel
+    private Integer month;
+    private Integer year;
 }
 

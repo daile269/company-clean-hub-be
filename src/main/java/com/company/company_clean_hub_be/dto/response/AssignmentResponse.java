@@ -38,6 +38,8 @@ public class AssignmentResponse {
     private Integer plannedDays;
     private List<DayOfWeek> workingDaysPerWeek;
     private BigDecimal additionalAllowance;
+    private BigDecimal monthlySupport;
+    private BigDecimal advanceNote;
     private String description;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -38,8 +38,12 @@ public class EmployeeResponse {
     private BigDecimal allowance;
     private BigDecimal insuranceSalary;
 
+    // Hỗ trợ cố định hàng tháng
+    private BigDecimal monthlySupport;
+
+    // [DEPRECATED] Replaced by Assignment.advanceNote compiled in advanceNoteSummary
     // Số tiền xin ứng hàng tháng
-    private BigDecimal monthlyAdvanceLimit;
+    // private BigDecimal monthlyAdvanceLimit;
 
     private String cccdFrontImage;
     private String cccdBackImage;

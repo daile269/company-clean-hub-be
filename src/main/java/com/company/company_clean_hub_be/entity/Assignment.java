@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -82,6 +83,14 @@ public class Assignment {
     @Column(name = "additional_allowance")
     @PositiveOrZero
     private BigDecimal additionalAllowance;
+
+    @Column(name = "monthly_support", precision = 18, scale = 2)
+    @PositiveOrZero
+    private BigDecimal monthlySupport;
+
+    @Column(name = "advance_note", precision = 18, scale = 2)
+    private BigDecimal advanceNote;
+
     @OneToMany(mappedBy = "assignment", fetch = FetchType.LAZY)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude

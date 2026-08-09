@@ -15,6 +15,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.company.company_clean_hub_be.dto.request.PaymentRequest;
 import com.company.company_clean_hub_be.dto.request.PayrollRequest;
 import com.company.company_clean_hub_be.dto.request.PayrollUpdateRequest;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
@@ -23,11 +24,13 @@ import com.company.company_clean_hub_be.dto.response.PaymentHistoryResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollAssignmentResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollOverviewResponse;
 import com.company.company_clean_hub_be.dto.response.PayrollResponse;
+import com.company.company_clean_hub_be.dto.response.PayrollSummaryDTO;
 import com.company.company_clean_hub_be.entity.Assignment;
 import com.company.company_clean_hub_be.entity.AssignmentScope;
 import com.company.company_clean_hub_be.entity.AssignmentType;
 import com.company.company_clean_hub_be.entity.Attendance;
 import com.company.company_clean_hub_be.entity.Employee;
+import com.company.company_clean_hub_be.entity.EmploymentType;
 import com.company.company_clean_hub_be.entity.PaymentHistory;
 import com.company.company_clean_hub_be.entity.Payroll;
 import com.company.company_clean_hub_be.entity.User;
@@ -97,6 +100,8 @@ public class PayrollServiceImpl implements PayrollService {
                                 continue;
                         }
 
+                        synchronizeCompanyAssignmentMonthlySupport(employee, assignments);
+
                         // Check if payroll already exists
                         Optional<Payroll> existingPayroll = payrollRepository.findByEmployeeAndMonthAndYear(employeeId,
                                         month,
@@ -154,13 +159,13 @@ public class PayrollServiceImpl implements PayrollService {
                 BigDecimal insuranceTotal = request.getInsuranceAmount() != null ? request.getInsuranceAmount()
                                 : BigDecimal.ZERO;
 
-                // Read advance from employee.monthlyAdvanceLimit instead of request
-                BigDecimal advanceTotal = employee.getMonthlyAdvanceLimit() != null
-                                ? employee.getMonthlyAdvanceLimit()
-                                : BigDecimal.ZERO;
-
-                log.debug("[SINGLE-CALC][INIT] advanceTotal={} (from employee.monthlyAdvanceLimit), insuranceTotal={}",
-                                advanceTotal, insuranceTotal);
+                // [DEPRECATED] advanceTotal replaced by advanceNoteSummary from Assignment.advanceNote
+                // BigDecimal advanceTotal = employee.getMonthlyAdvanceLimit() != null
+                //                 ? employee.getMonthlyAdvanceLimit()
+                //                 : BigDecimal.ZERO;
+                //
+                // log.debug("[SINGLE-CALC][INIT] advanceTotal={} (from employee.monthlyAdvanceLimit), insuranceTotal={}",
+                //                 advanceTotal, insuranceTotal);
 
                 List<Assignment> assignments = assignmentRepository
                                 .findDistinctAssignmentsByAttendanceMonthAndEmployee(
@@ -171,6 +176,8 @@ public class PayrollServiceImpl implements PayrollService {
                 if (assignments.isEmpty()) {
                         throw new AppException(ErrorCode.NO_ASSIGNMENT_DATA);
                 }
+
+                synchronizeCompanyAssignmentMonthlySupport(employee, assignments);
 
                 List<Attendance> attendances = attendanceRepository.findAttendancesByMonthYearAndEmployee(
                                 request.getMonth(), request.getYear(), request.getEmployeeId());
@@ -204,15 +211,15 @@ public class PayrollServiceImpl implements PayrollService {
                         BigDecimal support = defaultZero(
                                         attendanceRepository.sumSupportCostByAssignment(assignment.getId()));
                         BigDecimal additionalAllowance = defaultZero(assignment.getAdditionalAllowance());
+                        BigDecimal monthlySupport = defaultZero(assignment.getMonthlySupport());
 
-                        log.debug("[SINGLE-CALC][AMOUNTS] assignmentId={}, bonus={}, penalty={}, support={}, additionalAllowance={}",
-                                        assignment.getId(), bonus, penalty, support, additionalAllowance);
+                        log.debug("[SINGLE-CALC][AMOUNTS] assignmentId={}, bonus={}, penalty={}, support={}, additionalAllowance={}, monthlySupport={}",
+                                        assignment.getId(), bonus, penalty, support, additionalAllowance, monthlySupport);
 
                         totalBonus = totalBonus.add(bonus);
                         totalPenalties = totalPenalties.add(penalty);
-                        // Chỉ tính additionalAllowance vào totalSupportCosts (phụ cấp tháng)
-                        // support (phụ cấp attendance) sẽ được cộng trực tiếp vào tiền lương, không
-                        // tính vào totalSupportCosts
+                        // Chỉ additionalAllowance thuộc tổng phụ cấp.
+                        // Attendance support giữ nguyên công thức cũ; monthlySupport được helper cộng riêng sau công thức.
                         totalSupportCosts = totalSupportCosts.add(additionalAllowance);
 
                         BigDecimal assignmentBaseSalary = calculateBaseSalaryForAssignment(assignment);
@@ -220,14 +227,11 @@ public class PayrollServiceImpl implements PayrollService {
                         log.debug("[SINGLE-CALC][BASE-SALARY] assignmentId={}, baseSalary={}, baseSalaryTotal={}",
                                         assignment.getId(), assignmentBaseSalary, baseSalaryTotal);
 
-                        // Tách support và additionalAllowance:
-                        // - additionalAllowance: chia đều (phụ cấp tháng)
-                        // - support: cộng trực tiếp vào tiền lương (phụ cấp attendance)
                         BigDecimal assignmentAmount = calculateAssignmentAmount(
                                         assignment,
                                         bonus,
-                                        additionalAllowance, // Phụ cấp assignment (chia đều)
-                                        support, // Phụ cấp attendance (cộng trực tiếp)
+                                        additionalAllowance,
+                                        support,
                                         note);
 
                         amountTotal = amountTotal.add(assignmentAmount);
@@ -326,7 +330,7 @@ public class PayrollServiceImpl implements PayrollService {
                                 .totalDays(totalDays)
                                 .bonusTotal(totalBonus)
                                 .penaltyTotal(totalPenalties)
-                                .advanceTotal(advanceTotal)
+                                // [DEPRECATED] .advanceTotal(advanceTotal)
                                 .allowanceTotal(totalSupportCosts)
                                 .insuranceTotal(insuranceTotal)
                                 .finalSalary(finalSalary)
@@ -371,8 +375,8 @@ public class PayrollServiceImpl implements PayrollService {
                                 : BigDecimal.ZERO;
                 BigDecimal totalInsurance = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal()
                                 : BigDecimal.ZERO;
-                BigDecimal totalAdvance = payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal()
-                                : BigDecimal.ZERO;
+                // [DEPRECATED] BigDecimal totalAdvance = payroll.getAdvanceTotal()...
+                BigDecimal totalAdvance = BigDecimal.ZERO;
 
                 for (Assignment assignment : assignments) {
                         int assignmentDays = calculateActualWorkDays(assignment);
@@ -383,6 +387,7 @@ public class PayrollServiceImpl implements PayrollService {
                         BigDecimal assignmentSupport = defaultZero(
                                         attendanceRepository.sumSupportCostByAssignment(assignment.getId()));
                         BigDecimal additionalAllowance = defaultZero(assignment.getAdditionalAllowance());
+                        BigDecimal monthlySupport = defaultZero(assignment.getMonthlySupport());
 
                         AssignmentScope scope = assignment.getScope() != null ? assignment.getScope()
                                         : AssignmentScope.CONTRACT;
@@ -419,6 +424,7 @@ public class PayrollServiceImpl implements PayrollService {
                                         .assignmentBonus(assignmentBonus)
                                         .assignmentPenalty(assignmentPenalty)
                                         .assignmentAllowance(additionalAllowance) // Phụ cấp assignment (chia đều)
+                                        .monthlySupport(monthlySupport) // Hỗ trợ tháng cộng thẳng, không chia ngày
                                         .assignmentInsurance(BigDecimal.ZERO)
                                         .assignmentAdvance(BigDecimal.ZERO)
                                         .assignmentSalary(assignmentSalary)
@@ -428,7 +434,7 @@ public class PayrollServiceImpl implements PayrollService {
                                         .totalPenalty(null)
                                         .totalAllowance(null)
                                         .totalInsurance(null)
-                                        .totalAdvance(null)
+                                        // [DEPRECATED] .totalAdvance(null)
                                         .finalSalary(null)
                                         .companyAllowance(null)
                                         .isTotalRow(false)
@@ -457,6 +463,7 @@ public class PayrollServiceImpl implements PayrollService {
                                 .assignmentBonus(null)
                                 .assignmentPenalty(null)
                                 .assignmentAllowance(null)
+                                .monthlySupport(null)
                                 .assignmentInsurance(null)
                                 .assignmentAdvance(null)
                                 .assignmentSalary(null)
@@ -467,7 +474,7 @@ public class PayrollServiceImpl implements PayrollService {
                                 .totalAllowance(totalAllowance)
                                 .totalInsurance(totalInsurance)
                                 .companyAllowance(employee.getAllowance())
-                                .totalAdvance(totalAdvance)
+                                // [DEPRECATED] .totalAdvance(totalAdvance)
                                 .finalSalary(payroll.getFinalSalary())
                                 .isTotalRow(true)
                                 .build();
@@ -625,10 +632,14 @@ public class PayrollServiceImpl implements PayrollService {
                                         .totalInsurance(persistedPayroll.getInsuranceTotal())
                                         .companyAllowance(employee.getAllowance())
                                         .totalSalaryBeforeAdvance(salaryBeforeAdvance)
-                                        .totalAdvance(persistedPayroll.getAdvanceTotal())
+                                        // [DEPRECATED] .totalAdvance(persistedPayroll.getAdvanceTotal())
                                         .paidAmount(paidAmount)
                                         .finalSalary(remainingAmount) // Use remaining amount instead of finalSalary
                                         .note(noteStr)
+                                        .monthlySupport(computeMonthlySupportTotal(assignments))
+                                        .advanceNote(buildAdvanceNoteSummary(assignments))
+                                        .month(month)
+                                        .year(year)
                                         .isTotalRow(true) // Mark as summary row
                                         .build();
 
@@ -706,16 +717,16 @@ public class PayrollServiceImpl implements PayrollService {
 
                         Payroll payroll = payrollOpt.get();
 
-                        // Sync advance from employee to payroll (in case employee was updated)
-                        if (employee.getMonthlyAdvanceLimit() != null) {
-                                if (payroll.getAdvanceTotal() == null ||
-                                                !payroll.getAdvanceTotal().equals(employee.getMonthlyAdvanceLimit())) {
-                                        payroll.setAdvanceTotal(employee.getMonthlyAdvanceLimit());
-                                        payrollRepository.save(payroll);
-                                        log.info("[PAYROLL-FILTER-SYNC] Synced advance {} from employee {} to payroll",
-                                                        employee.getMonthlyAdvanceLimit(), employeeId);
-                                }
-                        }
+                        // [DEPRECATED] Sync advance from employee to payroll - replaced by advanceNoteSummary
+                        // if (employee.getMonthlyAdvanceLimit() != null) {
+                        //         if (payroll.getAdvanceTotal() == null ||
+                        //                         !payroll.getAdvanceTotal().equals(employee.getMonthlyAdvanceLimit())) {
+                        //                 payroll.setAdvanceTotal(employee.getMonthlyAdvanceLimit());
+                        //                 payrollRepository.save(payroll);
+                        //                 log.info("[PAYROLL-FILTER-SYNC] Synced advance {} from employee {} to payroll",
+                        //                                 employee.getMonthlyAdvanceLimit(), employeeId);
+                        //         }
+                        // } // [DEPRECATED] closing brace of advance sync block
 
                         // Convert to responses
                         List<PayrollAssignmentResponse> employeeResponses = convertPayrollToAssignmentResponses(
@@ -793,21 +804,23 @@ public class PayrollServiceImpl implements PayrollService {
                         return null;
                 }
 
+                synchronizeCompanyAssignmentMonthlySupport(employee, assignments);
+
                 BigDecimal amountTotal = BigDecimal.ZERO;
                 BigDecimal totalBonus = BigDecimal.ZERO;
                 BigDecimal totalPenalties = BigDecimal.ZERO;
                 BigDecimal totalSupportCosts = BigDecimal.ZERO;
-                // Read advance from employee.monthlyAdvanceLimit
-                BigDecimal totalAdvance = employee.getMonthlyAdvanceLimit() != null
-                                ? employee.getMonthlyAdvanceLimit()
-                                : BigDecimal.ZERO;
+                // [DEPRECATED] Read advance from employee.monthlyAdvanceLimit
+                // BigDecimal totalAdvance = employee.getMonthlyAdvanceLimit() != null
+                //                 ? employee.getMonthlyAdvanceLimit()
+                //                 : BigDecimal.ZERO;
+                BigDecimal totalAdvance = BigDecimal.ZERO;
                 BigDecimal totalInsurance = BigDecimal.ZERO;
                 int totalDays = 0;
 
                 log.debug(
-                                "[PAYROLL-EXPORT][DEBUG] Initial accumulators -> amountTotal={}, totalBonus={}, totalPenalties={}, totalSupportCosts={}, totalAdvance={}, totalInsurance={}, totalDays={}",
-                                amountTotal, totalBonus, totalPenalties, totalSupportCosts, totalAdvance,
-                                totalInsurance, totalDays);
+                                "[PAYROLL-EXPORT][DEBUG] Initial accumulators -> amountTotal={}, totalBonus={}, totalPenalties={}, totalSupportCosts={}, totalInsurance={}, totalDays={}",
+                                amountTotal, totalBonus, totalPenalties, totalSupportCosts, totalInsurance, totalDays);
 
                 boolean hasCompanyScope = assignments.stream()
                                 .anyMatch(a -> a.getScope() != null && a.getScope() == AssignmentScope.COMPANY);
@@ -843,10 +856,13 @@ public class PayrollServiceImpl implements PayrollService {
                         BigDecimal additionalAllowance = assignment.getAdditionalAllowance() != null
                                         ? assignment.getAdditionalAllowance()
                                         : BigDecimal.ZERO;
+                        BigDecimal monthlySupport = assignment.getMonthlySupport() != null
+                                        ? assignment.getMonthlySupport()
+                                        : BigDecimal.ZERO;
 
                         log.debug(
-                                        "[PAYROLL-EXPORT][DEBUG] Raw sums for assignment {} -> bonus={}, penalty={}, support={}, additionalAllowance={}",
-                                        assignment.getId(), bonus, penalty, support, additionalAllowance);
+                                        "[PAYROLL-EXPORT][DEBUG] Raw sums for assignment {} -> bonus={}, penalty={}, support={}, additionalAllowance={}, monthlySupport={}",
+                                        assignment.getId(), bonus, penalty, support, additionalAllowance, monthlySupport);
 
                         BigDecimal safeBonus = bonus != null ? bonus : BigDecimal.ZERO;
                         BigDecimal safePenalty = penalty != null ? penalty : BigDecimal.ZERO;
@@ -854,9 +870,8 @@ public class PayrollServiceImpl implements PayrollService {
 
                         totalBonus = totalBonus.add(safeBonus);
                         totalPenalties = totalPenalties.add(safePenalty);
-                        // Chỉ tính additionalAllowance vào totalSupportCosts (phụ cấp tháng)
-                        // support (phụ cấp attendance) sẽ được cộng trực tiếp vào tiền lương, không
-                        // tính vào totalSupportCosts
+                        // Chỉ additionalAllowance thuộc tổng phụ cấp.
+                        // Attendance support giữ nguyên công thức cũ; monthlySupport được helper cộng riêng sau công thức.
                         totalSupportCosts = totalSupportCosts.add(additionalAllowance);
 
                         // Calculate base salary (without bonuses/allowances)
@@ -868,12 +883,9 @@ public class PayrollServiceImpl implements PayrollService {
                                         assignment.getId(), totalBonus, totalPenalties, totalSupportCosts,
                                         baseSalaryTotal);
 
-                        // Tách support và additionalAllowance:
-                        // - additionalAllowance: chia đều (phụ cấp tháng)
-                        // - support: cộng trực tiếp vào tiền lương (phụ cấp attendance)
                         BigDecimal calculatedAssignmentAmount = calculateAssignmentAmount(assignment, safeBonus,
-                                        additionalAllowance, // Phụ cấp assignment (chia đều)
-                                        safeSupport, // Phụ cấp attendance (cộng trực tiếp)
+                                        additionalAllowance,
+                                        safeSupport,
                                         note);
                         log.debug("[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount returned {} for assignmentId={}",
                                         calculatedAssignmentAmount, assignment.getId());
@@ -893,22 +905,23 @@ public class PayrollServiceImpl implements PayrollService {
                 // Note: For existing payroll, don't reset paymentDate here - it will be updated
                 // below based on status
 
-                // Advance Total handling:
-                // - If creating new payroll: read from employee's monthlyAdvanceLimit
-                // - If updating existing payroll: keep existing advanceTotal value
-                BigDecimal advanceTotal;
-                if (!isExist) {
-                        // New payroll: use employee's monthly advance limit
-                        advanceTotal = employee.getMonthlyAdvanceLimit() != null
-                                        ? employee.getMonthlyAdvanceLimit()
-                                        : BigDecimal.ZERO;
-                        log.debug("[PAYROLL-EXPORT][DEBUG] New payroll - advanceTotal from employee.monthlyAdvanceLimit = {}",
-                                        advanceTotal);
-                } else {
-                        // Existing payroll: keep current value
-                        advanceTotal = payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal() : BigDecimal.ZERO;
-                        log.debug("[PAYROLL-EXPORT][DEBUG] Existing payroll - advanceTotal (kept) = {}", advanceTotal);
-                }
+                // [DEPRECATED] advanceTotal replaced by advanceNoteSummary from Assignment.advanceNote
+                // // Advance Total handling:
+                // // - If creating new payroll: read from employee's monthlyAdvanceLimit
+                // // - If updating existing payroll: keep existing advanceTotal value
+                // BigDecimal advanceTotal;
+                // if (!isExist) {
+                //         // New payroll: use employee's monthly advance limit
+                //         advanceTotal = employee.getMonthlyAdvanceLimit() != null
+                //                         ? employee.getMonthlyAdvanceLimit()
+                //                         : BigDecimal.ZERO;
+                //         log.debug("[PAYROLL-EXPORT][DEBUG] New payroll - advanceTotal from employee.monthlyAdvanceLimit = {}",
+                //                         advanceTotal);
+                // } else {
+                //         // Existing payroll: keep current value
+                //         advanceTotal = payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal() : BigDecimal.ZERO;
+                //         log.debug("[PAYROLL-EXPORT][DEBUG] Existing payroll - advanceTotal (kept) = {}", advanceTotal);
+                // }
 
                 BigDecimal insuranceTotal = BigDecimal.ZERO;
                 if (hasCompanyScope) {
@@ -971,8 +984,8 @@ public class PayrollServiceImpl implements PayrollService {
                         deductions = deductions.add(insuranceTotal);
                 }
                 log.debug(
-                                "[PAYROLL-EXPORT][DEBUG] Deductions calculated -> totalPenalties={}, insuranceTotal={}, deductions={} (note: advanceTotal={} is NOT deducted)",
-                                totalPenalties, insuranceTotal, deductions, advanceTotal);
+                                "[PAYROLL-EXPORT][DEBUG] Deductions calculated -> totalPenalties={}, insuranceTotal={}, deductions={}",
+                                totalPenalties, insuranceTotal, deductions);
 
                 BigDecimal finalAmount = amountTotal.subtract(deductions);
                 finalRow += String.format(
@@ -1001,7 +1014,7 @@ public class PayrollServiceImpl implements PayrollService {
                 payroll.setBonusTotal(totalBonus);
                 payroll.setTotalDays(totalDays);
                 payroll.setPenaltyTotal(totalPenalties);
-                payroll.setAdvanceTotal(advanceTotal);
+                // [DEPRECATED] payroll.setAdvanceTotal(advanceTotal);
                 payroll.setAllowanceTotal(totalSupportCosts);
                 payroll.setInsuranceTotal(insuranceTotal);
                 payroll.setFinalSalary(finalAmount);
@@ -1160,7 +1173,12 @@ public class PayrollServiceImpl implements PayrollService {
                                                 amount);
                         }
                 }
-                log.debug("[PAYROLL-EXPORT][DEBUG] calculateAssignmentAmount returning amount={}", amount);
+                BigDecimal oldFormulaAmount = amount;
+                BigDecimal monthlySupport = defaultZero(assignment.getMonthlySupport());
+                amount = oldFormulaAmount.add(monthlySupport);
+                log.debug(
+                                "[PAYROLL-CALC][MONTHLY-SUPPORT] assignmentId={}, oldFormulaAmount={}, monthlySupport={}, finalAmount={}",
+                                assignment.getId(), oldFormulaAmount, monthlySupport, amount);
                 return amount;
         }
 
@@ -1193,7 +1211,7 @@ public class PayrollServiceImpl implements PayrollService {
                 String key = assignment.getContract() != null
                                 ? assignment.getContract().getCustomer().getCompany() + " (" + assignment.getId()
                                                 + "): "
-                                : "Văn phòng: ";
+                                : "Văn phòng (" + assignment.getId() + "): ";
                 key += mapAssignmentTypeToVietnamese(assignment.getAssignmentType());
                 String value = "";
                 BigDecimal amount = BigDecimal.ZERO;
@@ -1339,8 +1357,16 @@ public class PayrollServiceImpl implements PayrollService {
                         }
                 }
 
-                log.debug("[PAYROLL-EXPORT][END] assignmentId={}, finalAmount={}",
-                                assignment.getId(), amount);
+                BigDecimal oldFormulaAmount = amount;
+                BigDecimal monthlySupport = defaultZero(assignment.getMonthlySupport());
+                amount = oldFormulaAmount.add(monthlySupport);
+                if (monthlySupport.compareTo(BigDecimal.ZERO) != 0) {
+                        value += String.format(" Hỗ trợ tháng: %s + %s = %s; ",
+                                        oldFormulaAmount, monthlySupport, amount);
+                }
+
+                log.debug("[PAYROLL-EXPORT][END] assignmentId={}, oldFormulaAmount={}, monthlySupport={}, finalAmount={}",
+                                assignment.getId(), oldFormulaAmount, monthlySupport, amount);
 
                 if (note != null) {
                         note.put(key, value);
@@ -1386,8 +1412,63 @@ public class PayrollServiceImpl implements PayrollService {
                 return BigDecimal.ZERO;
         }
 
+        private void synchronizeCompanyAssignmentMonthlySupport(Employee employee, List<Assignment> assignments) {
+                if (employee == null || employee.getEmploymentType() != EmploymentType.COMPANY_STAFF
+                                || employee.getMonthlySupport() == null
+                                || assignments == null || assignments.isEmpty()) {
+                        return;
+                }
+
+                BigDecimal currentMonthlySupport = employee.getMonthlySupport();
+                // Employee.monthlySupport là nguồn dữ liệu hiện hành cho toàn bộ assignment
+                // của COMPANY_STAFF, kể cả assignment được phân vào hợp đồng khách hàng.
+                // CONTRACT_STAFF bị loại trừ bởi điều kiện employee type ở trên.
+                List<Assignment> assignmentsToUpdate = assignments.stream()
+                                .filter(assignment -> defaultZero(assignment.getMonthlySupport())
+                                                .compareTo(currentMonthlySupport) != 0)
+                                .peek(assignment -> assignment.setMonthlySupport(currentMonthlySupport))
+                                .collect(Collectors.toList());
+
+                if (!assignmentsToUpdate.isEmpty()) {
+                        assignmentRepository.saveAll(assignmentsToUpdate);
+                        log.info(
+                                        "[PAYROLL-MONTHLY-SUPPORT-SYNC] employeeId={}, monthlySupport={}, updatedAssignmentIds={}",
+                                        employee.getId(), currentMonthlySupport,
+                                        assignmentsToUpdate.stream().map(Assignment::getId).collect(Collectors.toList()));
+                }
+        }
+
         private BigDecimal defaultZero(BigDecimal value) {
                 return value != null ? value : BigDecimal.ZERO;
+        }
+
+        /**
+         * Tổng monthly_support riêng của các assignment; khoản này được cộng thẳng vào
+         * lương và đồng thời trả riêng trên response để hiển thị.
+         */
+        private BigDecimal computeMonthlySupportTotal(List<Assignment> assignments) {
+                if (assignments == null || assignments.isEmpty()) {
+                        return BigDecimal.ZERO;
+                }
+                return assignments.stream()
+                        .map(a -> a.getMonthlySupport() != null ? a.getMonthlySupport() : BigDecimal.ZERO)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        /**
+         * Build advance note summary from all assignments (for display in payroll table)
+         */
+        private BigDecimal buildAdvanceNoteSummary(List<Assignment> assignments) {
+                if (assignments == null || assignments.isEmpty()) {
+                        return BigDecimal.ZERO;
+                }
+                BigDecimal sum = BigDecimal.ZERO;
+                for (Assignment a : assignments) {
+                        if (a.getAdvanceNote() != null && a.getAdvanceNote().compareTo(BigDecimal.ZERO) > 0) {
+                                sum = sum.add(a.getAdvanceNote());
+                        }
+                }
+                return sum.compareTo(BigDecimal.ZERO) > 0 ? sum : null;
         }
 
         @Override
@@ -1402,8 +1483,9 @@ public class PayrollServiceImpl implements PayrollService {
                 // log.info("getPayrollById completed: id={}, employeeId={}", id,
                 // resp.getEmployeeId());
                 // return resp;
+                // [DEPRECATED] advanceTotal removed from constructor
                 PayrollUpdateRequest payrollUpdateRequest = new PayrollUpdateRequest(payroll.getAllowanceTotal(),
-                                payroll.getInsuranceTotal(), payroll.getAdvanceTotal(), payroll.getPaidAmount());
+                                payroll.getInsuranceTotal(), payroll.getPaidAmount());
                 PayrollResponse rs = this.updatePayroll(id, payrollUpdateRequest);
                 return rs;
         }
@@ -1438,6 +1520,88 @@ public class PayrollServiceImpl implements PayrollService {
                                 .collect(Collectors.toList());
                 log.info("getAllPayrolls completed: count={}", result.size());
                 return result;
+        }
+
+        @Override
+        public List<PayrollSummaryDTO> getPayrollSummaryList(Integer month, Integer year) {
+                if (month == null || year == null) {
+                        java.time.LocalDate now = java.time.LocalDate.now();
+                        month = (month != null) ? month : now.getMonthValue();
+                        year = (year != null) ? year : now.getYear();
+                }
+                final Integer effectiveMonth = month;
+                final Integer effectiveYear = year;
+                log.info("getPayrollSummaryList requested: month={}, year={}", effectiveMonth, effectiveYear);
+
+                String currentUsername = userService.getCurrentUsername();
+                User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+                List<Long> assignedCustomerIds = null;
+                if (currentUser != null && currentUser.getRole() != null
+                        && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        assignedCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+                }
+
+                final List<Long> customerIdFilter = assignedCustomerIds;
+                List<Payroll> rawPayrolls;
+                if (customerIdFilter != null) {
+                        if (customerIdFilter.isEmpty()) {
+                                return new ArrayList<>();
+                        }
+                        Page<Payroll> payrollPage = payrollRepository.findByFiltersAndCustomerIds(
+                                null, effectiveMonth, effectiveYear, null, customerIdFilter, Pageable.unpaged());
+                        rawPayrolls = payrollPage.getContent();
+                } else {
+                        Page<Payroll> payrollPage = payrollRepository.findByFilters(
+                                null, effectiveMonth, effectiveYear, null, Pageable.unpaged());
+                        rawPayrolls = payrollPage.getContent();
+                }
+
+                // Batch-fetch assignments for advanceNote summary (tránh N+1)
+                List<Long> employeeIds = rawPayrolls.stream()
+                        .map(p -> p.getEmployee() != null ? p.getEmployee().getId() : null)
+                        .filter(id -> id != null)
+                        .distinct()
+                        .collect(Collectors.toList());
+
+                Map<Long, List<Assignment>> assignmentsByEmployee = Collections.emptyMap();
+                if (!employeeIds.isEmpty()) {
+                        List<Assignment> allAssignments = assignmentRepository
+                                .findDistinctAssignmentsByAttendanceMonthAndEmployeeIds(effectiveMonth, effectiveYear, employeeIds);
+                        if (customerIdFilter != null) {
+                                allAssignments = allAssignments.stream()
+                                        .filter(a -> a.getContract() != null && a.getContract().getCustomer() != null
+                                                && customerIdFilter.contains(a.getContract().getCustomer().getId()))
+                                        .collect(Collectors.toList());
+                        }
+                        assignmentsByEmployee = allAssignments.stream()
+                                .collect(Collectors.groupingBy(a -> a.getEmployee().getId()));
+                }
+                final Map<Long, List<Assignment>> finalAssignmentsMap = assignmentsByEmployee;
+
+                return rawPayrolls.stream().map(p -> {
+                        Long empId = p.getEmployee() != null ? p.getEmployee().getId() : null;
+                        List<Assignment> assignments = empId != null
+                                ? finalAssignmentsMap.getOrDefault(empId, Collections.emptyList())
+                                : Collections.emptyList();
+                        BigDecimal paidAmount = p.getPaidAmount() != null ? p.getPaidAmount() : BigDecimal.ZERO;
+                        BigDecimal finalSalary = p.getFinalSalary() != null ? p.getFinalSalary() : BigDecimal.ZERO;
+                        java.time.LocalDateTime payrollCreatedAt = p.getCreatedAt();
+                        int dtoMonth = payrollCreatedAt != null ? payrollCreatedAt.getMonthValue() : effectiveMonth;
+                        int dtoYear = payrollCreatedAt != null ? payrollCreatedAt.getYear() : effectiveYear;
+                        return PayrollSummaryDTO.builder()
+                                .payrollId(p.getId())
+                                .employeeId(p.getEmployee() != null ? p.getEmployee().getId() : null)
+                                .employeeCode(p.getEmployee() != null ? p.getEmployee().getEmployeeCode() : null)
+                                .employeeName(p.getEmployee() != null ? p.getEmployee().getName() : null)
+                                .month(dtoMonth)
+                                .year(dtoYear)
+                                .updatedAt(p.getUpdatedAt())
+                                .advanceNote(buildAdvanceNoteSummary(assignments))
+                                .totalSalary(finalSalary)
+                                .paidAmount(paidAmount)
+                                .remainingAmount(finalSalary.subtract(paidAmount))
+                                .build();
+                }).collect(Collectors.toList());
         }
 
         @Override
@@ -1672,6 +1836,61 @@ public class PayrollServiceImpl implements PayrollService {
         }
 
         @Override
+        @Transactional
+        public PayrollResponse processPayment(Long id, PaymentRequest request) {
+                log.info("processPayment requested: id={}, amount={}", id, request.getAmount());
+                Payroll payroll = payrollRepository.findById(id)
+                                .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
+
+                BigDecimal paymentAmount = request.getAmount();
+                if (paymentAmount == null || paymentAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                        throw new AppException(ErrorCode.INVALID_REQUEST);
+                }
+
+                BigDecimal previousPaid = payroll.getPaidAmount() != null ? payroll.getPaidAmount() : BigDecimal.ZERO;
+                BigDecimal newPaidAmount = previousPaid.add(paymentAmount);
+                BigDecimal finalSalary = payroll.getFinalSalary() != null ? payroll.getFinalSalary() : BigDecimal.ZERO;
+
+                // Validate: cannot pay on zero-salary payroll
+                if (finalSalary.compareTo(BigDecimal.ZERO) <= 0) {
+                        log.warn("[PAYMENT] Cannot process payment for payroll {} with finalSalary={}", id, finalSalary);
+                        throw new AppException(ErrorCode.INVALID_REQUEST);
+                }
+
+                // Allow overpayment — FE will warn user with confirmation dialog before submitting
+                payroll.setPaidAmount(newPaidAmount);
+
+                BigDecimal epsilon = new BigDecimal("0.01");
+                BigDecimal remaining = finalSalary.subtract(newPaidAmount);
+                LocalDateTime now = LocalDateTime.now();
+                if (remaining.compareTo(epsilon) <= 0) {
+                        payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PAID);
+                } else {
+                        payroll.setStatus(com.company.company_clean_hub_be.entity.PayrollStatus.PARTIAL_PAID);
+                }
+                payroll.setPaymentDate(now);
+                payroll.setUpdatedAt(now);
+
+                Payroll updated = payrollRepository.save(payroll);
+
+                // Create payment history — use MAX(installmentNumber) to avoid duplicates if records are deleted
+                Integer maxInstallment = paymentHistoryRepository.findMaxInstallmentNumberByPayrollId(id);
+                PaymentHistory paymentHistory = PaymentHistory.builder()
+                                .payroll(updated)
+                                .paymentDate(now)
+                                .amount(paymentAmount)
+                                .installmentNumber((maxInstallment != null ? maxInstallment : 0) + 1)
+                                .createdAt(now)
+                                .build();
+                paymentHistoryRepository.save(paymentHistory);
+
+                log.info("processPayment completed: id={}, newPaidAmount={}, status={}",
+                                id, newPaidAmount, updated.getStatus());
+                LocalDateTime createdAt = updated.getCreatedAt();
+                return mapToResponse(updated, createdAt.getMonthValue(), createdAt.getYear(), null);
+        }
+
+        @Override
         public PayrollResponse updatePayroll(Long id, PayrollUpdateRequest request) {
 
                 log.info("[PAYROLL-UPDATE] >>> Starting update for Payroll ID: {}. Request: {}", id, request);
@@ -1708,6 +1927,8 @@ public class PayrollServiceImpl implements PayrollService {
                         throw new AppException(ErrorCode.NO_ASSIGNMENT_DATA);
                 }
 
+                synchronizeCompanyAssignmentMonthlySupport(payroll.getEmployee(), assignments);
+
                 log.info("[PAYROLL-INFO] Found {} assignments to process", assignments.size());
 
                 // Check COMPANY scope
@@ -1731,12 +1952,11 @@ public class PayrollServiceImpl implements PayrollService {
                                         attendanceRepository.sumSupportCostByAssignment(assignment.getId()));
                         BigDecimal additionalAllowance = defaultZero(assignment.getAdditionalAllowance());
 
-                        // Tách support và additionalAllowance:
-                        // - additionalAllowance: chia đều (phụ cấp tháng)
-                        // - support: cộng trực tiếp vào tiền lương (phụ cấp attendance)
+                        // Công thức cũ nhận attendance support nguyên bản.
+                        // monthlySupport được calculateAssignmentAmount cộng riêng sau công thức cũ.
                         BigDecimal assignmentAmount = calculateAssignmentAmount(assignment, bonus,
-                                        additionalAllowance, // Phụ cấp assignment (chia đều)
-                                        support, // Phụ cấp attendance (cộng trực tiếp)
+                                        additionalAllowance,
+                                        support,
                                         note);
 
                         // Calculate base salary (without bonuses/allowances)
@@ -1783,7 +2003,6 @@ public class PayrollServiceImpl implements PayrollService {
                         log.debug("[PAYROLL-CALC] Insurance from employee.insuranceSalary (COMPANY scope): {}",
                                         insuranceTotal);
                 } else {
-                        // Fallback: payroll hiện tại hoặc 0
                         insuranceTotal = payroll.getInsuranceTotal() != null ? payroll.getInsuranceTotal()
                                         : BigDecimal.ZERO;
                         log.info("[PAYROLL-CALC] Insurance from Existing payroll: {}", insuranceTotal);
@@ -1812,27 +2031,28 @@ public class PayrollServiceImpl implements PayrollService {
                         }
                 }
 
-                BigDecimal advanceTotal;
-                if (request.getAdvanceTotal() != null) {
-                        // User is updating advance - use request value and sync to employee
-                        advanceTotal = request.getAdvanceTotal();
-                        Employee employee = payroll.getEmployee();
-                        if (employee != null) {
-                                employee.setMonthlyAdvanceLimit(advanceTotal);
-                                employeeRepository.save(employee);
-                                log.info("[PAYROLL-SYNC] Updated employee.monthlyAdvanceLimit to {}", advanceTotal);
-                        }
-                } else {
-                        // No update to advance - read from employee
-                        Employee employee = payroll.getEmployee();
-                        advanceTotal = (employee != null && employee.getMonthlyAdvanceLimit() != null)
-                                        ? employee.getMonthlyAdvanceLimit()
-                                        : (payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal()
-                                                        : BigDecimal.ZERO);
-                        log.info("[PAYROLL-SYNC] Reading advance from employee.monthlyAdvanceLimit: {}", advanceTotal);
-                }
+                // [DEPRECATED] advanceTotal replaced by advanceNoteSummary from Assignment.advanceNote
+                // BigDecimal advanceTotal;
+                // if (request.getAdvanceTotal() != null) {
+                //         // User is updating advance - use request value and sync to employee
+                //         advanceTotal = request.getAdvanceTotal();
+                //         Employee employee = payroll.getEmployee();
+                //         if (employee != null) {
+                //                 employee.setMonthlyAdvanceLimit(advanceTotal);
+                //                 employeeRepository.save(employee);
+                //                 log.info("[PAYROLL-SYNC] Updated employee.monthlyAdvanceLimit to {}", advanceTotal);
+                //         }
+                // } else {
+                //         // No update to advance - read from employee
+                //         Employee employee = payroll.getEmployee();
+                //         advanceTotal = (employee != null && employee.getMonthlyAdvanceLimit() != null)
+                //                         ? employee.getMonthlyAdvanceLimit()
+                //                         : (payroll.getAdvanceTotal() != null ? payroll.getAdvanceTotal()
+                //                                         : BigDecimal.ZERO);
+                //         log.info("[PAYROLL-SYNC] Reading advance from employee.monthlyAdvanceLimit: {}", advanceTotal);
+                // }
 
-                // Calculate total deductions: penalties + insurance (advanceTotal is now only a
+                // [DEPRECATED] Calculate total deductions: penalties + insurance (advanceTotal is now only a
                 // note, not deducted)
 
                 BigDecimal totalDeductions = totalPenalties != null ? totalPenalties : BigDecimal.ZERO;
@@ -1841,11 +2061,10 @@ public class PayrollServiceImpl implements PayrollService {
                 }
 
                 log.debug(
-                                "[PAYROLL-UPDATE] Calculating deductions -> totalPenalties={}, insuranceTotal={}, totalDeductions={} (note: advanceTotal={} is NOT deducted)",
+                                "[PAYROLL-UPDATE] Calculating deductions -> totalPenalties={}, insuranceTotal={}, totalDeductions={}",
                                 totalPenalties,
                                 insuranceTotal,
-                                totalDeductions,
-                                advanceTotal);
+                                totalDeductions);
                 BigDecimal finalSalary = amountTotal.subtract(totalDeductions);
 
                 finalRow += String.format(
@@ -1866,16 +2085,17 @@ public class PayrollServiceImpl implements PayrollService {
                 }
                 String noteStr = sb.toString();
 
+                // [DEPRECATED] Advance removed from log
                 log.info(
-                                "[PAYROLL-RESULT] Summary: TotalAmount={}, TotalDays={}, TotalBonus={}, TotalPenalties={}, Insurance={}, Advance={}, FINAL={}",
-                                amountTotal, totalDays, totalBonus, totalPenalties, insuranceTotal, advanceTotal,
+                                "[PAYROLL-RESULT] Summary: TotalAmount={}, TotalDays={}, TotalBonus={}, TotalPenalties={}, Insurance={}, FINAL={}",
+                                amountTotal, totalDays, totalBonus, totalPenalties, insuranceTotal,
                                 finalSalary);
 
                 // ===== UPDATE PAYROLL =====
                 payroll.setTotalDays(totalDays);
                 payroll.setBonusTotal(totalBonus);
                 payroll.setPenaltyTotal(totalPenalties);
-                payroll.setAdvanceTotal(advanceTotal);
+                // [DEPRECATED] payroll.setAdvanceTotal(advanceTotal);
                 payroll.setAllowanceTotal(totalSupportCosts);
                 payroll.setInsuranceTotal(insuranceTotal);
                 payroll.setFinalSalary(finalSalary);
@@ -1964,6 +2184,7 @@ public class PayrollServiceImpl implements PayrollService {
 
                 // Get employee directly from payroll (new architecture)
                 log.info("Step 1: Check payroll.getEmployee() ...");
+                List<Assignment> assignments = new ArrayList<>();
                 if (payroll.getEmployee() != null) {
                         Employee emp = payroll.getEmployee();
                         employeeId = emp.getId();
@@ -1972,8 +2193,8 @@ public class PayrollServiceImpl implements PayrollService {
                         log.info("Employee found from payroll.employee: id={}, name={}, code={}",
                                         employeeId, employeeName, employeeCode);
 
-                        // Get salary base from first assignment if available
-                        List<Assignment> assignments = assignmentRepository
+                        // Get assignments for this employee/month for salary base + display fields
+                        assignments = assignmentRepository
                                         .findDistinctAssignmentsByAttendanceMonthAndEmployee(month, year, employeeId);
                         if (assignedCustomerIds != null) {
                                 assignments = assignments.stream()
@@ -1991,12 +2212,15 @@ public class PayrollServiceImpl implements PayrollService {
 
                 BigDecimal bonusTotal = payroll.getBonusTotal();
                 BigDecimal penaltyTotal = payroll.getPenaltyTotal();
-                BigDecimal advanceTotal = payroll.getAdvanceTotal();
+                // [DEPRECATED] advanceTotal replaced by advanceNoteSummary
+                // BigDecimal advanceTotal = payroll.getAdvanceTotal();
+                BigDecimal advanceTotal = BigDecimal.ZERO;
                 BigDecimal allowanceTotal = payroll.getAllowanceTotal();
                 BigDecimal insuranceTotal = payroll.getInsuranceTotal();
                 BigDecimal finalSalary = payroll.getFinalSalary();
                 BigDecimal baseSalary = payroll.getBaseSalary();
                 int totalDays = payroll.getTotalDays() != null ? payroll.getTotalDays() : 0;
+                BigDecimal monthlySupportTotal = computeMonthlySupportTotal(assignments);
 
                 if (assignedCustomerIds != null) {
                         List<Attendance> attendances = payroll.getAttendances();
@@ -2041,10 +2265,14 @@ public class PayrollServiceImpl implements PayrollService {
                                         baseSalary = baseSalary.add(assignmentBaseSalary);
                                 }
 
-                                advanceTotal = BigDecimal.ZERO;
+                                // [DEPRECATED] advanceTotal = BigDecimal.ZERO;
                                 insuranceTotal = BigDecimal.ZERO;
 
-                                finalSalary = baseSalary.add(bonusTotal).add(allowanceTotal).subtract(penaltyTotal);
+                                // Giữ nguyên công thức QLT2 cũ rồi cộng monthlySupport đúng một lần,
+                                // theo đúng các assignment trong phạm vi khách hàng được xem.
+                                monthlySupportTotal = computeMonthlySupportTotal(assignmentsForAttendances);
+                                finalSalary = baseSalary.add(bonusTotal).add(allowanceTotal).subtract(penaltyTotal)
+                                                .add(monthlySupportTotal);
                                 if (finalSalary.compareTo(BigDecimal.ZERO) < 0) {
                                         finalSalary = BigDecimal.ZERO;
                                 }
@@ -2062,16 +2290,18 @@ public class PayrollServiceImpl implements PayrollService {
                                 .totalDays(totalDays)
                                 .bonusTotal(bonusTotal)
                                 .penaltyTotal(penaltyTotal)
-                                .advanceTotal(advanceTotal)
+                                // [DEPRECATED] .advanceTotal(advanceTotal)
                                 .allowanceTotal(allowanceTotal)
                                 .insuranceTotal(insuranceTotal)
                                 .finalSalary(finalSalary)
                                 .baseSalary(baseSalary)
+                                .monthlySupportTotal(monthlySupportTotal)
+                                .advanceNoteSummary(buildAdvanceNoteSummary(assignments))
                                 .status(payroll.getStatus())
                                 .paidAmount(payroll.getPaidAmount() != null ? payroll.getPaidAmount() : BigDecimal.ZERO)
-                                .remainingAmount(payroll.getFinalSalary() != null && payroll.getPaidAmount() != null
-                                                ? payroll.getFinalSalary().subtract(payroll.getPaidAmount())
-                                                : payroll.getFinalSalary())
+                                .remainingAmount(finalSalary != null && payroll.getPaidAmount() != null
+                                                ? finalSalary.subtract(payroll.getPaidAmount())
+                                                : finalSalary)
                                 .paymentDate(payroll.getPaymentDate())
                                 .accountantId(accountant != null ? accountant.getId() : null)
                                 .accountantName(accountant != null ? accountant.getUsername() : null)
@@ -2149,6 +2379,7 @@ public class PayrollServiceImpl implements PayrollService {
                                         .assignmentId(assignment.getId())
                                         .baseSalary(baseSalary)
                                         .workDays(workDays)
+                                        .monthlySupport(defaultZero(assignment.getMonthlySupport()))
                                         .expectedSalary(expectedSalary)
                                         .build();
 
