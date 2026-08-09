@@ -56,6 +56,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     private final com.company.company_clean_hub_be.repository.WorkLocationRepository workLocationRepository;
     private final com.company.company_clean_hub_be.repository.UserRepository userRepository;
     private final com.company.company_clean_hub_be.repository.NotificationRepository notificationRepository;
+    private final com.company.company_clean_hub_be.repository.CustomerAssignmentRepository customerAssignmentRepository;
 
     @Override
     @Transactional
@@ -1045,8 +1046,34 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
         }
 
+        String username = "anonymous";
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) username = auth.getName();
+        } catch (Exception ignored) {}
+        com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
+
+        List<Long> filterCustomerIds = null;
+        if (currentUser != null && currentUser.getRole() != null) {
+            String roleCode = currentUser.getRole().getCode();
+            if ("QLT2".equalsIgnoreCase(roleCode)) {
+                filterCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+            } else if ("CUSTOMER".equalsIgnoreCase(roleCode)) {
+                filterCustomerIds = List.of(currentUser.getId());
+            }
+        }
+
+        final List<Long> finalCustomerIds = filterCustomerIds;
         List<WorkSchedule> allSchedules = workScheduleRepository.findAll().stream()
             .filter(ws -> !ws.getScheduledDate().isBefore(startDate) && !ws.getScheduledDate().isAfter(endDate))
+            .filter(ws -> {
+                if (finalCustomerIds == null) return true;
+                if (finalCustomerIds.isEmpty()) return false;
+                return ws.getAssignment() != null && ws.getAssignment().getContract() != null 
+                    && ws.getAssignment().getContract().getCustomer() != null
+                    && finalCustomerIds.contains(ws.getAssignment().getContract().getCustomer().getId());
+            })
             .collect(Collectors.toList());
 
         // Group by contract

@@ -169,7 +169,8 @@ public class CustomerServiceImpl implements CustomerService {
     public List<CustomerResponse> getAllCustomers() {
         String username = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
         User currentUser = userRepository.findByUsername(username).orElse(null);
-        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser != null && currentUser.getRole() != null && 
+            ("QLT2".equalsIgnoreCase(currentUser.getRole().getCode()) || "QLV".equalsIgnoreCase(currentUser.getRole().getCode()))) {
             List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
             if (assignedIds.isEmpty()) {
                 return new ArrayList<>();
@@ -197,7 +198,8 @@ public class CustomerServiceImpl implements CustomerService {
         User currentUser = userRepository.findByUsername(username).orElse(null);
         
         Page<Customer> customerPage;
-        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser != null && currentUser.getRole() != null && 
+            ("QLT2".equalsIgnoreCase(currentUser.getRole().getCode()) || "QLV".equalsIgnoreCase(currentUser.getRole().getCode()))) {
             List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
             if (assignedIds.isEmpty()) {
                 return PageResponse.<CustomerResponse>builder()
@@ -235,7 +237,8 @@ public class CustomerServiceImpl implements CustomerService {
         String username = org.springframework.security.core.context.SecurityContextHolder
             .getContext().getAuthentication().getName();
         User currentUser = userRepository.findByUsername(username).orElse(null);
-        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser != null && currentUser.getRole() != null && 
+            ("QLT2".equalsIgnoreCase(currentUser.getRole().getCode()) || "QLV".equalsIgnoreCase(currentUser.getRole().getCode()))) {
             boolean exists = customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), id);
             if (!exists) {
                 throw new AppException(ErrorCode.FORBIDDEN);

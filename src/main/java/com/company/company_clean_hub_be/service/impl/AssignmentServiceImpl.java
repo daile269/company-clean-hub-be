@@ -3306,7 +3306,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                 if (newContract.getCustomer() != null) {
                         List<com.company.company_clean_hub_be.entity.CustomerAssignment> customerAssigns = customerAssignmentRepository.findByCustomerId(newContract.getCustomer().getId());
                         for (com.company.company_clean_hub_be.entity.CustomerAssignment ca : customerAssigns) {
-                                if (ca.getManager() != null && ca.getManager().getRole() != null && "QLT2".equalsIgnoreCase(ca.getManager().getRole().getCode())) {
+                                if (ca.getManager() != null && ca.getManager().getRole() != null && 
+                                    ("QLT2".equalsIgnoreCase(ca.getManager().getRole().getCode()) || "QLV".equalsIgnoreCase(ca.getManager().getRole().getCode()))) {
                                         if (managers.stream().noneMatch(m -> m.getId().equals(ca.getManager().getId()))) {
                                                 managers.add(ca.getManager());
                                         }
@@ -3369,8 +3370,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 contract.getNumberOfEmployees(),
                                 currentCount);
 
-                        // Gửi cho tất cả QLT1 và QLT2
-                        List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2"));
+                        // Gửi cho tất cả QLT1, QLT2, và QLV
+                        List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2", "QLV"));
                         LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                         for (User manager : managers) {
                                 boolean exists = notificationRepository.existsByTypeAndRefContractIdAndRecipientIdAndCreatedAtAfter(
@@ -3432,8 +3433,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         contract.getDescription() != null ? contract.getDescription() : "Không có mô tả",
                                         contract.getId());
 
-                                // Gửi cho tất cả QLT1 và QLT2
-                                List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2"));
+                                // Gửi cho tất cả QLT1, QLT2, và QLV
+                                List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2", "QLV"));
                                 LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                                 for (User manager : managers) {
                                         boolean exists = notificationRepository.existsByTypeAndContractIdAndEmployeeIdAndRecipientIdAndCreatedAtAfter(
