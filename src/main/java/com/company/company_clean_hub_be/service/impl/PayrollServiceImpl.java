@@ -584,6 +584,55 @@ public class PayrollServiceImpl implements PayrollService {
                                                 : 0;
                         }
 
+                        // Compute actual (pro-rated) allowance for Excel export
+                        // FIXED_BY_CONTRACT/FIXED_BY_COMPANY: allowance / plannedDays * actualDays
+                        // FIXED_BY_DAY/TEMPORARY: allowance added directly (not pro-rated)
+                        BigDecimal actualAllowanceTotal = BigDecimal.ZERO;
+                        for (Assignment assignment : assignments) {
+                                BigDecimal additionalAllowance = assignment.getAdditionalAllowance() != null
+                                                ? assignment.getAdditionalAllowance()
+                                                : BigDecimal.ZERO;
+
+                                AssignmentType type = assignment.getAssignmentType();
+                                if ((type == AssignmentType.FIXED_BY_CONTRACT
+                                                || type == AssignmentType.FIXED_BY_COMPANY)
+                                                && assignment.getPlannedDays() != null
+                                                && assignment.getPlannedDays() > 0
+                                                && assignment.getWorkDays() != null) {
+                                        int actualDays = calculateActualWorkDays(assignment);
+                                        BigDecimal proRated = additionalAllowance
+                                                        .divide(BigDecimal.valueOf(assignment.getPlannedDays()), 2,
+                                                                        RoundingMode.HALF_UP)
+                                                        .multiply(BigDecimal.valueOf(actualDays));
+                                        actualAllowanceTotal = actualAllowanceTotal.add(proRated);
+                                        log.debug("[PAYROLL-EXPORT][ALLOWANCE] FIXED assignmentId={}: raw={}, proRated={}/{}*{}={}",
+                                                        assignment.getId(), additionalAllowance,
+                                                        additionalAllowance, assignment.getPlannedDays(),
+                                                        actualDays, proRated);
+                                } else {
+                                        actualAllowanceTotal = actualAllowanceTotal.add(additionalAllowance);
+                                        log.debug("[PAYROLL-EXPORT][ALLOWANCE] NON-FIXED assignmentId={}: raw={}, added directly",
+                                                        assignment.getId(), additionalAllowance);
+                                }
+                        }
+                        // Handle COMPANY scope employee-level allowance (not pro-rated, fixed monthly)
+                        boolean hasCompanyScopeForExport = assignments.stream()
+                                        .anyMatch(a -> a.getScope() != null
+                                                        && a.getScope() == AssignmentScope.COMPANY);
+                        if (hasCompanyScopeForExport) {
+                                java.util.Optional<Assignment> companyAssignment = assignments.stream()
+                                                .filter(a -> a.getScope() != null
+                                                                && a.getScope() == AssignmentScope.COMPANY)
+                                                .findFirst();
+                                if (companyAssignment.isEmpty() && employee.getAllowance() != null) {
+                                        actualAllowanceTotal = actualAllowanceTotal.add(employee.getAllowance());
+                                        log.debug("[PAYROLL-EXPORT][ALLOWANCE] Added employee-level allowance for COMPANY scope: {}",
+                                                        employee.getAllowance());
+                                }
+                        }
+                        log.info("[PAYROLL-EXPORT][ALLOWANCE] Employee {}: rawAllowance={}, actualAllowance={}",
+                                        employeeId, persistedPayroll.getAllowanceTotal(), actualAllowanceTotal);
+
                         // Calculate total monthly salary (without adding advance)
                         BigDecimal salaryBeforeAdvance = persistedPayroll.getFinalSalary();
 
@@ -628,7 +677,7 @@ public class PayrollServiceImpl implements PayrollService {
                                         .totalPlanedDays(totalPlannedDays)
                                         .totalBonus(persistedPayroll.getBonusTotal())
                                         .totalPenalty(persistedPayroll.getPenaltyTotal())
-                                        .totalAllowance(persistedPayroll.getAllowanceTotal())
+                                        .totalAllowance(actualAllowanceTotal)
                                         .totalInsurance(persistedPayroll.getInsuranceTotal())
                                         .companyAllowance(employee.getAllowance())
                                         .totalSalaryBeforeAdvance(salaryBeforeAdvance)

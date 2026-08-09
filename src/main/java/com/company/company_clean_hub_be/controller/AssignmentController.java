@@ -107,10 +107,13 @@ public class AssignmentController {
     }
 
     @PutMapping("/{id}/advance")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('QLT1', 'QLT2', 'QLV')")
     public ApiResponse<AssignmentResponse> updateAdvanceNote(
             @PathVariable Long id,
             @Valid @RequestBody com.company.company_clean_hub_be.dto.request.AdvanceNoteUpdateRequest request) {
+        // DEBUG
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        log.info("[ASSIGNMENT][API][ADVANCE] DEBUG auth={}, principal={}, authorities={}",
+                auth, auth != null ? auth.getPrincipal() : "NULL", auth != null ? auth.getAuthorities() : "NULL");
         log.info("[ASSIGNMENT][API][ADVANCE] Start PUT /assignments/{}/advance advanceNote={}", id,
                 request.getAdvanceNote());
         AssignmentResponse assignment = assignmentService.updateAdvanceNote(id, request.getAdvanceNote());
