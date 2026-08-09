@@ -49,7 +49,8 @@ public class UserServiceImpl implements UserService {
         log.info("getAllUsers requested by {}", getCurrentUsername());
         String currentUsername = getCurrentUsername();
         User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
-        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser != null && currentUser.getRole() != null
+                && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
             List<Long> customerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
             if (customerIds.isEmpty()) {
                 return new java.util.ArrayList<>();
@@ -75,12 +76,13 @@ public class UserServiceImpl implements UserService {
         log.info("getUsersWithFilter requested by {}: keyword='{}', roleId={}, page={}, pageSize={}",
                 getCurrentUsername(), keyword, roleId, page, pageSize);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
-        
+
         String currentUsername = getCurrentUsername();
         User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
 
         Page<User> userPage;
-        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser != null && currentUser.getRole() != null
+                && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
             List<Long> customerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
             if (customerIds.isEmpty()) {
                 return PageResponse.<UserResponse>builder()

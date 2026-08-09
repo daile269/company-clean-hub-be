@@ -126,6 +126,12 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
         List<com.company.company_clean_hub_be.entity.Customer> findActiveCustomersByEmployee(
                         @Param("employeeId") Long employeeId);
 
+        @Query("SELECT DISTINCT a.employee.id, a.contract.customer FROM Assignment a " +
+                        "WHERE a.employee.id IN :employeeIds " +
+                        "AND a.status = 'IN_PROGRESS'")
+        List<Object[]> findActiveCustomersByEmployeeIds(
+                        @Param("employeeIds") List<Long> employeeIds);
+
         @Query("SELECT DISTINCT a FROM Assignment a " +
                         "JOIN a.attendances att " +
                         "WHERE a.employee.id = :employeeId " +
