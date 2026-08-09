@@ -28,7 +28,6 @@ public class EmployeeRequest {
     @Size(max = 50, message = "Số điện thoại không được vượt quá 50 ký tự")
     private String phone;
 
-    @NotNull(message = "Role ID bắt buộc")
     private Long roleId;
 
     private String status;
