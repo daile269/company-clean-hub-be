@@ -343,15 +343,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                         }
                 }
 
-                Role role = roleRepository.findById(request.getRoleId())
-                                .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
-
-                // employee.setUsername(request.getUsername());
-                // if (request.getPassword() != null && !request.getPassword().isEmpty()) {
-                // employee.setPassword(passwordEncoder.encode(request.getPassword()));
-                // }
+                // Cập nhật thông tin cá nhân (không thay đổi Role tài khoản)
                 employee.setPhone(request.getPhone());
-                employee.setRole(role);
                 employee.setStatus(request.getStatus());
                 employee.setCccd(request.getCccd());
                 // Không cho phép sửa employeeCode vì đã tự động sinh
