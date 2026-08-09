@@ -153,6 +153,11 @@ public class UserServiceImpl implements UserService {
             throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
         }
 
+        // Kiểm tra mật khẩu khi tạo mới
+        if (request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new AppException(ErrorCode.PASSWORD_REQUIRED);
+        }
+
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
@@ -193,7 +198,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
         user.setUsername(request.getUsername());
-        if (request.getPassword() != null && !request.getPassword().isEmpty()) {
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
         user.setPhone(request.getPhone());
