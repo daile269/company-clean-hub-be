@@ -9,6 +9,7 @@ import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.*;
 import com.company.company_clean_hub_be.service.AssignmentMetricsService;
 import com.company.company_clean_hub_be.service.AssignmentService;
+import com.company.company_clean_hub_be.service.SalaryNoteValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
@@ -56,6 +57,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         private final AssignmentMetricsService assignmentMetricsService;
         private final com.company.company_clean_hub_be.repository.SalaryNoteRepository salaryNoteRepository;
         private final com.company.company_clean_hub_be.repository.NotificationRepository notificationRepository;
+        private final SalaryNoteValidator salaryNoteValidator;
 
         @Override
         public List<AssignmentResponse> getAllAssignments() {
@@ -263,6 +265,12 @@ public class AssignmentServiceImpl implements AssignmentService {
                         if (!existingAssignments.isEmpty()) {
                                 throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
                         }
+                }
+
+                // R1/R2: validate Salary Note của hợp đồng trước khi lưu (chặn sai loại / lương ngoài khoảng)
+                if (contract != null) {
+                        salaryNoteValidator.validateAssignmentType(contract, assignmentTypeParsed);
+                        salaryNoteValidator.validateSalaryRange(contract, assignmentTypeParsed, request.getSalaryAtTime());
                 }
 
                 Assignment assignment = Assignment.builder()
@@ -870,6 +878,13 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 request.getEmployeeId(), request.getContractId());
                                 throw new AppException(ErrorCode.ASSIGNMENT_ALREADY_EXISTS);
                         }
+                }
+
+                // R1/R2: validate Salary Note của hợp đồng trước khi lưu (chặn sai loại / lương ngoài khoảng)
+                if (assignment.getContract() != null) {
+                        salaryNoteValidator.validateAssignmentType(assignment.getContract(), assignment.getAssignmentType());
+                        salaryNoteValidator.validateSalaryRange(assignment.getContract(),
+                                assignment.getAssignmentType(), request.getSalaryAtTime());
                 }
 
                 // Update fields
@@ -3306,17 +3321,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 dayName);
 
                 // Gửi notification cho tất cả QLT1 và các QLT2 được phân công quản lý khách hàng này
-                List<User> managers = new java.util.ArrayList<>(userRepository.findActiveUsersByRoleCode("QLT1"));
-                if (newContract.getCustomer() != null) {
-                        List<com.company.company_clean_hub_be.entity.CustomerAssignment> customerAssigns = customerAssignmentRepository.findByCustomerId(newContract.getCustomer().getId());
-                        for (com.company.company_clean_hub_be.entity.CustomerAssignment ca : customerAssigns) {
-                                if (ca.getManager() != null && ca.getManager().getRole() != null && "QLT2".equalsIgnoreCase(ca.getManager().getRole().getCode())) {
-                                        if (managers.stream().noneMatch(m -> m.getId().equals(ca.getManager().getId()))) {
-                                                managers.add(ca.getManager());
-                                        }
-                                }
-                        }
-                }
+                List<User> managers = notificationService.getRecipientsForContract(newContract);
                 log.warn("[NOTIFY][WORK_TIME_CONFLICT] Detected: employeeId={}, newContractId={}, conflictContractId={}, day={}",
                                 employeeId, newContract.getId(), conflictContract.getId(), conflictDay);
                 log.info("[NOTIFY][WORK_TIME_CONFLICT] Found {} manager(s) with role QLT1 to notify", managers.size());

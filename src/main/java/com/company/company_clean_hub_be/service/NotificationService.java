@@ -2,6 +2,7 @@ package com.company.company_clean_hub_be.service;
 
 import com.company.company_clean_hub_be.dto.response.NotificationResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.entity.Contract;
 import com.company.company_clean_hub_be.entity.NotificationType;
 import com.company.company_clean_hub_be.entity.User;
 
@@ -63,4 +64,11 @@ public interface NotificationService {
      * Đánh dấu tất cả notification của user đang login là đã đọc.
      */
     void markAllAsRead();
+
+    /**
+     * Lấy danh sách người nhận thông báo cho 1 hợp đồng:
+     * QLT1 (tất cả) + QLT2 (chỉ những người được phân công quản lý khách hàng của hợp đồng).
+     * Không gửi QLV. Tự dedup theo user.
+     */
+    List<User> getRecipientsForContract(Contract contract);
 }

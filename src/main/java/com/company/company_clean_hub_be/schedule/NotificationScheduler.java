@@ -2,7 +2,9 @@ package com.company.company_clean_hub_be.schedule;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -10,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.company.company_clean_hub_be.entity.*;
 import com.company.company_clean_hub_be.repository.*;
+import com.company.company_clean_hub_be.service.NotificationService;
+import com.company.company_clean_hub_be.service.SalaryNoteValidator;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +33,8 @@ public class NotificationScheduler {
     private final AssignmentVerificationRepository assignmentVerificationRepository;
     private final VerificationImageRepository verificationImageRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
+    private final SalaryNoteValidator salaryNoteValidator;
 
     /**
      * Kiểm tra nhân viên quên chụp hình xác minh (chạy mỗi 30 phút từ 6h-20h).
@@ -121,37 +127,73 @@ public class NotificationScheduler {
     }
 
     /**
-     * Kiểm tra điều động tạm thời quá 5 ngày (mỗi ngày lúc 10:30 sáng)
+     * Kiểm tra FIXED_BY_DAY làm việc quá 5 ngày liên tiếp (mỗi ngày lúc 7:00 sáng).
+     *
+     * R3: target là FIXED_BY_DAY (KHÔNG phải TEMPORARY), streak đếm ngày làm việc liên tiếp
+     * riêng từng hợp đồng, bỏ qua cuối tuần/ngày nghỉ. Báo tại ngày 6, 11, 16... (streak % 5 == 1).
+     * Recipients: QLT1 (tất cả) + QLT2 (theo customer được phân công), KHÔNG gửi QLV.
      */
-    @Scheduled(cron = "0 30 10 * * *")
+    @Scheduled(cron = "0 0 7 * * *")
     @Transactional
     public void checkTemporaryOver5Days() {
-        log.info("[NOTIF-SCHEDULER] Checking temporary assignments over 5 days...");
+        log.info("[NOTIF-SCHEDULER] Checking FIXED_BY_DAY streak over 5 days...");
         try {
-            List<Assignment> temporaryAssignments = assignmentRepository
-                    .findByAssignmentTypeAndStatus(AssignmentType.TEMPORARY, AssignmentStatus.IN_PROGRESS);
-            LocalDate today = LocalDate.now();
-            for (Assignment assignment : temporaryAssignments) {
-                if (assignment.getStartDate() != null) {
-                    long daysSinceStart = java.time.temporal.ChronoUnit.DAYS
-                            .between(assignment.getStartDate(), today);
-                    if (daysSinceStart > 5) {
-                        createNotification(
-                                NotificationType.TEMPORARY_OVER_5_DAYS,
-                                "Điều động tạm thời quá 5 ngày",
-                                String.format("Phân công tạm thời #%d của nhân viên %s đã kéo dài %d ngày",
-                                        assignment.getId(),
-                                        assignment.getEmployee().getName(),
-                                        daysSinceStart),
-                                assignment.getEmployee().getId(),
-                                assignment.getId(),
-                                assignment.getContract() != null ? assignment.getContract().getId() : null);
+            List<Assignment> fixedByDayAssignments = assignmentRepository
+                    .findByAssignmentTypeAndStatus(AssignmentType.FIXED_BY_DAY, AssignmentStatus.IN_PROGRESS);
+
+            Set<String> checkedKeys = new HashSet<>();
+            for (Assignment assignment : fixedByDayAssignments) {
+                if (assignment.getEmployee() == null || assignment.getContract() == null) continue;
+                Long employeeId = assignment.getEmployee().getId();
+                Long contractId = assignment.getContract().getId();
+                String key = employeeId + ":" + contractId;
+                if (!checkedKeys.add(key)) continue;
+
+                try {
+                    SalaryNoteValidator.StreakResult result = salaryNoteValidator
+                            .calculateFixedByDayStreak(employeeId, contractId);
+                    int streak = result.streakDays();
+                    if (!salaryNoteValidator.shouldNotify(streak)) continue;
+
+                    Contract contract = contractRepository.findById(contractId).orElse(null);
+                    Employee employee = assignment.getEmployee();
+                    String title = "Cảnh báo nhân viên làm tạm thời quá số ngày quy định";
+                    String contractLabel = (contract != null && contract.getDescription() != null && !contract.getDescription().isBlank())
+                            ? "Hợp đồng #" + contract.getId() + " - " + contract.getDescription()
+                            : "Hợp đồng #" + contractId;
+                    String message = String.format(
+                            "Nhân viên %s (%s) đã làm việc %d ngày liên tiếp (phân công cố định theo ngày) tại %s. Vui lòng kiểm tra.",
+                            employee.getName(), employee.getEmployeeCode(), streak, contractLabel);
+
+                    // QLT1 (tất cả) + QLT2 (theo customer được phân công), dedup theo user
+                    List<User> managers = notificationService.getRecipientsForContract(contract);
+
+                    LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+                    for (User manager : managers) {
+                        boolean exists = notificationRepository
+                                .existsByTypeAndRefContractIdAndRecipientIdAndCreatedAtAfter(
+                                        NotificationType.TEMPORARY_OVER_5_DAYS, contractId, manager.getId(), todayStart);
+                        if (!exists) {
+                            Notification notification = Notification.builder()
+                                    .recipient(manager)
+                                    .type(NotificationType.TEMPORARY_OVER_5_DAYS)
+                                    .title(title)
+                                    .message(message)
+                                    .refContractId(contractId)
+                                    .isRead(false)
+                                    .createdAt(LocalDateTime.now())
+                                    .build();
+                            notificationRepository.save(notification);
+                        }
                     }
+                } catch (Exception e) {
+                    log.error("[NOTIF-SCHEDULER] Error checking FIXED_BY_DAY streak for employee={}, contract={}: {}",
+                            employeeId, contractId, e.getMessage());
                 }
             }
-            log.info("[NOTIF-SCHEDULER] Temporary over 5 days check completed.");
+            log.info("[NOTIF-SCHEDULER] FIXED_BY_DAY streak check completed.");
         } catch (Exception e) {
-            log.error("[NOTIF-SCHEDULER] Error checking temporary assignments: {}", e.getMessage(), e);
+            log.error("[NOTIF-SCHEDULER] Error checking FIXED_BY_DAY streak: {}", e.getMessage(), e);
         }
     }
 
