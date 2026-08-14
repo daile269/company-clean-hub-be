@@ -17,7 +17,6 @@ public class UserRequest {
 
     @Size(max = 100, message = "Họ tên không được vượt quá 100 ký tự")
     private String name;
-    @NotBlank(message = "Mật khẩu bắt buộc")
     @Size(min = 6, max = 255, message = "Mật khẩu phải có ít nhất 6 ký tự")
     private String password;
 

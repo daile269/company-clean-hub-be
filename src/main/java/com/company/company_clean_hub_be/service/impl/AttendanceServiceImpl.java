@@ -233,7 +233,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         User currentUser = userRepository.findByUsername(username).orElse(null);
 
         Page<Attendance> attendancePage;
-        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser != null && currentUser.getRole() != null && 
+            "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
             List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
             if (assignedIds.isEmpty()) {
                 return PageResponse.<AttendanceResponse>builder()
@@ -246,6 +247,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                         .last(true)
                         .build();
             }
+            attendancePage = attendanceRepository.findByFiltersAndCustomerIds(keyword, month, year, assignedIds, pageable);
+        } else if (currentUser != null && currentUser.getRole() != null && "CUSTOMER".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            List<Long> assignedIds = List.of(currentUser.getId());
             attendancePage = attendanceRepository.findByFiltersAndCustomerIds(keyword, month, year, assignedIds, pageable);
         } else {
             attendancePage = attendanceRepository.findByFilters(keyword, month, year, pageable);

@@ -31,9 +31,7 @@ public class AuthServiceImpl implements AuthService {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             request.getUsername(),
-                            request.getPassword()
-                    )
-            );
+                            request.getPassword()));
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
             String jwt = tokenProvider.generateToken(authentication);
@@ -51,8 +49,7 @@ public class AuthServiceImpl implements AuthService {
                     user.getPhone(),
                     user.getRole().getName(),
                     user.getRole().getId(),
-                    userType
-            );
+                    userType);
         } catch (Exception e) {
             throw new AppException(ErrorCode.LOGIN_VALID);
         }

@@ -142,12 +142,27 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 request.getStartDate());
                                 throw new AppException(ErrorCode.FORBIDDEN);
                         }
-                        // Nếu tạo cho ngày hôm nay nhưng đã qua 08:00 sáng thì QLV không được tạo
+                        // Nếu tạo cho ngày hôm nay: chỉ được phân công đến tối đa 1 tiếng SAU giờ bắt đầu làm của hợp đồng
+                        // Ví dụ: giờ làm 17:00 → được phân đến trước 18:00
+                        // Nếu không tìm thấy hợp đồng/giờ làm → bỏ qua, không chặn
                         if (request.getStartDate().isEqual(today)) {
                                 LocalTime now = LocalTime.now();
-                                if (now.isAfter(LocalTime.of(8, 0))) {
-                                        log.warn("QLV cannot create assignment for today after 08:00: now={}", now);
-                                        throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME);
+                                LocalTime workStartTime = null;
+                                if (request.getContractId() != null) {
+                                        workStartTime = contractRepository.findById(request.getContractId())
+                                                        .map(c -> c.getWorkStartTime())
+                                                        .orElse(null);
+                                }
+                                if (workStartTime != null) {
+                                        LocalTime cutoffTime = workStartTime.plusHours(1);
+                                        if (now.isAfter(cutoffTime)) {
+                                                log.warn("QLV không được phân công hôm nay sau thời hạn cho phép: now={}, cutoffTime={}, workStartTime={}",
+                                                                now, cutoffTime, workStartTime);
+                                                String detail = String.format(
+                                                        "QLV chỉ được phân công/điều động trong vòng 1 tiếng kể từ khi ca làm bắt đầu.%nCa làm: %s — Hạn chót phân công: %s — Thời điểm hiện tại: %s",
+                                                        workStartTime.toString(), cutoffTime.toString(), now.withSecond(0).withNano(0).toString());
+                                                throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME, detail);
+                                        }
                                 }
                         }
                 }
@@ -1343,12 +1358,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         }
 
                                         LocalTime workStartTime = (contractForDate != null) ? contractForDate.getWorkStartTime() : null;
-                                        LocalTime cutoffTime = (workStartTime != null) ? workStartTime.minusHours(1) : LocalTime.of(8, 0);
-
-                                        if (now.isAfter(cutoffTime)) {
-                                                log.warn("QLV cannot perform temporary reassignment for today after cutoff time: now={}, cutoffTime={}, workStartTime={}",
-                                                                now, cutoffTime, workStartTime);
-                                                throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME);
+                                        // Chỉ kiểm tra nếu tìm được giờ làm từ hợp đồng
+                                        // Được phân công đến tối đa 1 tiếng SAU giờ bắt đầu làm
+                                        // Ví dụ: giờ làm 17:00 → được phân đến trước 18:00
+                                        if (workStartTime != null) {
+                                                LocalTime cutoffTime = workStartTime.plusHours(1);
+                                                if (now.isAfter(cutoffTime)) {
+                                                        log.warn("QLV không được điều động tạm thời sau thời hạn cho phép: now={}, cutoffTime={}, workStartTime={}",
+                                                                        now, cutoffTime, workStartTime);
+                                                        String detail = String.format(
+                                                                "QLV chỉ được phân công/điều động trong vòng 1 tiếng kể từ khi ca làm bắt đầu.%nCa làm: %s — Hạn chót phân công: %s — Thời điểm hiện tại: %s",
+                                                                workStartTime.toString(), cutoffTime.toString(), now.withSecond(0).withNano(0).toString());
+                                                        throw new AppException(ErrorCode.QLV_CREATE_AFTER_ALLOWED_TIME, detail);
+                                                }
                                         }
                                 }
                         }
@@ -3320,8 +3342,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 conflictContract.getWorkStartTime(), conflictContract.getWorkEndTime(),
                                 dayName);
 
-                // Gửi notification cho tất cả QLT1 và các QLT2 được phân công quản lý khách hàng này
-                List<User> managers = notificationService.getRecipientsForContract(newContract);
+                // Gửi notification cho tất cả QLT1 và các QLT2 được phân công quản lý khách hàng này   
+                List<User> managers = new java.util.ArrayList<>(userRepository.findActiveUsersByRoleCode("QLT1"));
+                if (newContract.getCustomer() != null) {
+                        List<com.company.company_clean_hub_be.entity.CustomerAssignment> customerAssigns = customerAssignmentRepository.findByCustomerId(newContract.getCustomer().getId());
+                        for (com.company.company_clean_hub_be.entity.CustomerAssignment ca : customerAssigns) {
+                                if (ca.getManager() != null && ca.getManager().getRole() != null && 
+                                    ("QLT2".equalsIgnoreCase(ca.getManager().getRole().getCode()) || "QLV".equalsIgnoreCase(ca.getManager().getRole().getCode()))) {
+                                        if (managers.stream().noneMatch(m -> m.getId().equals(ca.getManager().getId()))) {
+                                                managers.add(ca.getManager());
+                                        }
+                                }
+                        }
+                }
                 log.warn("[NOTIFY][WORK_TIME_CONFLICT] Detected: employeeId={}, newContractId={}, conflictContractId={}, day={}",
                                 employeeId, newContract.getId(), conflictContract.getId(), conflictDay);
                 log.info("[NOTIFY][WORK_TIME_CONFLICT] Found {} manager(s) with role QLT1 to notify", managers.size());
@@ -3378,8 +3411,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 contract.getNumberOfEmployees(),
                                 currentCount);
 
-                        // Gửi cho tất cả QLT1 và QLT2
-                        List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2"));
+                        // Gửi cho tất cả QLT1, QLT2, và QLV
+                        List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2", "QLV"));
                         LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                         for (User manager : managers) {
                                 boolean exists = notificationRepository.existsByTypeAndRefContractIdAndRecipientIdAndCreatedAtAfter(
@@ -3441,8 +3474,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                                         contract.getDescription() != null ? contract.getDescription() : "Không có mô tả",
                                         contract.getId());
 
-                                // Gửi cho tất cả QLT1 và QLT2
-                                List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2"));
+                                // Gửi cho tất cả QLT1, QLT2, và QLV
+                                List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2", "QLV"));
                                 LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                                 for (User manager : managers) {
                                         boolean exists = notificationRepository.existsByTypeAndContractIdAndEmployeeIdAndRecipientIdAndCreatedAtAfter(

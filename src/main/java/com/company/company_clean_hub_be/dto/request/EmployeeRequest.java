@@ -28,12 +28,11 @@ public class EmployeeRequest {
     @Size(max = 50, message = "Số điện thoại không được vượt quá 50 ký tự")
     private String phone;
 
-    @NotNull(message = "Role ID bắt buộc")
     private Long roleId;
 
     private String status;
 
-    @Size(max = 50, message = "CCCD không được vượt quá 50 ký tự")
+    @Pattern(regexp = "^$|^[0-9]{12}$", message = "Số CCCD phải đúng 12 chữ số")
     private String cccd;
 
     @NotBlank(message = "Chỗ ở hiện tại không được để trống")
@@ -60,7 +59,8 @@ public class EmployeeRequest {
 
     private BigDecimal insuranceSalary;
 
-    // [DEPRECATED] Replaced by Assignment.advanceNote compiled in advanceNoteSummary
+    // [DEPRECATED] Replaced by Assignment.advanceNote compiled in
+    // advanceNoteSummary
     // Số tiền xin ứng hàng tháng
     // private BigDecimal monthlyAdvanceLimit;
 

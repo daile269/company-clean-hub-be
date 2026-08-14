@@ -643,7 +643,8 @@ public class InvoiceServiceImpl implements InvoiceService {
         log.info("getInvoicesByMonthAndYear requested: month={}, year={}", month, year);
         String currentUsername = getCurrentUsername();
         User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
-        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser != null && currentUser.getRole() != null && 
+            "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
             List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
             if (assignedIds.isEmpty()) {
                 return new ArrayList<>();
@@ -666,7 +667,8 @@ public class InvoiceServiceImpl implements InvoiceService {
         String currentUsername = getCurrentUsername();
         User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
         List<Invoice> invoices;
-        if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+        if (currentUser != null && currentUser.getRole() != null && 
+            "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
             List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
             if (assignedIds.isEmpty()) {
                 return new ArrayList<>();
@@ -692,7 +694,8 @@ public class InvoiceServiceImpl implements InvoiceService {
             User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
 
             org.springframework.data.domain.Page<Invoice> invoicePage;
-            if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            if (currentUser != null && currentUser.getRole() != null && 
+                "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
                 List<Long> assignedIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
                 if (assignedIds.isEmpty()) {
                     return com.company.company_clean_hub_be.dto.response.PageResponse.<InvoiceResponse>builder()

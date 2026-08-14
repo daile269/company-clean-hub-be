@@ -12,7 +12,7 @@ public interface EmployeeService {
 
         PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword,
                         com.company.company_clean_hub_be.entity.EmploymentType employmentType,
-                        String province, Boolean unassigned, int page, int pageSize);
+                        String province, String ward, Boolean unassigned, int page, int pageSize);
 
         EmployeeResponse getEmployeeById(Long id);
 

@@ -36,6 +36,10 @@ public class SseEmitterService {
         emitter.onTimeout(() -> {
             emitters.remove(userId);
             log.info("SSE timeout: userId={}", userId);
+            try {
+                emitter.complete();
+            } catch (Exception ignored) {
+            }
         });
         emitter.onError(e -> {
             emitters.remove(userId);

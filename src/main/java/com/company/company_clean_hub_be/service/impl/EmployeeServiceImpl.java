@@ -100,14 +100,28 @@ public class EmployeeServiceImpl implements EmployeeService {
         @Override
         public PageResponse<EmployeeResponse> getEmployeesWithFilter(String keyword,
                         com.company.company_clean_hub_be.entity.EmploymentType employmentType,
-                        String province, Boolean unassigned, int page, int pageSize) {
-                log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, province='{}', unassigned={}, page={}, pageSize={}",
-                                keyword, employmentType, province, unassigned, page, pageSize);
+                        String province, String ward, Boolean unassigned, int page, int pageSize) {
+                log.info("getEmployeesWithFilter requested: keyword='{}', employmentType={}, province='{}', ward='{}', unassigned={}, page={}, pageSize={}",
+                                keyword, employmentType, province, ward, unassigned, page, pageSize);
                 Pageable pageable = PageRequest.of(page, pageSize, Sort.by("employeeCode").descending());
-                Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, province, unassigned, pageable);
+                Page<Employee> employeePage = employeeRepository.findByFilters(keyword, employmentType, province, ward, unassigned, pageable);
+
+                List<Long> employeeIds = employeePage.getContent().stream().map(Employee::getId).collect(Collectors.toList());
+                java.util.Map<Long, List<com.company.company_clean_hub_be.entity.Customer>> customerMap = new java.util.HashMap<>();
+
+                if (!employeeIds.isEmpty()) {
+                        List<Object[]> rows = assignmentRepository.findActiveCustomersByEmployeeIds(employeeIds);
+                        for (Object[] row : rows) {
+                                Long empId = (Long) row[0];
+                                com.company.company_clean_hub_be.entity.Customer customer = (com.company.company_clean_hub_be.entity.Customer) row[1];
+                                if (customer != null) {
+                                        customerMap.computeIfAbsent(empId, k -> new java.util.ArrayList<>()).add(customer);
+                                }
+                        }
+                }
 
                 List<EmployeeResponse> employees = employeePage.getContent().stream()
-                                .map(this::mapToResponse)
+                                .map(emp -> mapToResponseWithActiveCustomers(emp, customerMap.get(emp.getId())))
                                 .collect(Collectors.toList());
 
                 return PageResponse.<EmployeeResponse>builder()
@@ -172,9 +186,13 @@ public class EmployeeServiceImpl implements EmployeeService {
                         throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
                 }
 
-                // Kiểm tra trùng CCCD (nếu có nhập)
+                // Kiểm tra định dạng & trùng CCCD (nếu có nhập)
                 if (request.getCccd() != null && !request.getCccd().trim().isEmpty()) {
-                        if (employeeRepository.existsByCccd(request.getCccd().trim())) {
+                        String cccd = request.getCccd().trim();
+                        if (!cccd.matches("^[0-9]{12}$")) {
+                                throw new AppException(ErrorCode.INVALID_CCCD);
+                        }
+                        if (employeeRepository.existsByCccd(cccd)) {
                                 throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
                         }
                 }
@@ -284,10 +302,15 @@ public class EmployeeServiceImpl implements EmployeeService {
                         throw new AppException(ErrorCode.EMPLOYEE_CODE_ALREADY_EXISTS);
                 }
 
-                // Kiểm tra trùng CCCD (nếu có nhập, ngoại trừ chính nó)
-                if (request.getCccd() != null && !request.getCccd().trim().isEmpty() 
-                                && employeeRepository.existsByCccdAndIdNot(request.getCccd().trim(), id)) {
-                        throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
+                // Kiểm tra định dạng & trùng CCCD (nếu có nhập, ngoại trừ chính nó)
+                if (request.getCccd() != null && !request.getCccd().trim().isEmpty()) {
+                        String cccd = request.getCccd().trim();
+                        if (!cccd.matches("^[0-9]{12}$")) {
+                                throw new AppException(ErrorCode.INVALID_CCCD);
+                        }
+                        if (employeeRepository.existsByCccdAndIdNot(cccd, id)) {
+                                throw new AppException(ErrorCode.CCCD_ALREADY_EXISTS);
+                        }
                 }
 
                 // Nếu người cập nhật là Quản lý vùng (code = 'QLV')
@@ -344,15 +367,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                         }
                 }
 
-                Role role = roleRepository.findById(request.getRoleId())
-                                .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
-
-                // employee.setUsername(request.getUsername());
-                // if (request.getPassword() != null && !request.getPassword().isEmpty()) {
-                // employee.setPassword(passwordEncoder.encode(request.getPassword()));
-                // }
+                // Cập nhật thông tin cá nhân (không thay đổi Role tài khoản)
                 employee.setPhone(request.getPhone());
-                employee.setRole(role);
                 employee.setStatus(request.getStatus());
                 employee.setCccd(request.getCccd());
                 // Không cho phép sửa employeeCode vì đã tự động sinh
@@ -444,15 +460,19 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         private EmployeeResponse mapToResponse(Employee employee) {
-                // Lấy tên các khách hàng đang làm việc (IN_PROGRESS)
                 List<com.company.company_clean_hub_be.entity.Customer> activeCustomers =
                         assignmentRepository.findActiveCustomersByEmployee(employee.getId());
-                String currentCustomerName = activeCustomers.isEmpty() ? null :
-                        activeCustomers.stream()
+                return mapToResponseWithActiveCustomers(employee, activeCustomers);
+        }
+
+        private EmployeeResponse mapToResponseWithActiveCustomers(Employee employee, List<com.company.company_clean_hub_be.entity.Customer> activeCustomers) {
+                List<com.company.company_clean_hub_be.entity.Customer> customers = activeCustomers != null ? activeCustomers : java.util.Collections.emptyList();
+                String currentCustomerName = customers.isEmpty() ? null :
+                        customers.stream()
                                 .map(c -> c.getName())
                                 .collect(Collectors.joining(", "));
 
-                Long currentCustomerId = activeCustomers.isEmpty() ? null : activeCustomers.get(0).getId();
+                Long currentCustomerId = customers.isEmpty() ? null : customers.get(0).getId();
 
                 return EmployeeResponse.builder()
                                 .id(employee.getId())
@@ -473,7 +493,6 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 .monthlySalary(employee.getMonthlySalary())
                                 .allowance(employee.getAllowance())
                                 .insuranceSalary(employee.getInsuranceSalary())
-                                // [DEPRECATED] .monthlyAdvanceLimit(employee.getMonthlyAdvanceLimit())
                                 .monthlySupport(employee.getMonthlySupport())
                                 .cccdFrontImage(employee.getCccdFrontImage())
                                 .cccdBackImage(employee.getCccdBackImage())

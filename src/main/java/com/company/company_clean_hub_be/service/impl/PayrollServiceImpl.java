@@ -1526,17 +1526,27 @@ public class PayrollServiceImpl implements PayrollService {
                 Payroll payroll = payrollRepository.findById(id)
                                 .orElseThrow(() -> new AppException(ErrorCode.PAYROLL_NOT_FOUND));
 
-                // LocalDateTime createdAt = payroll.getCreatedAt();
-                // PayrollResponse resp = mapToResponse(payroll, createdAt.getMonthValue(),
-                // createdAt.getYear(), null);
-                // log.info("getPayrollById completed: id={}, employeeId={}", id,
-                // resp.getEmployeeId());
-                // return resp;
-                // [DEPRECATED] advanceTotal removed from constructor
-                PayrollUpdateRequest payrollUpdateRequest = new PayrollUpdateRequest(payroll.getAllowanceTotal(),
-                                payroll.getInsuranceTotal(), payroll.getPaidAmount());
-                PayrollResponse rs = this.updatePayroll(id, payrollUpdateRequest);
-                return rs;
+                String currentUsername = userService.getCurrentUsername();
+                User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
+                List<Long> assignedCustomerIds = null;
+                if (currentUser != null && currentUser.getRole() != null
+                                && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                        assignedCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+                }
+
+                LocalDateTime createdAt = payroll.getCreatedAt();
+                Integer month = createdAt != null ? createdAt.getMonthValue() : null;
+                Integer year = createdAt != null ? createdAt.getYear() : null;
+
+                // For Admin/QLT1/Accountant (assignedCustomerIds == null): update & recalculate company-wide payroll
+                if (assignedCustomerIds == null) {
+                        PayrollUpdateRequest payrollUpdateRequest = new PayrollUpdateRequest(payroll.getAllowanceTotal(),
+                                        payroll.getInsuranceTotal(), payroll.getPaidAmount());
+                        return this.updatePayroll(id, payrollUpdateRequest);
+                }
+
+                // For QLT2/QLV: return filtered response scoped to assigned customers without mutating DB company-wide entity
+                return mapToResponse(payroll, month, year, null, assignedCustomerIds);
         }
 
         @Override
@@ -1545,7 +1555,8 @@ public class PayrollServiceImpl implements PayrollService {
                 String currentUsername = userService.getCurrentUsername();
                 User currentUser = userRepository.findByUsername(currentUsername).orElse(null);
                 List<Long> assignedCustomerIds = null;
-                if (currentUser != null && currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+                if (currentUser != null && currentUser.getRole() != null
+                                && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
                         assignedCustomerIds = customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
                 }
                 
@@ -2271,6 +2282,7 @@ public class PayrollServiceImpl implements PayrollService {
                 int totalDays = payroll.getTotalDays() != null ? payroll.getTotalDays() : 0;
                 BigDecimal monthlySupportTotal = computeMonthlySupportTotal(assignments);
 
+                String responseNote = payroll.getNote();
                 if (assignedCustomerIds != null) {
                         List<Attendance> attendances = payroll.getAttendances();
                         if (attendances == null) {
@@ -2325,6 +2337,29 @@ public class PayrollServiceImpl implements PayrollService {
                                 if (finalSalary.compareTo(BigDecimal.ZERO) < 0) {
                                         finalSalary = BigDecimal.ZERO;
                                 }
+
+                                // Build filtered note for QLT2/QLV scoped only to assigned customers
+                                Map<String, String> filteredNoteMap = new LinkedHashMap<>();
+                                for (Assignment assignment : assignmentsForAttendances) {
+                                        BigDecimal bonus = defaultZero(attendanceRepository.sumBonusByAssignment(assignment.getId()));
+                                        BigDecimal penalty = defaultZero(attendanceRepository.sumPenaltyByAssignment(assignment.getId()));
+                                        BigDecimal support = defaultZero(attendanceRepository.sumSupportCostByAssignment(assignment.getId()));
+                                        BigDecimal additionalAllowance = defaultZero(assignment.getAdditionalAllowance());
+                                        calculateAssignmentAmount(assignment, bonus, additionalAllowance, support, filteredNoteMap);
+                                }
+                                String finalRow = "( " + baseSalary.add(bonusTotal).add(allowanceTotal) + " ) - (" + penaltyTotal + " + " + insuranceTotal + ") = " + finalSalary;
+                                filteredNoteMap.put("Tổng", finalRow);
+
+                                StringBuilder sb = new StringBuilder();
+                                for (Map.Entry<String, String> entry : filteredNoteMap.entrySet()) {
+                                        if (!entry.getKey().equals("Tổng")) {
+                                                sb.append(entry.getKey()).append(" ").append(entry.getValue()).append("\n");
+                                        }
+                                }
+                                if (filteredNoteMap.containsKey("Tổng")) {
+                                        sb.append("Tổng: ").append(filteredNoteMap.get("Tổng"));
+                                }
+                                responseNote = sb.toString();
                         }
                 }
 
@@ -2356,7 +2391,7 @@ public class PayrollServiceImpl implements PayrollService {
                                 .accountantName(accountant != null ? accountant.getUsername() : null)
                                 .createdAt(payroll.getCreatedAt())
                                 .updatedAt(payroll.getUpdatedAt())
-                                .note(payroll.getNote())
+                                .note(responseNote)
                                 .build();
 
                 return response;
