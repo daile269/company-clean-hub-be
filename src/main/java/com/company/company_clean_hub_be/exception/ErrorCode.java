@@ -96,7 +96,11 @@ public enum ErrorCode {
 
     INVALID_WORK_TIME_RANGE(400, "Giờ bắt đầu phải nhỏ hơn giờ kết thúc"),
     NOTIFICATION_NOT_FOUND(404, "Thông báo không tồn tại"),
-    SALARY_NOTE_NOT_FOUND(404, "Ghi chú tiền lương không tồn tại");
+    SALARY_NOTE_NOT_FOUND(404, "Ghi chú tiền lương không tồn tại"),
+
+    // ─── Salary Note Validation (R1/R2) ──────────────────────────────────────
+    INVALID_ASSIGNMENT_TYPE(400, "Sai loại phân công. Hợp đồng này không hỗ trợ loại phân công đã chọn."),
+    SALARY_OUT_OF_RANGE(400, "Lương phải nằm trong khoảng cho phép.");
 
     private final int code;
     private final String message;

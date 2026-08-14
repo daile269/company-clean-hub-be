@@ -2,11 +2,14 @@ package com.company.company_clean_hub_be.service.impl;
 
 import com.company.company_clean_hub_be.dto.response.NotificationResponse;
 import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.entity.Contract;
+import com.company.company_clean_hub_be.entity.CustomerAssignment;
 import com.company.company_clean_hub_be.entity.Notification;
 import com.company.company_clean_hub_be.entity.NotificationType;
 import com.company.company_clean_hub_be.entity.User;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
+import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
 import com.company.company_clean_hub_be.repository.NotificationRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.service.NotificationService;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -30,6 +34,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final CustomerAssignmentRepository customerAssignmentRepository;
     private final SseEmitterService sseEmitterService;
 
     @Override
@@ -57,6 +62,24 @@ public class NotificationServiceImpl implements NotificationService {
 
         // Push real-time qua SSE nếu recipient đang kết nối online
         sseEmitterService.sendToUser(recipient.getId(), mapToResponse(notification));
+    }
+
+    @Override
+    public List<User> getRecipientsForContract(Contract contract) {
+        List<User> managers = new ArrayList<>(userRepository.findActiveUsersByRoleCode("QLT1"));
+        if (contract != null && contract.getCustomer() != null) {
+            List<CustomerAssignment> assigns = customerAssignmentRepository
+                    .findByCustomerId(contract.getCustomer().getId());
+            for (CustomerAssignment ca : assigns) {
+                if (ca.getManager() != null
+                        && ca.getManager().getRole() != null
+                        && "QLT2".equalsIgnoreCase(ca.getManager().getRole().getCode())
+                        && managers.stream().noneMatch(m -> m.getId().equals(ca.getManager().getId()))) {
+                    managers.add(ca.getManager());
+                }
+            }
+        }
+        return managers;
     }
 
     @Override

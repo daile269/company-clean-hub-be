@@ -38,3 +38,6 @@ src/main/resources/application.properties
 ### Logs ###
 logs/
 *.log
+
+### TDD/E2E acceptance tests (not for production) ###
+src/test/

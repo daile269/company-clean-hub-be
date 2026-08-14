@@ -102,6 +102,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         Attendance attendance = Attendance.builder()
                 .assignment(assignment)
+                .employee(employee)
                 .date(request.getDate())
                 .workHours(request.getWorkHours())
                 .bonus(request.getBonus())
@@ -117,7 +118,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .build();
 
         Attendance savedAttendance = attendanceRepository.save(attendance);
-        
+
         // Sync with work_schedule if exists
         workScheduleService.syncAttendanceCreation(savedAttendance.getId());
         
