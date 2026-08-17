@@ -3342,7 +3342,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 conflictContract.getWorkStartTime(), conflictContract.getWorkEndTime(),
                                 dayName);
 
-                // Gửi notification cho tất cả QLT1 và các QLT2 được phân công quản lý khách hàng này   
+                // Gửi notification cho tất cả QLT1 và các QLT2 được phân công quản lý khách hàng này
                 List<User> managers = new java.util.ArrayList<>(userRepository.findActiveUsersByRoleCode("QLT1"));
                 if (newContract.getCustomer() != null) {
                         List<com.company.company_clean_hub_be.entity.CustomerAssignment> customerAssigns = customerAssignmentRepository.findByCustomerId(newContract.getCustomer().getId());

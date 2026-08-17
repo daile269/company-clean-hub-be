@@ -150,6 +150,12 @@ public class NotificationScheduler {
                 if (!checkedKeys.add(key)) continue;
 
                 try {
+                    // R3 precondition: hợp đồng phải có đủ 2 ghi chú lương DAILY (FIXED + TEMPORARY)
+                    // và lương phân công nằm STRICTLY trong khoảng (FIXED, TEMPORARY).
+                    if (!salaryNoteValidator.isEligibleForStreak(assignment.getContract(), assignment.getSalaryAtTime())) {
+                        continue;
+                    }
+
                     SalaryNoteValidator.StreakResult result = salaryNoteValidator
                             .calculateFixedByDayStreak(employeeId, contractId);
                     int streak = result.streakDays();

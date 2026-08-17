@@ -1033,6 +1033,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<com.company.company_clean_hub_be.dto.response.WorkScheduleContractSummary> getContractsSummary(
             Integer month, Integer year, String sort) {
 
@@ -1100,6 +1101,12 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                     .contractCode("HĐ-" + contractId)
                     .customerName(contract.getCustomer() != null ? contract.getCustomer().getName() : "")
                     .customerId(contract.getCustomer() != null ? contract.getCustomer().getId() : null)
+                    .serviceNames(contract.getServices() == null ? java.util.List.of()
+                        : contract.getServices().stream()
+                            .sorted(java.util.Comparator.comparing(s -> s.getId()))
+                            .map(s -> s.getTitle())
+                            .filter(t -> t != null && !t.isBlank())
+                            .collect(java.util.stream.Collectors.toList()))
                     .totalEmployees((int) employeeCount)
                     .totalSchedules(total)
                     .verifiedCount(verified)
