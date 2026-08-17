@@ -118,6 +118,33 @@ public class SalaryNoteValidator {
     }
 
     /**
+     * R3 precondition — phân công FIXED_BY_DAY chỉ được cảnh báo streak khi:
+     * 1. Hợp đồng có đủ 2 ghi chú lương DAILY_ASSIGNMENT: FIXED + TEMPORARY (Archetype D).
+     * 2. Lương phân công nằm STRICTLY trong khoảng: fixed &lt; salaryAtTime &lt; temporary.
+     */
+    public boolean isEligibleForStreak(Contract contract, BigDecimal salaryAtTime) {
+        if (contract == null || salaryAtTime == null) return false;
+
+        List<SalaryNote> dailyNotes = salaryNoteRepository.findByContractId(contract.getId())
+                .stream()
+                .filter(sn -> sn.getCategory() == SalaryNoteCategory.DAILY_ASSIGNMENT)
+                .toList();
+
+        SalaryNote fixedDaily = dailyNotes.stream()
+                .filter(sn -> sn.getSalaryType() == SalaryNoteType.FIXED)
+                .findFirst().orElse(null);
+        SalaryNote tempDaily = dailyNotes.stream()
+                .filter(sn -> sn.getSalaryType() == SalaryNoteType.TEMPORARY)
+                .findFirst().orElse(null);
+
+        if (fixedDaily == null || tempDaily == null) return false;
+        if (fixedDaily.getAmount() == null || tempDaily.getAmount() == null) return false;
+
+        return salaryAtTime.compareTo(fixedDaily.getAmount()) > 0
+                && salaryAtTime.compareTo(tempDaily.getAmount()) < 0;
+    }
+
+    /**
      * R3 — Đếm số ngày làm việc liên tiếp của FIXED_BY_DAY (riêng từng contract, bỏ qua cuối tuần/ngày nghỉ).
      */
     public StreakResult calculateFixedByDayStreak(Long employeeId, Long contractId) {

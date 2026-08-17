@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -14,6 +16,7 @@ public class WorkScheduleContractSummary {
     private String contractCode;
     private String customerName;
     private Long customerId;
+    private List<String> serviceNames;
     private Integer totalEmployees;
     private Long totalSchedules;
     private Long verifiedCount;

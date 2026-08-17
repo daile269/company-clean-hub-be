@@ -1,35 +1,70 @@
 package com.company.company_clean_hub_be.service.impl;
 
-import com.company.company_clean_hub_be.dto.request.AssignmentRequest;
-import com.company.company_clean_hub_be.dto.request.TemporaryReassignmentRequest;
-import com.company.company_clean_hub_be.dto.response.*;
-import com.company.company_clean_hub_be.entity.*;
-import com.company.company_clean_hub_be.exception.AppException;
-import com.company.company_clean_hub_be.exception.ErrorCode;
-import com.company.company_clean_hub_be.repository.*;
-import com.company.company_clean_hub_be.service.AssignmentMetricsService;
-import com.company.company_clean_hub_be.service.AssignmentService;
-import com.company.company_clean_hub_be.service.SalaryNoteValidator;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.*;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.Duration;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.ArrayList;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.company.company_clean_hub_be.dto.request.AssignmentRequest;
+import com.company.company_clean_hub_be.dto.request.TemporaryReassignmentRequest;
+import com.company.company_clean_hub_be.dto.response.AssignmentHistoryResponse;
+import com.company.company_clean_hub_be.dto.response.AssignmentResponse;
+import com.company.company_clean_hub_be.dto.response.AttendanceResponse;
+import com.company.company_clean_hub_be.dto.response.PageResponse;
+import com.company.company_clean_hub_be.dto.response.RollbackResponse;
+import com.company.company_clean_hub_be.dto.response.TemporaryAssignmentResponse;
+import com.company.company_clean_hub_be.dto.response.WorkScheduleResponse;
+import com.company.company_clean_hub_be.entity.Assignment;
+import com.company.company_clean_hub_be.entity.AssignmentHistory;
+import com.company.company_clean_hub_be.entity.AssignmentScope;
+import com.company.company_clean_hub_be.entity.AssignmentStatus;
+import com.company.company_clean_hub_be.entity.AssignmentType;
+import com.company.company_clean_hub_be.entity.AssignmentVerification;
+import com.company.company_clean_hub_be.entity.Attendance;
+import com.company.company_clean_hub_be.entity.Contract;
+import com.company.company_clean_hub_be.entity.ContractType;
+import com.company.company_clean_hub_be.entity.Customer;
+import com.company.company_clean_hub_be.entity.Employee;
+import com.company.company_clean_hub_be.entity.HistoryStatus;
+import com.company.company_clean_hub_be.entity.NotificationType;
+import com.company.company_clean_hub_be.entity.ReassignmentType;
+import com.company.company_clean_hub_be.entity.SalaryNote;
+import com.company.company_clean_hub_be.entity.User;
+import com.company.company_clean_hub_be.entity.WorkSchedule;
+import com.company.company_clean_hub_be.entity.WorkScheduleReason;
+import com.company.company_clean_hub_be.entity.WorkScheduleStatus;
+import com.company.company_clean_hub_be.exception.AppException;
+import com.company.company_clean_hub_be.exception.ErrorCode;
+import com.company.company_clean_hub_be.repository.AssignmentHistoryRepository;
+import com.company.company_clean_hub_be.repository.AssignmentRepository;
+import com.company.company_clean_hub_be.repository.AttendanceRepository;
+import com.company.company_clean_hub_be.repository.ContractRepository;
+import com.company.company_clean_hub_be.repository.CustomerRepository;
+import com.company.company_clean_hub_be.repository.EmployeeRepository;
+import com.company.company_clean_hub_be.repository.UserRepository;
+import com.company.company_clean_hub_be.service.AssignmentMetricsService;
+import com.company.company_clean_hub_be.service.AssignmentService;
+import com.company.company_clean_hub_be.service.SalaryNoteValidator;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
@@ -2110,11 +2145,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                         }
                         List<AssignmentResponse> assignmentResponses = new java.util.ArrayList<>(grouped.values());
 
+                        // Extract service names from contract
+                        List<String> serviceNames = contract.getServices() != null
+                                ? contract.getServices().stream()
+                                        .map(s -> s.getTitle())
+                                        .collect(Collectors.toList())
+                                : new ArrayList<>();
+
                         result.add(new com.company.company_clean_hub_be.dto.response.AssignmentsByContractResponse(
                                         contract.getId(),
                                         contract.getDescription(),
                                         contract.getStartDate(),
                                         contract.getContractType(),
+                                        serviceNames,
                                         assignmentResponses));
                 }
 
@@ -2855,9 +2898,17 @@ public class AssignmentServiceImpl implements AssignmentService {
                                                 .collect(Collectors.toList());
                         }
 
+                        // Extract service names from contract
+                        List<String> serviceNames = contract.getServices() != null
+                                ? contract.getServices().stream()
+                                        .map(s -> s.getTitle())
+                                        .collect(Collectors.toList())
+                                : new ArrayList<>();
+
                         result.add(new com.company.company_clean_hub_be.dto.response.ReassignmentHistoryByContractResponse(
                                         contract.getId(),
                                         contract.getDescription(),
+                                        serviceNames,
                                         mapped));
                 }
 
@@ -3342,7 +3393,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 conflictContract.getWorkStartTime(), conflictContract.getWorkEndTime(),
                                 dayName);
 
-                // Gửi notification cho tất cả QLT1 và các QLT2 được phân công quản lý khách hàng này   
+                // Gửi notification cho tất cả QLT1 và các QLT2 được phân công quản lý khách hàng này
                 List<User> managers = new java.util.ArrayList<>(userRepository.findActiveUsersByRoleCode("QLT1"));
                 if (newContract.getCustomer() != null) {
                         List<com.company.company_clean_hub_be.entity.CustomerAssignment> customerAssigns = customerAssignmentRepository.findByCustomerId(newContract.getCustomer().getId());
