@@ -25,7 +25,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
            "(:keyword IS NULL OR :keyword = '' OR " +
            "LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(e.phone) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+           "LOWER(e.phone) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+           "LOWER(e.cccd) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
            "AND (:employmentType IS NULL OR e.employmentType = :employmentType) " +
            "AND (:province IS NULL OR :province = '' OR LOWER(e.address) LIKE LOWER(CONCAT('%', :province, '%'))) " +
            "AND (:ward IS NULL OR :ward = '' OR LOWER(e.address) LIKE LOWER(CONCAT('%', :ward, '%'))) " +
