@@ -244,10 +244,10 @@ public class EmployeeServiceImpl implements EmployeeService {
                 Employee savedEmployee = employeeRepository.save(employee);
                 log.info("createEmployee completed by {}: employeeId={}", username, savedEmployee.getId());
 
-                // Gửi notification cho Quản lý tổng (QLT1)
+                // Gửi notification cho Quản lý tổng (QLT1 & QLT2)
                 try {
-                        java.util.List<User> managers = userRepository.findActiveUsersByRoleCode("QLT1");
-                        log.info("[NOTIFY][NEW_EMPLOYEE] Found {} manager(s) with role QLT1 to notify",
+                        java.util.List<User> managers = userRepository.findByRoleCodeIn(java.util.List.of("QLT1", "QLT2"));
+                        log.info("[NOTIFY][NEW_EMPLOYEE] Found {} manager(s) with role QLT1/QLT2 to notify",
                                         managers.size());
                         if (managers.isEmpty()) {
                                 log.warn("[NOTIFY][NEW_EMPLOYEE] No QLT1 managers found — notification will NOT be sent for employeeId={}",
