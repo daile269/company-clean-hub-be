@@ -212,9 +212,12 @@ public class EmployeeServiceImpl implements EmployeeService {
 
                 String finalCccd = (request.getCccd() != null && !request.getCccd().trim().isEmpty()) ? request.getCccd().trim() : null;
                 String finalBankAccount = (request.getBankAccount() != null && !request.getBankAccount().trim().isEmpty()) ? request.getBankAccount().trim() : null;
+                String finalEmployeeCode = (request.getEmployeeCode() != null && !request.getEmployeeCode().trim().isEmpty())
+                                ? request.getEmployeeCode().trim()
+                                : request.getPhone().trim();
 
                 Employee employee = Employee.builder()
-                                .employeeCode(request.getEmployeeCode())
+                                .employeeCode(finalEmployeeCode)
                                 .username(request.getUsername())
                                 .password(passwordEncoder.encode(request.getPassword()))
                                 .phone(request.getPhone())
