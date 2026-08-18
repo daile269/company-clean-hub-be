@@ -190,8 +190,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
 
     @Override
-    public List<WorkScheduleResponse> getWorkSchedulesByEmployee(Long employeeId, LocalDate startDate, LocalDate endDate) {
-        List<WorkSchedule> schedules = workScheduleRepository.findByEmployeeIdAndDateRange(employeeId, startDate, endDate);
+    public List<WorkScheduleResponse> getWorkSchedulesByEmployee(Long employeeId, Long contractId, LocalDate startDate, LocalDate endDate) {
+        List<WorkSchedule> schedules = contractId != null
+            ? workScheduleRepository.findByEmployeeIdAndContractIdAndDateRange(employeeId, contractId, startDate, endDate)
+            : workScheduleRepository.findByEmployeeIdAndDateRange(employeeId, startDate, endDate);
         return schedules.stream()
             .map(this::mapToResponse)
             .collect(Collectors.toList());
@@ -326,8 +328,8 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
 
     @Override
-    public List<com.company.company_clean_hub_be.dto.response.EmployeeScheduleSummary> getEmployeesWithSchedules(Integer month, Integer year) {
-        log.info("Getting employees with schedules: month={}, year={}", month, year);
+    public List<com.company.company_clean_hub_be.dto.response.EmployeeScheduleSummary> getEmployeesWithSchedules(Integer month, Integer year, Long contractId) {
+        log.info("Getting employees with schedules: month={}, year={}, contractId={}", month, year, contractId);
 
         // Determine date range
         LocalDate startDate;
@@ -341,9 +343,12 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
         }
 
-        // Get all schedules in date range
+        // Get schedules in date range, optionally filtered by contract
         List<WorkSchedule> schedules = workScheduleRepository.findAll().stream()
             .filter(ws -> !ws.getScheduledDate().isBefore(startDate) && !ws.getScheduledDate().isAfter(endDate))
+            .filter(ws -> contractId == null
+                || (ws.getAssignment() != null && ws.getAssignment().getContract() != null
+                    && ws.getAssignment().getContract().getId().equals(contractId)))
             .collect(Collectors.toList());
 
         // Group by employee

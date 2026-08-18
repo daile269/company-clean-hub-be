@@ -30,6 +30,9 @@ public class AssignmentResponse {
     private java.time.LocalDate contractStartDate;
     private java.time.LocalDate contractEndDate;
     private ContractType contractType;
+    private String serviceName;
+    private java.time.LocalTime workStartTime;
+    private java.time.LocalTime workEndTime;
     private LocalDate startDate;
     private LocalDate endDate;
     private AssignmentStatus status;

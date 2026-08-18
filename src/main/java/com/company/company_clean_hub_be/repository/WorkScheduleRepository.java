@@ -56,6 +56,10 @@ public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Long
     @Query("SELECT ws FROM WorkSchedule ws WHERE ws.employee.id = :employeeId AND ws.scheduledDate BETWEEN :startDate AND :endDate")
     List<WorkSchedule> findByEmployeeIdAndDateRange(@Param("employeeId") Long employeeId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
+    // Find by employee, contract and date range
+    @Query("SELECT ws FROM WorkSchedule ws WHERE ws.employee.id = :employeeId AND ws.assignment.contract.id = :contractId AND ws.scheduledDate BETWEEN :startDate AND :endDate")
+    List<WorkSchedule> findByEmployeeIdAndContractIdAndDateRange(@Param("employeeId") Long employeeId, @Param("contractId") Long contractId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
     // Find by reason
     List<WorkSchedule> findByReason(WorkScheduleReason reason);
 
