@@ -21,5 +21,7 @@ public class CccdValidationResponse {
 
     private CccdExtractedData extractedData; // Thông tin đọc từ QR Code (Số CCCD, Họ tên...)
 
+    private String errorMessage;         // Lời nhắn báo lỗi chi tiết từ GPT AI Vision
+
     private List<ValidationErrorCode> errors;
 }

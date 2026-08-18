@@ -33,6 +33,7 @@ public class CccdValidationServiceImpl {
     private final OpenCvImageProcessor imageProcessor;
     private final com.company.company_clean_hub_be.cccd.opencv.CccdQrScanner cccdQrScanner;
     private final CccdValidationProperties props;
+    private final GptCccdService gptCccdService;
 
     /**
      * Điểm vào chính: nhận 2 MultipartFile (front + back), trả về kết quả validation.
@@ -57,7 +58,19 @@ public class CccdValidationServiceImpl {
                     .build();
         }
 
-        // Xử lý từng mặt
+        // Ưu tiên gọi GPT Vision bóc tách 2 mặt CCCD
+        try {
+            CccdValidationResponse gptResponse = gptCccdService.validateWithGpt(frontFile, backFile);
+            if (gptResponse != null) {
+                log.info("[CCCD] GPT Validation completed successfully: valid={}, extractedData={}",
+                        gptResponse.isValid(), gptResponse.getExtractedData());
+                return gptResponse;
+            }
+        } catch (Exception e) {
+            log.warn("[CCCD] GPT Validation failed, falling back to OpenCV OCR: {}", e.getMessage());
+        }
+
+        // Xử lý từng mặt (OpenCV Fallback)
         CccdSideResult frontResult = processSide(frontFile, DocumentSide.FRONT);
         CccdSideResult backResult  = processSide(backFile,  DocumentSide.BACK);
 
