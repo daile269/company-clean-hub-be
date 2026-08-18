@@ -48,10 +48,11 @@ public class WorkScheduleController {
     public ApiResponse<List<WorkScheduleResponse>> getByEmployee(
             @PathVariable Long employeeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long contractId) {
 
-        log.info("Getting work schedules for employee: {} from {} to {}", employeeId, startDate, endDate);
-        List<WorkScheduleResponse> schedules = workScheduleService.getWorkSchedulesByEmployee(employeeId, startDate, endDate);
+        log.info("Getting work schedules for employee: {} contract: {} from {} to {}", employeeId, contractId, startDate, endDate);
+        List<WorkScheduleResponse> schedules = workScheduleService.getWorkSchedulesByEmployee(employeeId, contractId, startDate, endDate);
         return ApiResponse.success("Lấy lịch làm việc thành công", schedules, HttpStatus.OK.value());
     }
 
@@ -238,12 +239,13 @@ public class WorkScheduleController {
     @GetMapping("/employees-with-schedules")
     public ApiResponse<List<com.company.company_clean_hub_be.dto.response.EmployeeScheduleSummary>> getEmployeesWithSchedules(
             @RequestParam(required = false) Integer month,
-            @RequestParam(required = false) Integer year) {
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Long contractId) {
 
-        log.info("Getting employees with schedules: month={}, year={}", month, year);
+        log.info("Getting employees with schedules: month={}, year={}, contractId={}", month, year, contractId);
 
         List<com.company.company_clean_hub_be.dto.response.EmployeeScheduleSummary> employees =
-            workScheduleService.getEmployeesWithSchedules(month, year);
+            workScheduleService.getEmployeesWithSchedules(month, year, contractId);
         return ApiResponse.success("Lấy danh sách nhân viên thành công", employees, HttpStatus.OK.value());
     }
 

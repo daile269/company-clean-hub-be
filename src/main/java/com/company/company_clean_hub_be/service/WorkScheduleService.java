@@ -31,7 +31,7 @@ public interface WorkScheduleService {
     // Get work schedules
     List<WorkScheduleResponse> getWorkSchedulesByAssignment(Long assignmentId);
     
-    List<WorkScheduleResponse> getWorkSchedulesByEmployee(Long employeeId, LocalDate startDate, LocalDate endDate);
+    List<WorkScheduleResponse> getWorkSchedulesByEmployee(Long employeeId, Long contractId, LocalDate startDate, LocalDate endDate);
     
     List<WorkScheduleResponse> getMissedSchedules(LocalDate startDate, LocalDate endDate);
     
@@ -46,7 +46,7 @@ public interface WorkScheduleService {
     
     com.company.company_clean_hub_be.dto.response.WorkScheduleStatsResponse getStats(Integer month, Integer year, Long employeeId);
     
-    List<com.company.company_clean_hub_be.dto.response.EmployeeScheduleSummary> getEmployeesWithSchedules(Integer month, Integer year);
+    List<com.company.company_clean_hub_be.dto.response.EmployeeScheduleSummary> getEmployeesWithSchedules(Integer month, Integer year, Long contractId);
 
     // Photo capture
     WorkScheduleResponse capturePhoto(WorkScheduleCaptureRequest request);
