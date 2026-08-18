@@ -50,6 +50,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         private final WorkScheduleRepository workScheduleRepository;
         private final com.company.company_clean_hub_be.service.EmployeeImageService employeeImageService;
         private final com.company.company_clean_hub_be.service.FileStorageService fileStorageService;
+        private final com.company.company_clean_hub_be.cccd.service.impl.CccdValidationServiceImpl cccdValidationService;
 
         @Override
         public String generateEmployeeCode(EmploymentType employmentType) {
@@ -425,6 +426,21 @@ public class EmployeeServiceImpl implements EmployeeService {
                 log.info("EmployeeService.uploadCccdImages - start: employeeId={}", id);
                 Employee employee = employeeRepository.findById(id)
                                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+                // Backend Guard: Tự động validate ảnh CCCD bằng OpenCV trước khi tải lên Cloudinary
+                if (frontFile != null && !frontFile.isEmpty() && backFile != null && !backFile.isEmpty()) {
+                        com.company.company_clean_hub_be.cccd.dto.CccdValidationResponse valResult =
+                                cccdValidationService.validate(frontFile, backFile);
+
+                        if (!valResult.isValid() && valResult.getStatus() == com.company.company_clean_hub_be.cccd.enums.ValidationStatus.INVALID) {
+                                String detailErr = (valResult.getErrors() != null && !valResult.getErrors().isEmpty())
+                                        ? valResult.getErrors().get(0).getMessage()
+                                        : "Ảnh không đạt tiêu chuẩn CCCD";
+                                log.warn("CCCD validation failed in uploadCccdImages: employeeId={}, status={}, error={}",
+                                        id, valResult.getStatus(), detailErr);
+                                throw new AppException(ErrorCode.INVALID_IMAGE_FORMAT, "Ảnh CCCD không hợp lệ: " + detailErr);
+                        }
+                }
 
                 if (frontFile != null && !frontFile.isEmpty()) {
                         String oldFront = employee.getCccdFrontImage();
