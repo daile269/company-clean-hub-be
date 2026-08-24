@@ -102,16 +102,7 @@ public class PayrollServiceImpl implements PayrollService {
 
                         synchronizeCompanyAssignmentMonthlySupport(employee, assignments);
 
-                        // Check if payroll already exists
-                        Optional<Payroll> existingPayroll = payrollRepository.findByEmployeeAndMonthAndYear(employeeId,
-                                        month,
-                                        year);
-                        if (existingPayroll.isPresent()) {
-                                log.info("[BULK-CALC] Payroll already exists for employee {}, skip creation",
-                                                employeeId);
-                                continue;
-                        }
-
+                        // Upsert (tạo mới nếu chưa có, tính lại nếu đã có) — không bỏ qua payroll đã tồn tại
                         Payroll payroll = upsertPayrollFromAssignments(employee, assignments, month, year, accountant,
                                         new LinkedHashMap<>());
 
