@@ -53,26 +53,31 @@ public class ContractController {
     }
 
     @GetMapping("/{id}")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('CONTRACT_VIEW') or @securityCheck.isContractManagedByCurrentUser(#id)")
+    @org.springframework.security.access.prepost.PreAuthorize("@securityCheck.canViewContract(#id)")
     public ApiResponse<ContractResponse> getContractById(@PathVariable Long id) {
         ContractResponse contract = contractService.getContractById(id);
-        // CUSTOMER can only view their own contracts
+        // CUSTOMER can only view their own contracts (defense-in-depth)
         AuthorizationUtils.validateContractOwnership(contract.getCustomerId());
         return ApiResponse.success("Lấy thông tin hợp đồng thành công", contract, HttpStatus.OK.value());
     }
 
     @GetMapping("/customer/{customerId}")
     public ApiResponse<List<ContractResponse>> getContractsByCustomer(@PathVariable Long customerId) {
-        // CUSTOMER can only view their own contracts
+        // CUSTOMER can only view their own contracts; QLT2/QLV chỉ KH mình quản lý
         AuthorizationUtils.validateCustomerAccess(customerId);
+        AuthorizationUtils.validateManagerCustomerScope(customerId);
         List<ContractResponse> contracts = contractService.getContractsByCustomer(customerId);
         return ApiResponse.success("Lấy danh sách hợp đồng của khách hàng thành công", contracts,
                 HttpStatus.OK.value());
     }
 
     @GetMapping("/assignment/{assignmentId}")
+    @org.springframework.security.access.prepost.PreAuthorize("@securityCheck.isAssignmentManagedByCurrentUser(#assignmentId)")
     public ApiResponse<ContractResponse> getContractByAssignmentId(@PathVariable Long assignmentId) {
         ContractResponse contract = contractService.getContractByAssignmentId(assignmentId);
+        if (contract != null) {
+            AuthorizationUtils.validateContractOwnership(contract.getCustomerId());
+        }
         return ApiResponse.success("Lấy thông tin hợp đồng từ phân công thành công", contract, HttpStatus.OK.value());
     }
 

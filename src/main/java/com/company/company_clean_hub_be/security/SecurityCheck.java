@@ -4,6 +4,7 @@ import com.company.company_clean_hub_be.entity.Employee;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.CustomerRepository;
 import com.company.company_clean_hub_be.repository.AssignmentRepository;
+import com.company.company_clean_hub_be.repository.AssignmentVerificationRepository;
 import com.company.company_clean_hub_be.repository.RatingRepository;
 import com.company.company_clean_hub_be.repository.ContractRepository;
 import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
@@ -27,6 +28,7 @@ public class SecurityCheck {
     private final CustomerRepository customerRepository;
     private final ContractRepository contractRepository;
     private final AssignmentRepository assignmentRepository;
+    private final AssignmentVerificationRepository assignmentVerificationRepository;
     private final RatingRepository ratingRepository;
     private final CustomerAssignmentRepository customerAssignmentRepository;
     private final InvoiceRepository invoiceRepository;
@@ -244,6 +246,61 @@ public class SecurityCheck {
             return contractRepository.findById(contractId)
                     .map(c -> c.getCustomer() != null &&
                             customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), c.getCustomer().getId()))
+                    .orElse(false);
+        }
+        return true;
+    }
+
+    /**
+     * Quyền XEM một hợp đồng cụ thể — dùng làm gate cho GET /api/contracts/{id}.
+     *
+     * Chỉ thắt chặt đúng QLT2/QLV (buộc phải quản lý KH của hợp đồng đó).
+     * Mọi role khác (QLT1/ACCOUNTANT/CUSTOMER/EMPLOYEE…) giữ nguyên hành vi cũ:
+     * CUSTOMER được chặn thêm bởi AuthorizationUtils.validateContractOwnership ở controller.
+     */
+    public boolean canViewContract(Long contractId) {
+        if (contractId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
+        if (currentUser == null) return false;
+
+        String role = currentUser.getRole() != null ? currentUser.getRole().getCode() : null;
+        if (role == null) return true;
+
+        if ("QLT2".equalsIgnoreCase(role) || "QLV".equalsIgnoreCase(role)) {
+            return contractRepository.findById(contractId)
+                    .map(c -> c.getCustomer() != null &&
+                            customerAssignmentRepository.existsByManagerIdAndCustomerId(currentUser.getId(), c.getCustomer().getId()))
+                    .orElse(false);
+        }
+        return true;
+    }
+
+    /**
+     * Quyền XÁC MINH (approve/reject/bypass) một verification cụ thể.
+     *
+     * Chỉ thắt chặt QLT2/QLV: buộc phải quản lý KH của assignment mà verification này
+     * thuộc về (assignment → contract → customer). Mọi role khác (QLT1/ACCOUNTANT/…)
+     * giữ nguyên hành vi cũ.
+     */
+    public boolean isVerificationManagedByCurrentUser(Long verificationId) {
+        if (verificationId == null) return false;
+        String username = userService.getCurrentUsername();
+        if (username == null) return false;
+        com.company.company_clean_hub_be.entity.User currentUser = userRepository.findByUsername(username).orElse(null);
+        if (currentUser == null) return false;
+
+        String role = currentUser.getRole() != null ? currentUser.getRole().getCode() : null;
+        if (role == null) return true;
+
+        if ("QLT2".equalsIgnoreCase(role) || "QLV".equalsIgnoreCase(role)) {
+            return assignmentVerificationRepository.findById(verificationId)
+                    .map(v -> v.getAssignment() != null
+                            && v.getAssignment().getContract() != null
+                            && v.getAssignment().getContract().getCustomer() != null
+                            && customerAssignmentRepository.existsByManagerIdAndCustomerId(
+                                    currentUser.getId(), v.getAssignment().getContract().getCustomer().getId()))
                     .orElse(false);
         }
         return true;

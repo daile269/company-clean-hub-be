@@ -4,6 +4,7 @@ import java.security.Principal;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -90,6 +91,7 @@ public class VerificationController {
     }
 
     @PutMapping("/approve")
+    @PreAuthorize("@securityCheck.isVerificationManagedByCurrentUser(#request.verificationId)")
     public ApiResponse<AssignmentVerificationResponse> approveVerification(
             @Valid @RequestBody VerificationApprovalRequest request,
             Principal principal) {
@@ -99,6 +101,7 @@ public class VerificationController {
     }
 
     @PutMapping("/{verificationId}/reject")
+    @PreAuthorize("@securityCheck.isVerificationManagedByCurrentUser(#verificationId)")
     public ApiResponse<AssignmentVerificationResponse> rejectVerification(
             @PathVariable Long verificationId,
             @RequestBody(required = false) String reason,
@@ -109,6 +112,7 @@ public class VerificationController {
     }
 
     @PutMapping("/{verificationId}/bypass-approve")
+    @PreAuthorize("@securityCheck.isVerificationManagedByCurrentUser(#verificationId)")
     public ApiResponse<AssignmentVerificationResponse> bypassApproveVerification(
             @PathVariable Long verificationId,
             @RequestBody(required = false) String notes,

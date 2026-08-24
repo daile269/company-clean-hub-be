@@ -22,7 +22,8 @@ public class AssignmentVerificationResponse {
     private String employeeName;
     private String employeeCode;
     private Long contractId;
-    
+    private Long customerId;
+
     private VerificationReason reason;
     private VerificationStatus status;
     
