@@ -6,6 +6,7 @@ import com.company.company_clean_hub_be.entity.User;
 import com.company.company_clean_hub_be.exception.AppException;
 import com.company.company_clean_hub_be.exception.ErrorCode;
 import com.company.company_clean_hub_be.repository.UserRepository;
+import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
 import com.company.company_clean_hub_be.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,10 +20,12 @@ public class AuthorizationUtils {
 
     @Autowired
     private static UserRepository userRepository;
+    private static CustomerAssignmentRepository customerAssignmentRepository;
 
     @Autowired
-    public AuthorizationUtils(UserRepository userRepository) {
+    public AuthorizationUtils(UserRepository userRepository, CustomerAssignmentRepository customerAssignmentRepository) {
         AuthorizationUtils.userRepository = userRepository;
+        AuthorizationUtils.customerAssignmentRepository = customerAssignmentRepository;
     }
 
     /**
@@ -67,6 +70,22 @@ public class AuthorizationUtils {
             }
         }
         // Other roles can access any customer
+    }
+
+    /**
+     * Chặn QLT2/QLV truy cập khách hàng KHÔNG thuộc quyền quản lý (customer_assignments).
+     * QLT1 / ACCOUNTANT / CUSTOMER (đã được validateCustomerAccess xử lý riêng) không bị chặn ở đây.
+     */
+    public static void validateManagerCustomerScope(Long customerId) {
+        User user = getCurrentUser();
+        if (user == null || user.getRole() == null) return;
+        String role = user.getRole().getCode();
+        if ("QLT2".equalsIgnoreCase(role) || "QLV".equalsIgnoreCase(role)) {
+            boolean exists = customerAssignmentRepository.existsByManagerIdAndCustomerId(user.getId(), customerId);
+            if (!exists) {
+                throw new AppException(ErrorCode.FORBIDDEN);
+            }
+        }
     }
 
     /**

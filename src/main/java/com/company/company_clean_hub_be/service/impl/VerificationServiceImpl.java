@@ -3,8 +3,10 @@ package com.company.company_clean_hub_be.service.impl;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -33,6 +35,7 @@ import com.company.company_clean_hub_be.repository.AssignmentRepository;
 import com.company.company_clean_hub_be.repository.AssignmentVerificationRepository;
 import com.company.company_clean_hub_be.repository.AttendanceRepository;
 import com.company.company_clean_hub_be.repository.ContractRepository;
+import com.company.company_clean_hub_be.repository.CustomerAssignmentRepository;
 import com.company.company_clean_hub_be.repository.EmployeeRepository;
 import com.company.company_clean_hub_be.repository.UserRepository;
 import com.company.company_clean_hub_be.repository.VerificationImageRepository;
@@ -61,6 +64,7 @@ public class VerificationServiceImpl implements VerificationService {
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final ContractRepository contractRepository;
+    private final CustomerAssignmentRepository customerAssignmentRepository;
     private final WorkScheduleRepository workScheduleRepository;
     private final WorkScheduleService workScheduleService;
     private final FileStorageService fileStorageService;
@@ -129,8 +133,32 @@ public class VerificationServiceImpl implements VerificationService {
         if (currentUser instanceof com.company.company_clean_hub_be.entity.Customer) {
             throw new AppException(ErrorCode.FORBIDDEN);
         }
-        return verificationRepository.findPendingVerifications()
-                .stream()
+
+        List<AssignmentVerification> verifications = verificationRepository.findPendingVerifications();
+
+        // QLT2/QLV chỉ thấy verification của nhân viên thuộc KH mình quản lý.
+        if (currentUser != null && currentUser.getRole() != null) {
+            String role = currentUser.getRole().getCode();
+            if ("QLT2".equalsIgnoreCase(role) || "QLV".equalsIgnoreCase(role)) {
+                List<Long> customerIds = customerAssignmentRepository
+                        .findCustomerIdsByManagerId(currentUser.getId());
+                Set<Long> scope = customerIds == null
+                        ? new HashSet<>()
+                        : new HashSet<>(customerIds);
+                verifications = verifications.stream()
+                        .filter(v -> {
+                            Long cid = v.getAssignment() != null
+                                    && v.getAssignment().getContract() != null
+                                    && v.getAssignment().getContract().getCustomer() != null
+                                            ? v.getAssignment().getContract().getCustomer().getId()
+                                            : null;
+                            return cid != null && scope.contains(cid);
+                        })
+                        .collect(Collectors.toList());
+            }
+        }
+
+        return verifications.stream()
                 .map(this::mapToVerificationResponse)
                 .collect(Collectors.toList());
     }
@@ -776,6 +804,9 @@ public class VerificationServiceImpl implements VerificationService {
                 .employeeName(employee.getName())
                 .employeeCode(employee.getEmployeeCode())
                 .contractId(assignment.getContract() != null ? assignment.getContract().getId() : null)
+                .customerId(assignment.getContract() != null && assignment.getContract().getCustomer() != null
+                        ? assignment.getContract().getCustomer().getId()
+                        : null)
                 .reason(verification.getReason())
                 .status(verification.getStatus())
                 .maxAttempts(displayMaxAttempts)
