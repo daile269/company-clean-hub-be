@@ -81,6 +81,44 @@ public class SalaryNoteValidator {
     }
 
     /**
+     * Map AssignmentType → ghi chú lương tương ứng để so sánh "vượt ngân sách".
+     * - FIXED_BY_CONTRACT / FIXED_BY_COMPANY → MONTHLY_ASSIGNMENT + FIXED
+     * - FIXED_BY_DAY                         → DAILY_ASSIGNMENT  + FIXED
+     * - TEMPORARY                            → DAILY_ASSIGNMENT  + TEMPORARY
+     * - SUPPORT / null / không khớp          → null (không báo)
+     */
+    public SalaryNote findComparableSalaryNote(Contract contract, AssignmentType assignmentType) {
+        if (contract == null || assignmentType == null) return null;
+        if (assignmentType == AssignmentType.SUPPORT) return null;
+
+        SalaryNoteCategory category;
+        SalaryNoteType salaryType;
+        switch (assignmentType) {
+            case FIXED_BY_CONTRACT:
+            case FIXED_BY_COMPANY:
+                category = SalaryNoteCategory.MONTHLY_ASSIGNMENT;
+                salaryType = SalaryNoteType.FIXED;
+                break;
+            case FIXED_BY_DAY:
+                category = SalaryNoteCategory.DAILY_ASSIGNMENT;
+                salaryType = SalaryNoteType.FIXED;
+                break;
+            case TEMPORARY:
+                category = SalaryNoteCategory.DAILY_ASSIGNMENT;
+                salaryType = SalaryNoteType.TEMPORARY;
+                break;
+            default:
+                return null;
+        }
+
+        return salaryNoteRepository.findByContractId(contract.getId())
+                .stream()
+                .filter(sn -> sn.getCategory() == category && sn.getSalaryType() == salaryType)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
      * R2 — Chặn lương ngoài khoảng [FIXED.amount, TEMPORARY.amount] (Archetype D).
      * Chỉ áp dụng cho loại ngày (FIXED_BY_DAY / TEMPORARY) và khi hợp đồng có đủ
      * DAILY_ASSIGNMENT/FIXED + DAILY_ASSIGNMENT/TEMPORARY.

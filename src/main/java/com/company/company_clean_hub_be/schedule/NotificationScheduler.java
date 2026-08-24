@@ -32,7 +32,6 @@ public class NotificationScheduler {
     private final AssignmentRepository assignmentRepository;
     private final AssignmentVerificationRepository assignmentVerificationRepository;
     private final VerificationImageRepository verificationImageRepository;
-    private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final SalaryNoteValidator salaryNoteValidator;
 
@@ -82,7 +81,7 @@ public class NotificationScheduler {
                                             contract.getWorkStartTime()),
                                     assignment.getEmployee().getId(),
                                     assignment.getId(),
-                                    contract.getId());
+                                    contract);
                         }
                     }
                 }
@@ -118,7 +117,7 @@ public class NotificationScheduler {
                                 contract.getDescription(),
                                 contract.getContractType() != null ? contract.getContractType().name() : "Không xác định",
                                 contract.getEndDate()),
-                        null, null, contract.getId());
+                        null, null, contract);
             }
             log.info("[NOTIF-SCHEDULER] Expiring contract check completed. Found: {}", expiringContracts.size());
         } catch (Exception e) {
@@ -204,9 +203,10 @@ public class NotificationScheduler {
     }
 
     private void createNotification(NotificationType type, String title, String message,
-                                     Long refEmployeeId, Long refAssignmentId, Long refContractId) {
+                                     Long refEmployeeId, Long refAssignmentId, Contract contract) {
         // Gửi cho tất cả QLT1 và QLT2
-        List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2"));
+        List<User> managers = notificationService.getRecipientsForContract(contract);
+        Long refContractId = contract != null ? contract.getId() : null;
         LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
         for (User manager : managers) {
             // Dedup per recipient: mỗi manager chỉ nhận 1 notification/ngày cho cùng 1 issue

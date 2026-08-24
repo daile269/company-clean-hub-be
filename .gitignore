@@ -35,6 +35,9 @@ build/
 ### Application Properties ###
 src/main/resources/application.properties
 
+### Local build config (untracked per team decision) ###
+/pom.xml
+
 ### Logs ###
 logs/
 *.log

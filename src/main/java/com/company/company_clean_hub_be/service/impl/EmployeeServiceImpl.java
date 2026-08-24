@@ -246,7 +246,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
                 // Gửi notification cho Quản lý tổng (QLT1 & QLT2)
                 try {
-                        java.util.List<User> managers = userRepository.findByRoleCodeIn(java.util.List.of("QLT1", "QLT2"));
+                        java.util.List<User> managers = userRepository.findByRoleCodeIn(java.util.List.of("QLT1"));
                         log.info("[NOTIFY][NEW_EMPLOYEE] Found {} manager(s) with role QLT1/QLT2 to notify",
                                         managers.size());
                         if (managers.isEmpty()) {
