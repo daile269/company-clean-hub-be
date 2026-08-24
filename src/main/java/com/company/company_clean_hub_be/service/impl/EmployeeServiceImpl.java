@@ -50,6 +50,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         private final WorkScheduleRepository workScheduleRepository;
         private final com.company.company_clean_hub_be.service.EmployeeImageService employeeImageService;
         private final com.company.company_clean_hub_be.service.FileStorageService fileStorageService;
+        private final com.company.company_clean_hub_be.cccd.service.impl.CccdValidationServiceImpl cccdValidationService;
 
         @Override
         public String generateEmployeeCode(EmploymentType employmentType) {
@@ -211,9 +212,12 @@ public class EmployeeServiceImpl implements EmployeeService {
 
                 String finalCccd = (request.getCccd() != null && !request.getCccd().trim().isEmpty()) ? request.getCccd().trim() : null;
                 String finalBankAccount = (request.getBankAccount() != null && !request.getBankAccount().trim().isEmpty()) ? request.getBankAccount().trim() : null;
+                String finalEmployeeCode = (request.getEmployeeCode() != null && !request.getEmployeeCode().trim().isEmpty())
+                                ? request.getEmployeeCode().trim()
+                                : request.getPhone().trim();
 
                 Employee employee = Employee.builder()
-                                .employeeCode(request.getEmployeeCode())
+                                .employeeCode(finalEmployeeCode)
                                 .username(request.getUsername())
                                 .password(passwordEncoder.encode(request.getPassword()))
                                 .phone(request.getPhone())
@@ -240,10 +244,10 @@ public class EmployeeServiceImpl implements EmployeeService {
                 Employee savedEmployee = employeeRepository.save(employee);
                 log.info("createEmployee completed by {}: employeeId={}", username, savedEmployee.getId());
 
-                // Gửi notification cho Quản lý tổng (QLT1)
+                // Gửi notification cho Quản lý tổng (QLT1 & QLT2)
                 try {
-                        java.util.List<User> managers = userRepository.findActiveUsersByRoleCode("QLT1");
-                        log.info("[NOTIFY][NEW_EMPLOYEE] Found {} manager(s) with role QLT1 to notify",
+                        java.util.List<User> managers = userRepository.findByRoleCodeIn(java.util.List.of("QLT1", "QLT2"));
+                        log.info("[NOTIFY][NEW_EMPLOYEE] Found {} manager(s) with role QLT1/QLT2 to notify",
                                         managers.size());
                         if (managers.isEmpty()) {
                                 log.warn("[NOTIFY][NEW_EMPLOYEE] No QLT1 managers found — notification will NOT be sent for employeeId={}",
@@ -425,6 +429,9 @@ public class EmployeeServiceImpl implements EmployeeService {
                 log.info("EmployeeService.uploadCccdImages - start: employeeId={}", id);
                 Employee employee = employeeRepository.findById(id)
                                 .orElseThrow(() -> new AppException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+                // Directly store files to Cloudinary
+
 
                 if (frontFile != null && !frontFile.isEmpty()) {
                         String oldFront = employee.getCccdFrontImage();

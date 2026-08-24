@@ -23,18 +23,27 @@ public class SseEmitterService {
      * User kết nối SSE — gọi khi FE mở kết nối.
      */
     public SseEmitter subscribe(Long userId) {
-        // Timeout 10 phút, FE sẽ tự reconnect khi hết
-        SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
+        // Đóng kết nối cũ nếu user này từng kết nối trước đó
+        SseEmitter oldEmitter = emitters.remove(userId);
+        if (oldEmitter != null) {
+            try {
+                oldEmitter.complete();
+            } catch (Exception ignored) {
+            }
+        }
+
+        // Timeout = 0L (không bao giờ timeout từ phía Spring MVC, giữ kết nối bằng heartbeat @Scheduled)
+        SseEmitter emitter = new SseEmitter(0L);
 
         emitters.put(userId, emitter);
         log.info("SSE subscribed: userId={}", userId);
 
         emitter.onCompletion(() -> {
-            emitters.remove(userId);
+            emitters.remove(userId, emitter);
             log.info("SSE completed: userId={}", userId);
         });
         emitter.onTimeout(() -> {
-            emitters.remove(userId);
+            emitters.remove(userId, emitter);
             log.info("SSE timeout: userId={}", userId);
             try {
                 emitter.complete();
@@ -42,7 +51,7 @@ public class SseEmitterService {
             }
         });
         emitter.onError(e -> {
-            emitters.remove(userId);
+            emitters.remove(userId, emitter);
             log.warn("SSE error userId={}: {}", userId, e.getMessage());
         });
 
@@ -50,7 +59,7 @@ public class SseEmitterService {
         try {
             emitter.send(SseEmitter.event().name("connected").data("ok"));
         } catch (IOException e) {
-            emitters.remove(userId);
+            emitters.remove(userId, emitter);
         }
 
         return emitter;
@@ -82,5 +91,22 @@ public class SseEmitterService {
      */
     public int getConnectedCount() {
         return emitters.size();
+    }
+
+    /**
+     * Định kỳ 15 giây gửi gói tin heartbeat ping để giữ kết nối TCP luôn thông suốt.
+     * Tự động dọn dẹp các kết nối đã ngắt khỏi Memory.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 15000)
+    public void sendHeartbeat() {
+        if (emitters.isEmpty()) return;
+        emitters.forEach((userId, emitter) -> {
+            try {
+                emitter.send(SseEmitter.event().comment("ping"));
+            } catch (Exception e) {
+                emitters.remove(userId);
+                log.debug("Removed dead SSE emitter for userId={}", userId);
+            }
+        });
     }
 }
