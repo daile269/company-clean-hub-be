@@ -3472,7 +3472,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                                 currentCount);
 
                         // Gửi cho tất cả QLT1, QLT2, và QLV
-                        List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2", "QLV"));
+                        List<User> managers = notificationService.getRecipientsForContract(contract);
                         LocalDateTime todayStart = LocalDate.now().atStartOfDay();
                         for (User manager : managers) {
                                 boolean exists = notificationRepository.existsByTypeAndRefContractIdAndRecipientIdAndCreatedAtAfter(
@@ -3492,16 +3492,13 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
 
         /**
-         * Kiểm tra và gửi notification nếu phân công có lương vượt quá salaryNote quy định.
-         * Duyệt tất cả SalaryNote của contract, so sánh với salaryAtTime của assignment.
+         * Kiểm tra và gửi notification nếu phân công có lương vượt quá ghi chú lương
+         * CÙNG loại phân công (category) và CÙNG loại lương (salaryType).
+         * Tránh so nhầm lương tháng với ghi chú ngày (false positive).
          */
         private void checkAndNotifyAssignmentOverBudget(Assignment assignment) {
                 Contract contract = assignment.getContract();
                 if (contract == null) {
-                        return;
-                }
-                List<SalaryNote> salaryNotes = salaryNoteRepository.findByContractId(contract.getId());
-                if (salaryNotes == null || salaryNotes.isEmpty()) {
                         return;
                 }
 
@@ -3510,55 +3507,60 @@ public class AssignmentServiceImpl implements AssignmentService {
                         return;
                 }
 
-                for (SalaryNote sn : salaryNotes) {
-                        if (sn.getAmount() == null) {
-                                continue;
-                        }
-                        if (assignmentSalary.compareTo(sn.getAmount()) > 0) {
-                                Employee emp = (Employee) assignment.getEmployee();
-                                String categoryLabel = sn.getCategory() != null
-                                        ? sn.getCategory().getDescription()
-                                        : "Không xác định";
-                                String typeLabel = sn.getSalaryType() != null
-                                        ? sn.getSalaryType().getDescription()
-                                        : "Không xác định";
-                                String title = "Phân công vượt ngân sách lương";
-                                String message = String.format(
-                                        "Nhân viên %s (%s) được phân công với mức lương %s VNĐ, "
-                                                + "vượt quá ghi chú lương '%s - %s' (%s VNĐ) của hợp đồng '%s' (ID=%d).",
-                                        emp.getName(),
-                                        emp.getEmployeeCode(),
-                                        String.format("%,.0f", assignmentSalary),
-                                        categoryLabel, typeLabel,
-                                        String.format("%,.0f", sn.getAmount()),
-                                        contract.getDescription() != null ? contract.getDescription() : "Không có mô tả",
-                                        contract.getId());
+                SalaryNote comparableNote = salaryNoteValidator.findComparableSalaryNote(
+                        contract, assignment.getAssignmentType());
+                if (comparableNote == null) {
+                        return; // SUPPORT / không có ghi chú khớp → không báo
+                }
+                if (comparableNote.getAmount() == null) {
+                        return; // ghi chú khớp nhưng amount null → không so sánh được
+                }
 
-                                // Gửi cho tất cả QLT1, QLT2, và QLV
-                                List<User> managers = userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2", "QLV"));
-                                LocalDateTime todayStart = LocalDate.now().atStartOfDay();
-                                for (User manager : managers) {
-                                        boolean exists = notificationRepository.existsByTypeAndContractIdAndEmployeeIdAndRecipientIdAndCreatedAtAfter(
-                                                NotificationType.ASSIGNMENT_OVER_BUDGET,
-                                                contract.getId(),
-                                                assignment.getEmployee().getId(),
-                                                manager.getId(),
-                                                todayStart);
-                                        if (!exists) {
-                                                notificationService.createNotification(
-                                                        manager,
-                                                        NotificationType.ASSIGNMENT_OVER_BUDGET,
-                                                        title,
-                                                        message,
-                                                        assignment.getEmployee().getId(),
-                                                        assignment.getId(),
-                                                        contract.getId());
-                                        }
-                                }
-                                log.warn("[NOTIFY][ASSIGNMENT_OVER_BUDGET] Assignment {} salary {} exceeds SalaryNote {} amount {}",
-                                        assignment.getId(), assignmentSalary, sn.getId(), sn.getAmount());
-                                break; // Chỉ gửi 1 notification cho lần vượt đầu tiên
+                if (assignmentSalary.compareTo(comparableNote.getAmount()) <= 0) {
+                        return; // không vượt
+                }
+
+                Employee emp = (Employee) assignment.getEmployee();
+                String categoryLabel = comparableNote.getCategory() != null
+                        ? comparableNote.getCategory().getDescription()
+                        : "Không xác định";
+                String typeLabel = comparableNote.getSalaryType() != null
+                        ? comparableNote.getSalaryType().getDescription()
+                        : "Không xác định";
+                String title = "Phân công vượt ngân sách lương";
+                String message = String.format(
+                        "Nhân viên %s (%s) được phân công với mức lương %s VNĐ, "
+                                + "vượt quá ghi chú lương '%s - %s' (%s VNĐ) của hợp đồng '%s' (ID=%d).",
+                        emp.getName(),
+                        emp.getEmployeeCode(),
+                        String.format("%,.0f", assignmentSalary),
+                        categoryLabel, typeLabel,
+                        String.format("%,.0f", comparableNote.getAmount()),
+                        contract.getDescription() != null ? contract.getDescription() : "Không có mô tả",
+                        contract.getId());
+
+                // Gửi cho QLT1 (active) + QLT2 quản lý khách hàng của hợp đồng
+                List<User> managers = notificationService.getRecipientsForContract(contract);
+                LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+                for (User manager : managers) {
+                        boolean exists = notificationRepository.existsByTypeAndContractIdAndEmployeeIdAndRecipientIdAndCreatedAtAfter(
+                                NotificationType.ASSIGNMENT_OVER_BUDGET,
+                                contract.getId(),
+                                assignment.getEmployee().getId(),
+                                manager.getId(),
+                                todayStart);
+                        if (!exists) {
+                                notificationService.createNotification(
+                                        manager,
+                                        NotificationType.ASSIGNMENT_OVER_BUDGET,
+                                        title,
+                                        message,
+                                        assignment.getEmployee().getId(),
+                                        assignment.getId(),
+                                        contract.getId());
                         }
                 }
+                log.warn("[NOTIFY][ASSIGNMENT_OVER_BUDGET] Assignment {} salary {} exceeds SalaryNote {} amount {}",
+                        assignment.getId(), assignmentSalary, comparableNote.getId(), comparableNote.getAmount());
         }
 }

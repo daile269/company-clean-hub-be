@@ -119,6 +119,16 @@ public class VerificationServiceImpl implements VerificationService {
 
     @Override
     public List<AssignmentVerificationResponse> getPendingVerifications() {
+        // CUSTOMER không được xem danh sách chờ duyệt (mục "Xác minh nhân viên mới").
+        com.company.company_clean_hub_be.entity.User currentUser = null;
+        try {
+            currentUser = com.company.company_clean_hub_be.util.AuthorizationUtils.getCurrentUser();
+        } catch (Exception ignored) {
+            // Không có security context (internal call) → giữ nguyên hành vi
+        }
+        if (currentUser instanceof com.company.company_clean_hub_be.entity.Customer) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
         return verificationRepository.findPendingVerifications()
                 .stream()
                 .map(this::mapToVerificationResponse)

@@ -194,7 +194,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         List<WorkSchedule> schedules = contractId != null
             ? workScheduleRepository.findByEmployeeIdAndContractIdAndDateRange(employeeId, contractId, startDate, endDate)
             : workScheduleRepository.findByEmployeeIdAndDateRange(employeeId, startDate, endDate);
+        List<Long> customerScope = resolveCustomerScope();
         return schedules.stream()
+            .filter(ws -> inCustomerScope(ws, customerScope))
             .map(this::mapToResponse)
             .collect(Collectors.toList());
     }
@@ -250,7 +252,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             }
         }
 
+        List<Long> customerScope = resolveCustomerScope();
         return schedules.stream()
+            .filter(ws -> inCustomerScope(ws, customerScope))
             .map(this::mapToResponse)
             .collect(Collectors.toList());
     }
@@ -344,11 +348,13 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         }
 
         // Get schedules in date range, optionally filtered by contract
+        List<Long> customerScope = resolveCustomerScope();
         List<WorkSchedule> schedules = workScheduleRepository.findAll().stream()
             .filter(ws -> !ws.getScheduledDate().isBefore(startDate) && !ws.getScheduledDate().isAfter(endDate))
             .filter(ws -> contractId == null
                 || (ws.getAssignment() != null && ws.getAssignment().getContract() != null
                     && ws.getAssignment().getContract().getId().equals(contractId)))
+            .filter(ws -> inCustomerScope(ws, customerScope))
             .collect(Collectors.toList());
 
         // Group by employee
@@ -1010,10 +1016,44 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             .build();
     }
 
+    /**
+     * Trả danh sách customerId mà user hiện tại được phép xem, hoặc null nếu
+     * không bị giới hạn (QLT1/QLV/ACCOUNTANT/ADMIN). CUSTOMER → chỉ chính mình;
+     * QLT2 → danh sách khách hàng họ quản lý.
+     */
+    private List<Long> resolveCustomerScope() {
+        com.company.company_clean_hub_be.entity.User currentUser;
+        try {
+            currentUser = com.company.company_clean_hub_be.util.AuthorizationUtils.getCurrentUser();
+        } catch (Exception e) {
+            return null; // không có security context → không giới hạn
+        }
+        if (currentUser instanceof com.company.company_clean_hub_be.entity.Customer) {
+            return List.of(currentUser.getId());
+        }
+        if (currentUser.getRole() != null && "QLT2".equalsIgnoreCase(currentUser.getRole().getCode())) {
+            return customerAssignmentRepository.findCustomerIdsByManagerId(currentUser.getId());
+        }
+        return null;
+    }
+
+    private boolean inCustomerScope(WorkSchedule ws, List<Long> scope) {
+        if (scope == null) return true;
+        return ws.getAssignment() != null
+            && ws.getAssignment().getContract() != null
+            && ws.getAssignment().getContract().getCustomer() != null
+            && scope.contains(ws.getAssignment().getContract().getCustomer().getId());
+    }
+
     @Override
     public com.company.company_clean_hub_be.dto.response.VerificationImageResponse getImageByWorkScheduleId(Long workScheduleId) {
         WorkSchedule schedule = workScheduleRepository.findById(workScheduleId)
             .orElseThrow(() -> new ResourceNotFoundException("Work schedule not found: " + workScheduleId));
+
+        List<Long> customerScope = resolveCustomerScope();
+        if (!inCustomerScope(schedule, customerScope)) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
 
         if (schedule.getVerificationImage() == null) {
             return null;
@@ -1177,7 +1217,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
             // Gửi cho tất cả QLT1 và QLT2
             List<com.company.company_clean_hub_be.entity.User> managers =
-                    userRepository.findByRoleCodeIn(List.of("QLT1", "QLT2"));
+                    notificationService.getRecipientsForContract(assignment.getContract());
             java.time.LocalDateTime todayStart = java.time.LocalDate.now().atStartOfDay();
             for (com.company.company_clean_hub_be.entity.User manager : managers) {
                 boolean exists = notificationRepository
