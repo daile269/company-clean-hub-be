@@ -386,6 +386,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 employee.setAllowance(request.getAllowance());
                 employee.setInsuranceSalary(request.getInsuranceSalary());
                 // [DEPRECATED] employee.setMonthlyAdvanceLimit(request.getMonthlyAdvanceLimit());
+                java.math.BigDecimal oldMonthlySupport = employee.getMonthlySupport();
                 employee.setMonthlySupport(request.getMonthlySupport());
                 if (request.getCccdFrontImage() != null) {
                         String front = request.getCccdFrontImage().trim();
@@ -420,8 +421,53 @@ public class EmployeeServiceImpl implements EmployeeService {
                 employee.setUpdatedAt(LocalDateTime.now());
 
                 Employee updatedEmployee = employeeRepository.save(employee);
+
+                // Tiền hỗ trợ tháng chỉ được đồng bộ tại đây — thời điểm người dùng chủ động
+                // sửa hồ sơ. Luồng tính lương chỉ đọc, không ghi ngược lại vào assignment.
+                if (!java.util.Objects.equals(oldMonthlySupport, updatedEmployee.getMonthlySupport())) {
+                        syncMonthlySupportToCompanyAssignments(updatedEmployee);
+                }
+
                 log.info("updateEmployee completed by {}: id={}", username, updatedEmployee.getId());
                 return mapToResponse(updatedEmployee);
+        }
+
+        /**
+         * Đồng bộ tiền hỗ trợ tháng của nhân viên văn phòng xuống ĐÚNG assignment văn
+         * phòng (scope=COMPANY) của kỳ lương hiện tại.
+         *
+         * Cố ý giới hạn ở tháng hiện tại để không viết lại lương các tháng đã chốt.
+         * Giá trị được ghi ở dạng thô (cho phép null) để thao tác xoá cũng lan xuống.
+         */
+        private void syncMonthlySupportToCompanyAssignments(Employee employee) {
+                if (employee.getEmploymentType() != EmploymentType.COMPANY_STAFF) {
+                        return;
+                }
+
+                java.time.LocalDate today = java.time.LocalDate.now();
+                int month = today.getMonthValue();
+                int year = today.getYear();
+
+                List<com.company.company_clean_hub_be.entity.Assignment> companyAssignments = assignmentRepository
+                                .findAssignmentsByEmployeeAndMonthAndYear(employee.getId(), month, year)
+                                .stream()
+                                .filter(a -> a.getScope() == com.company.company_clean_hub_be.entity.AssignmentScope.COMPANY)
+                                .collect(Collectors.toList());
+
+                if (companyAssignments.isEmpty()) {
+                        log.info("[MONTHLY-SUPPORT-SYNC] employeeId={} has no COMPANY assignment for {}/{}, skip",
+                                        employee.getId(), month, year);
+                        return;
+                }
+
+                companyAssignments.forEach(a -> a.setMonthlySupport(employee.getMonthlySupport()));
+                assignmentRepository.saveAll(companyAssignments);
+
+                log.info("[MONTHLY-SUPPORT-SYNC] employeeId={}, monthlySupport={}, updatedAssignmentIds={}",
+                                employee.getId(), employee.getMonthlySupport(),
+                                companyAssignments.stream()
+                                                .map(com.company.company_clean_hub_be.entity.Assignment::getId)
+                                                .collect(Collectors.toList()));
         }
 
         @Override

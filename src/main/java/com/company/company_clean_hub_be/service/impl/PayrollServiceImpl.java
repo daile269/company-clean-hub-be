@@ -100,8 +100,6 @@ public class PayrollServiceImpl implements PayrollService {
                                 continue;
                         }
 
-                        synchronizeCompanyAssignmentMonthlySupport(employee, assignments);
-
                         // Upsert (tạo mới nếu chưa có, tính lại nếu đã có) — không bỏ qua payroll đã tồn tại
                         Payroll payroll = upsertPayrollFromAssignments(employee, assignments, month, year, accountant,
                                         new LinkedHashMap<>());
@@ -167,8 +165,6 @@ public class PayrollServiceImpl implements PayrollService {
                 if (assignments.isEmpty()) {
                         throw new AppException(ErrorCode.NO_ASSIGNMENT_DATA);
                 }
-
-                synchronizeCompanyAssignmentMonthlySupport(employee, assignments);
 
                 List<Attendance> attendances = attendanceRepository.findAttendancesByMonthYearAndEmployee(
                                 request.getMonth(), request.getYear(), request.getEmployeeId());
@@ -844,8 +840,6 @@ public class PayrollServiceImpl implements PayrollService {
                         return null;
                 }
 
-                synchronizeCompanyAssignmentMonthlySupport(employee, assignments);
-
                 BigDecimal amountTotal = BigDecimal.ZERO;
                 BigDecimal totalBonus = BigDecimal.ZERO;
                 BigDecimal totalPenalties = BigDecimal.ZERO;
@@ -1452,32 +1446,6 @@ public class PayrollServiceImpl implements PayrollService {
                 return BigDecimal.ZERO;
         }
 
-        private void synchronizeCompanyAssignmentMonthlySupport(Employee employee, List<Assignment> assignments) {
-                if (employee == null || employee.getEmploymentType() != EmploymentType.COMPANY_STAFF
-                                || employee.getMonthlySupport() == null
-                                || assignments == null || assignments.isEmpty()) {
-                        return;
-                }
-
-                BigDecimal currentMonthlySupport = employee.getMonthlySupport();
-                // Employee.monthlySupport là nguồn dữ liệu hiện hành cho toàn bộ assignment
-                // của COMPANY_STAFF, kể cả assignment được phân vào hợp đồng khách hàng.
-                // CONTRACT_STAFF bị loại trừ bởi điều kiện employee type ở trên.
-                List<Assignment> assignmentsToUpdate = assignments.stream()
-                                .filter(assignment -> defaultZero(assignment.getMonthlySupport())
-                                                .compareTo(currentMonthlySupport) != 0)
-                                .peek(assignment -> assignment.setMonthlySupport(currentMonthlySupport))
-                                .collect(Collectors.toList());
-
-                if (!assignmentsToUpdate.isEmpty()) {
-                        assignmentRepository.saveAll(assignmentsToUpdate);
-                        log.info(
-                                        "[PAYROLL-MONTHLY-SUPPORT-SYNC] employeeId={}, monthlySupport={}, updatedAssignmentIds={}",
-                                        employee.getId(), currentMonthlySupport,
-                                        assignmentsToUpdate.stream().map(Assignment::getId).collect(Collectors.toList()));
-                }
-        }
-
         private BigDecimal defaultZero(BigDecimal value) {
                 return value != null ? value : BigDecimal.ZERO;
         }
@@ -1977,8 +1945,6 @@ public class PayrollServiceImpl implements PayrollService {
                                         year);
                         throw new AppException(ErrorCode.NO_ASSIGNMENT_DATA);
                 }
-
-                synchronizeCompanyAssignmentMonthlySupport(payroll.getEmployee(), assignments);
 
                 log.info("[PAYROLL-INFO] Found {} assignments to process", assignments.size());
 
