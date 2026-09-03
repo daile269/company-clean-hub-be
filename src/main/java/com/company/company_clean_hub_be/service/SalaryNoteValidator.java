@@ -36,10 +36,9 @@ public class SalaryNoteValidator {
     private final ContractRepository contractRepository;
 
     /**
-     * R1 — Chặn sai loại phân công.
+     * R1 — Chặn sai loại phân công (chỉ đúng 1 case theo yêu cầu gốc).
      * FIXED_BY_CONTRACT / FIXED_BY_COMPANY → cần MONTHLY_ASSIGNMENT.
-     * FIXED_BY_DAY / TEMPORARY           → cần DAILY_ASSIGNMENT.
-     * SUPPORT                             → bỏ qua.
+     * Các loại khác (FIXED_BY_DAY / TEMPORARY / SUPPORT) → không chặn.
      * Không có SalaryNote nào             → bỏ qua.
      */
     public void validateAssignmentType(Contract contract, AssignmentType assignmentType) {
@@ -51,27 +50,11 @@ public class SalaryNoteValidator {
 
         boolean hasMonthly = salaryNotes.stream()
                 .anyMatch(sn -> sn.getCategory() == SalaryNoteCategory.MONTHLY_ASSIGNMENT);
-        boolean hasDailyFixed = salaryNotes.stream()
-                .anyMatch(sn -> sn.getCategory() == SalaryNoteCategory.DAILY_ASSIGNMENT
-                        && sn.getSalaryType() == SalaryNoteType.FIXED);
-        boolean hasDailyTemporary = salaryNotes.stream()
-                .anyMatch(sn -> sn.getCategory() == SalaryNoteCategory.DAILY_ASSIGNMENT
-                        && sn.getSalaryType() == SalaryNoteType.TEMPORARY);
 
         switch (assignmentType) {
             case FIXED_BY_CONTRACT:
             case FIXED_BY_COMPANY:
                 if (!hasMonthly) {
-                    throw new AppException(ErrorCode.INVALID_ASSIGNMENT_TYPE);
-                }
-                break;
-            case FIXED_BY_DAY:
-                if (!hasDailyFixed) {
-                    throw new AppException(ErrorCode.INVALID_ASSIGNMENT_TYPE);
-                }
-                break;
-            case TEMPORARY:
-                if (!hasDailyTemporary) {
                     throw new AppException(ErrorCode.INVALID_ASSIGNMENT_TYPE);
                 }
                 break;
